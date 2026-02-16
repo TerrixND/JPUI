@@ -1,20 +1,69 @@
 "use client";
 
 import InputBox from "@/components/ui/InputBox";
+import {
+  clearPendingSetupPayload,
+  getPendingSetupPayloadForEmail,
+  setupUser,
+} from "@/lib/setupUser";
+import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
 const LoginPage = () => {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error(
+          "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_PROJECT_URL and NEXT_PUBLIC_SUPABASE_PUB_KEY.",
+        );
+      }
+
+      const normalizedEmail = email.trim();
+
+      const { data, error: signInError } = await supabase.auth.signInWithPassword(
+        {
+          email: normalizedEmail,
+          password,
+        },
+      );
+
+      if (signInError || !data.session?.access_token) {
+        throw new Error(signInError?.message || "Unable to login.");
+      }
+
+      const pendingPayload = getPendingSetupPayloadForEmail(normalizedEmail);
+      await setupUser(data.session.access_token, pendingPayload || {});
+      clearPendingSetupPayload();
+
+      router.replace("/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to login.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="lg:w-[70%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
       <h3 className="text-base font-semibold text-black">Welcome Back</h3>
       <p className="text-xs text-slate-700 mt-1.25 mb-6">
         Enter your information to proceed.
       </p>
-      <form>
+      <form onSubmit={handleLogin}>
         <InputBox
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -33,14 +82,17 @@ const LoginPage = () => {
 
         <button
           type="submit"
-          className="w-full bg-green-700 py-3 text-white rounded cursor-pointer mt-3"
+          disabled={loading}
+          className={`w-full py-3 text-white rounded cursor-pointer mt-3 ${
+            loading ? "bg-green-500" : "bg-green-700"
+          }`}
         >
-          LOGIN
+          {loading ? "LOGGING IN..." : "LOGIN"}
         </button>
 
         <div className="w-full flex gap-3 mt-5 flex-wrap">
           <Link
-            href={"/auth/signup"}
+            href={"/signup"}
             className="
       flex-1 min-w-[160px]
       group
@@ -66,7 +118,7 @@ const LoginPage = () => {
           </Link>
 
           <Link
-            href={"/auth/signup"}
+            href={"/signup"}
             className="
       flex-1 min-w-[160px]
       group
@@ -92,7 +144,7 @@ const LoginPage = () => {
           </Link>
 
           <Link
-            href={"/auth/signup"}
+            href={"/signup"}
             className="
       flex-1 min-w-[160px]
       group
@@ -122,7 +174,7 @@ const LoginPage = () => {
           <p className="text-[13px] text-slate-800">
             Forgot{" "}
             <Link
-              href={"/auth/signup"}
+              href={"/signup"}
               className="font-medium text-green-600 underline"
             >
               Password?
@@ -130,7 +182,7 @@ const LoginPage = () => {
           </p>
 
           <p className="text-[13px] text-slate-800">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link
               href={"/signup"}
               className="font-medium text-green-600 underline"

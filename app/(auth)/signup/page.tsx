@@ -1,7 +1,14 @@
 "use client";
 
 import InputBox from "@/components/ui/InputBox";
+import {
+  clearPendingSetupPayload,
+  setupUser,
+  storePendingSetupPayload,
+} from "@/lib/setupUser";
+import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
 const languages = [
@@ -24,7 +31,8 @@ const languages = [
 ];
 
 const SignupPage = () => {
-  const [profilePic, setProfilePic] = useState<File | null>(null);
+  const router = useRouter();
+
   const [fullName, setFullName] = useState<string>("");
   const [city, setCity] = useState<string>("");
   const [phNo, setPhNo] = useState<string>("");
@@ -32,10 +40,68 @@ const SignupPage = () => {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(languages[0]);
 
-  const handleSignUp = async () => {};
+  const handleSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    setLoading(true);
+
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error(
+          "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_PROJECT_URL and NEXT_PUBLIC_SUPABASE_PUB_KEY.",
+        );
+      }
+
+      const normalizedEmail = email.trim();
+
+      if (!normalizedEmail || !password) {
+        throw new Error("Email and password are required.");
+      }
+
+      const profilePayload = {
+        displayName: fullName.trim() || undefined,
+        phone: phNo.trim() || undefined,
+        lineId: lineID.trim() || undefined,
+        preferredLanguage: selected.code || undefined,
+        city: city.trim() || undefined,
+      };
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: profilePayload,
+        },
+      });
+
+      if (signUpError) {
+        throw new Error(signUpError.message);
+      }
+
+      if (data.session?.access_token) {
+        await setupUser(data.session.access_token, profilePayload);
+        clearPendingSetupPayload();
+        router.replace("/");
+        router.refresh();
+        return;
+      }
+
+      storePendingSetupPayload(normalizedEmail, profilePayload);
+      setMessage(
+        "Sign up successful. Verify your email, then login to finish account setup.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign up.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="lg:w-[100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
       <div className="flex justify-between items-center flex-wrap mb-6 gap-4">
@@ -129,11 +195,12 @@ const SignupPage = () => {
         </div>
 
         {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
+        {message && <p className="text-green-700 text-xs pb-2.5">{message}</p>}
         <button
           type="submit"
           disabled={loading}
           className={`cursor-pointer mt-3 w-full py-3 text-white rounded ${
-            loading ? "bg-purple-400" : "bg-green-700"
+            loading ? "bg-green-500" : "bg-green-700"
           }`}
         >
           {loading ? "Signing Up..." : "SIGN UP"}
