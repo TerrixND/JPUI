@@ -1,11 +1,6 @@
 "use client";
 
 import InputBox from "@/components/ui/InputBox";
-import {
-  clearPendingSetupPayload,
-  getPendingSetupPayloadForEmail,
-  setupUser,
-} from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,10 +38,6 @@ const LoginPage = () => {
       if (signInError || !data.session?.access_token) {
         throw new Error(signInError?.message || "Unable to login.");
       }
-
-      const pendingPayload = getPendingSetupPayloadForEmail(normalizedEmail);
-      await setupUser(data.session.access_token, pendingPayload || {});
-      clearPendingSetupPayload();
 
       router.replace("/");
       router.refresh();

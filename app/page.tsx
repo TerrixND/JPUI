@@ -6,57 +6,41 @@ import {
   setupUser,
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
-import React, { useEffect, useState } from "react";
-
-const consumeHashSession = async () => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const hash = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : "";
-
-  if (!hash) {
-    return null;
-  }
-
-  const params = new URLSearchParams(hash);
-  const accessToken = params.get("access_token");
-  const refreshToken = params.get("refresh_token");
-
-  if (!accessToken || !refreshToken) {
-    return null;
-  }
-
-  const { data, error } = await supabase.auth.setSession({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-
-  if (error || !data.session) {
-    throw new Error(error?.message || "Unable to restore auth session.");
-  }
-
-  const cleanUrl = `${window.location.pathname}${window.location.search}`;
-  window.history.replaceState({}, document.title, cleanUrl);
-
-  return data.session;
-};
+import React, { useEffect, useRef, useState } from "react";
 
 const HomePage = () => {
   const [setupError, setSetupError] = useState("");
+  const hasSyncedSetupRef = useRef(false);
 
   useEffect(() => {
+    if (hasSyncedSetupRef.current) {
+      return;
+    }
+    hasSyncedSetupRef.current = true;
+
     const syncSetupUserAfterCallback = async () => {
       if (!isSupabaseConfigured) {
         return;
       }
 
       try {
-        const callbackSession = await consumeHashSession();
-        const session =
-          callbackSession || (await supabase.auth.getSession()).data.session;
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          if (
+            sessionError.message
+              .toLowerCase()
+              .includes("invalid refresh token")
+          ) {
+            await supabase.auth.signOut();
+            return;
+          }
+
+          throw new Error(sessionError.message);
+        }
 
         if (!session?.access_token) {
           return;
@@ -67,11 +51,11 @@ const HomePage = () => {
           ? getPendingSetupPayloadForEmail(email)
           : null;
 
-        if (!callbackSession && !pendingPayload) {
+        if (!pendingPayload) {
           return;
         }
 
-        await setupUser(session.access_token, pendingPayload || {});
+        await setupUser(session.access_token, pendingPayload);
         clearPendingSetupPayload();
       } catch (error) {
         setSetupError(
