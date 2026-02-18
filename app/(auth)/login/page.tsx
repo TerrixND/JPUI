@@ -84,7 +84,7 @@ const LoginPage = () => {
           type="submit"
           disabled={loading}
           className={`w-full py-3 text-white rounded cursor-pointer mt-3 ${
-            loading ? "bg-green-500" : "bg-green-700"
+            loading ? "bg-emerald-500" : "bg-emerald-700"
           }`}
         >
           {loading ? "LOGGING IN..." : "LOGIN"}
@@ -108,7 +108,7 @@ const LoginPage = () => {
     "
           >
             <img
-              src="/Google.png"
+              src="/icons/Google.png"
               alt="Google logo"
               className="w-5 h-5 object-contain"
             />
@@ -134,7 +134,7 @@ const LoginPage = () => {
     "
           >
             <img
-              src="/Line.png"
+              src="/icons/Line.png"
               alt="Line logo"
               className="w-5 h-5 object-contain"
             />
@@ -160,7 +160,7 @@ const LoginPage = () => {
     "
           >
             <img
-              src="/facebook.png"
+              src="/icons/facebook.png"
               alt="Facebook logo"
               className="w-5 h-5 object-contain"
             />
@@ -175,7 +175,7 @@ const LoginPage = () => {
             Forgot{" "}
             <Link
               href={"/signup"}
-              className="font-medium text-green-600 underline"
+              className="font-medium text-emerald-700 underline"
             >
               Password?
             </Link>
@@ -185,7 +185,7 @@ const LoginPage = () => {
             Don&apos;t have an account?{" "}
             <Link
               href={"/signup"}
-              className="font-medium text-green-600 underline"
+              className="font-medium text-emerald-700 underline"
             >
               SignUp
             </Link>

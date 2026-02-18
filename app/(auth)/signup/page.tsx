@@ -195,12 +195,12 @@ const SignupPage = () => {
         </div>
 
         {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
-        {message && <p className="text-green-700 text-xs pb-2.5">{message}</p>}
+        {message && <p className="text-emerald-700 text-xs pb-2.5">{message}</p>}
         <button
           type="submit"
           disabled={loading}
           className={`cursor-pointer mt-3 w-full py-3 text-white rounded ${
-            loading ? "bg-green-500" : "bg-green-700"
+            loading ? "bg-emerald-500" : "bg-emerald-700"
           }`}
         >
           {loading ? "Signing Up..." : "SIGN UP"}
@@ -209,7 +209,7 @@ const SignupPage = () => {
           Already have an account?{" "}
           <Link
             href={"/login"}
-            className="font-medium text-green-600 underline"
+            className="font-medium text-emerald-600 underline"
           >
             Login
           </Link>

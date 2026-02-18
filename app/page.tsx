@@ -1,5 +1,10 @@
 "use client";
 
+import AboutProduct from "@/components/ui/AboutProduct";
+import Footer from "@/components/ui/Footer";
+import Hero from "@/components/ui/Hero";
+import Navbar from "@/components/ui/Navbar";
+import OurCollection from "@/components/ui/OurCollection";
 import {
   clearPendingSetupPayload,
   getPendingSetupPayloadForEmail,
@@ -87,7 +92,11 @@ const HomePage = () => {
 
   return (
     <div>
-      HomePage
+      <Navbar />
+      <Hero />
+      <AboutProduct />
+      <OurCollection/>
+      <Footer/>
       {setupError && (
         <p className="mt-3 text-sm text-red-600">
           Account setup sync failed: {setupError}

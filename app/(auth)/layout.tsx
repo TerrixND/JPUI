@@ -8,7 +8,7 @@ const AuthLayout = ({ children }: { children: ReactNode }) => {
         {children}
       </div>
       <img
-        src={"/greenImg.jpg"}
+        src={"/images/greenImg.jpg"}
         className="hidden md:block w-[40vw] h-screen bg-contain bg-no-repeat bg-center overflow-hidden relative"
       />
     </div>
