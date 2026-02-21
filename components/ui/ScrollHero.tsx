@@ -44,8 +44,6 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [visible, setVisible] = useState(true);
-  const heroWrapperRef = useRef<HTMLDivElement>(null);
   const [showDots, setShowDots] = useState(true);
 
   useEffect(() => {
@@ -86,24 +84,36 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   };
 
   return (
-    <div className="relative h-screen">
+    <div className="relative sh-root">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap');
 
         .sh-display { font-family: 'Cormorant Garamond', serif; }
         .sh-sans    { font-family: 'Jost', sans-serif; }
+        .sh-root    { background: #000; }
 
         /* Snap scroll on the container */
         .sh-snap-container {
           scroll-snap-type: y mandatory;
           scroll-behavior: smooth;
-          height: 100vh;
-          height: 100dvh;
+          min-height: 100svh;
+          height: 100svh;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          background: #000;
         }
         .sh-snap-section {
           scroll-snap-align: start;
-          height: 100vh;
-          height: 100dvh;
+          min-height: 100svh;
+          height: 100svh;
+        }
+
+        @supports (height: 100dvh) {
+          .sh-snap-container,
+          .sh-snap-section {
+            min-height: 100dvh;
+            height: 100dvh;
+          }
         }
 
         /* Video fills section without overflow distortion */
@@ -185,12 +195,22 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
         /* Vertical text counter */
         .sh-vertical { writing-mode: vertical-rl; }
 
+        .sh-nav-dots {
+          right: calc(1.5rem + env(safe-area-inset-right));
+        }
+
+        .sh-content {
+          padding-left: calc(5vw + env(safe-area-inset-left));
+          padding-right: calc(5vw + env(safe-area-inset-right));
+          padding-bottom: calc(8vh + env(safe-area-inset-bottom));
+        }
+
         /* ── Responsive overrides ────────────────────────────────────────── */
 
         /* Nav dots: move closer to edge on small screens */
         @media (max-width: 640px) {
           .sh-nav-dots {
-            right: 1rem !important;
+            right: calc(0.75rem + env(safe-area-inset-right)) !important;
             gap: 0.6rem !important;
           }
 
@@ -202,9 +222,9 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
 
           /* Content block: reduce horizontal & bottom padding */
           .sh-content {
-            padding-left: 1.25rem !important;
-            padding-right: 3rem !important; /* keep clear of nav dots */
-            padding-bottom: 6vh !important;
+            padding-left: calc(1.25rem + env(safe-area-inset-left)) !important;
+            padding-right: calc(3rem + env(safe-area-inset-right)) !important; /* keep clear of nav dots */
+            padding-bottom: calc(6vh + env(safe-area-inset-bottom)) !important;
             max-width: 100% !important;
           }
 
@@ -231,12 +251,12 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
 
         /* Tablet breakpoint */
         @media (min-width: 641px) and (max-width: 1024px) {
-          .sh-nav-dots { right: 1.5rem !important; }
+          .sh-nav-dots { right: calc(1.25rem + env(safe-area-inset-right)) !important; }
 
           .sh-content {
-            padding-left: 4vw !important;
-            padding-right: 4rem !important;
-            padding-bottom: 7vh !important;
+            padding-left: calc(4vw + env(safe-area-inset-left)) !important;
+            padding-right: calc(4rem + env(safe-area-inset-right)) !important;
+            padding-bottom: calc(7vh + env(safe-area-inset-bottom)) !important;
             max-width: 80% !important;
           }
 
@@ -258,7 +278,7 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
         /* Landscape mobile: shorten vertical padding so content fits */
         @media (max-width: 896px) and (orientation: landscape) {
           .sh-content {
-            padding-bottom: 4vh !important;
+            padding-bottom: calc(4vh + env(safe-area-inset-bottom)) !important;
           }
           .sh-title {
             font-size: clamp(2rem, 8vw, 3.5rem) !important;
@@ -273,7 +293,7 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
 
       {/* ───────────── Nav Dots ───────────── */}
       <div
-        className={`fixed right-10 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-4 transition-opacity duration-500 ${
+        className={`sh-nav-dots fixed right-10 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-4 transition-opacity duration-500 ${
           showDots ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
@@ -292,7 +312,7 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
       {/* ── Scroll container ────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="h-screen sh-snap-container sh-sans overflow-y-scroll snap-y snap-mandatory scroll-smooth"
+        className="sh-snap-container sh-sans overflow-y-auto overscroll-y-contain snap-y snap-mandatory scroll-smooth"
       >
         {sections.map((section, i) => (
           <section
@@ -300,7 +320,7 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
             ref={(el) => {
               sectionRefs.current[i] = el;
             }}
-            className="sh-snap-section relative h-screen w-full overflow-hidden flex items-end justify-start"
+            className="sh-snap-section relative w-full overflow-hidden flex items-end justify-start"
             style={{ "--accent": section.accent } as React.CSSProperties}
           >
             {/* Video background */}

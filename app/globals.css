@@ -20,8 +20,8 @@ html {
 
 /* styles/globals.css  or tailwind base layer */
 @layer base {
-  html {
+  html, body, #__next {
     scroll-behavior: smooth;
-    scroll-snap-type: y proximity;
+    height: 100%;
   }
 }

@@ -6,7 +6,7 @@ import React, { useEffect, useState } from "react";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [totalQuantity, setTotalQuantity] = useState(3);
+  const totalQuantity = 3;
   const [isScrolled, setIsScrolled] = useState(false);
 
   const textColor = isScrolled ? "text-black" : "text-white";
@@ -34,6 +34,7 @@ const Navbar = () => {
       className={`z-100 w-full fixed top-0 left-0 transition-all duration-300 ${
         isScrolled ? "bg-white shadow-md" : "bg-transparent"
       }`}
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       {/* Main bar */}
       <div className="px-6 sm:px-12 lg:px-20 py-4 flex justify-between items-center">
