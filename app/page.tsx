@@ -70,14 +70,15 @@ const HomePage = () => {
   }, []);
 
   return (
-    <div className="bg-transparent">
-      <Navbar />
+    <div className="bg-black">
+      <Navbar heroMode />
       <main className="scroll-smooth">
         <ScrollHero hideAtRef={nextSectionRef} />
 
         {/* This section will hide nav dots when visible */}
         <div
           ref={nextSectionRef}
+          style={{ scrollSnapAlign: "start" }}
         >
           <AboutProduct />
           <NewArrivals />

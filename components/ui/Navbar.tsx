@@ -3,10 +3,12 @@
 import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
+import useAuth from "@/hooks/useAuth";
 
-const Navbar = () => {
+const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
+  const user = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const totalQuantity = 3;
+  const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
 
   const textColor = isScrolled ? "text-black" : "text-white";
@@ -21,8 +23,8 @@ const Navbar = () => {
   // 👇 Detect scroll
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-      // 50px = after hero area starts disappearing
+      const threshold = heroMode ? window.innerHeight * 2.5 : 50;
+      setIsScrolled(window.scrollY > threshold);
     };
 
     window.addEventListener("scroll", handleScroll);
@@ -56,18 +58,39 @@ const Navbar = () => {
 
         {/* Icons + Hamburger */}
         <div className="flex gap-10 items-center">
-          <button className="relative cursor-pointer">
-            <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
-            {totalQuantity > 0 && (
+          {totalQuantity > 0 && (
+            <button className="relative cursor-pointer">
+              <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
               <span className="absolute -top-2 -right-3 bg-black text-white text-[10px] px-1.5 py-0.5 rounded-full">
                 {totalQuantity}
               </span>
-            )}
-          </button>
+            </button>
+          )}
 
-          <button className="hidden md:block cursor-pointer">
-            <User className={`w-5 h-5 ${iconColor}`} />
-          </button>
+          {user ? (
+            <Link href="/profile" className="hidden md:block">
+              <User className={`w-5 h-5 ${iconColor}`} />
+            </Link>
+          ) : (
+            <div className="hidden md:flex gap-3 items-center">
+              <Link
+                href="/login"
+                className={`text-sm ${textColor} hover:opacity-70 transition-opacity duration-200`}
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className={`text-sm px-4 py-1.5 border rounded transition-colors duration-200 ${
+                  isScrolled
+                    ? "border-black text-black hover:bg-black hover:text-white"
+                    : "border-white text-white hover:bg-white hover:text-black"
+                }`}
+              >
+                Sign Up
+              </Link>
+            </div>
+          )}
 
           <button
             className="md:hidden cursor-pointer ml-1"
@@ -97,13 +120,32 @@ const Navbar = () => {
             </Link>
           ))}
 
-          <Link
-            href="/profile"
-            onClick={() => setMenuOpen(false)}
-            className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
-          >
-            Profile
-          </Link>
+          {user ? (
+            <Link
+              href="/profile"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+            >
+              Profile
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                className="text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                onClick={() => setMenuOpen(false)}
+                className="text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       )}
     </div>
