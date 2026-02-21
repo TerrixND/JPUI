@@ -43,10 +43,34 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   const [animKey, setAnimKey] = useState(0);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const [visible, setVisible] = useState(true);
-  const heroWrapperRef = useRef<HTMLDivElement>(null);
   const [showDots, setShowDots] = useState(true);
+
+  /* ── Real viewport height for mobile browsers ───────────────────────────
+   * window.innerHeight gives the true visible area, excluding browser chrome
+   * (address bar, bottom nav bar). We set it as --sh-vh so all full-screen
+   * elements use this value instead of 100vh / 100dvh, which can still be
+   * unreliable on some mobile WebKit / Blink versions.
+   * ─────────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const setVh = () => {
+      const vh = window.innerHeight;
+      document.documentElement.style.setProperty("--sh-vh", `${vh}px`);
+    };
+    setVh();
+    window.addEventListener("resize", setVh);
+    window.addEventListener("orientationchange", setVh);
+    // Re-run after orientation settles (iOS fires the event before the new
+    // dimensions are available)
+    const onOrientationChange = () => {
+      setTimeout(setVh, 100);
+    };
+    window.addEventListener("orientationchange", onOrientationChange);
+    return () => {
+      window.removeEventListener("resize", setVh);
+      window.removeEventListener("orientationchange", setVh);
+      window.removeEventListener("orientationchange", onOrientationChange);
+    };
+  }, []);
 
   useEffect(() => {
     const observers = sectionRefs.current.map((ref, i) => {
@@ -66,17 +90,12 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
     return () => observers.forEach((obs) => obs?.disconnect());
   }, []);
 
-  /* Detect if ScrollHero is visible on page */
   useEffect(() => {
     if (!hideAtRef?.current) return;
-
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        setShowDots(!entry.isIntersecting);
-      },
+      ([entry]) => setShowDots(!entry.isIntersecting),
       { threshold: 0.1 },
     );
-
     observer.observe(hideAtRef.current);
     return () => observer.disconnect();
   }, [hideAtRef]);
@@ -86,66 +105,220 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   };
 
   return (
-    <div className="relative h-screen">
+    <div className="bg-black">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap');
 
         .sh-display { font-family: 'Cormorant Garamond', serif; }
         .sh-sans    { font-family: 'Jost', sans-serif; }
 
-        /* Snap scroll on the container */
+        /*
+         * --sh-vh is set by JS to window.innerHeight — the only reliable way
+         * to get the real visible viewport on mobile browsers.
+         * Falls back to 100dvh → 100vh for SSR / no-JS environments.
+         */
+        :root { --sh-vh: 100dvh; }
+
+        /* ── Outer wrapper: just a positional anchor, no clipping ── */
+        .sh-root {
+          position: relative;
+          width: 100%;
+          height: var(--sh-vh);
+        }
+
+        /* ── Snap container ── */
         .sh-snap-container {
           scroll-snap-type: y mandatory;
-          scroll-behavior: smooth;
-          height: 100vh;
-          height: 100dvh;
+          overflow-y: scroll;
+          /* Use the JS value so browser chrome is accounted for */
+          height: var(--sh-vh);
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
+        .sh-snap-container::-webkit-scrollbar { display: none; }
+
+        /* ── Each snap section fills exactly one screen ── */
         .sh-snap-section {
           scroll-snap-align: start;
-          height: 100vh;
-          height: 100dvh;
+          scroll-snap-stop: always;
+          position: relative;
+          width: 100%;
+          /* Critical: use --sh-vh so every slide is exactly the visible height */
+          height: var(--sh-vh);
+          overflow: hidden;
+          display: flex;
+          align-items: flex-end;
+          justify-content: flex-start;
         }
 
-        /* Video fills section without overflow distortion */
+        /* ── Video ── */
         .sh-video {
-          transform: scale(1.04);
-          transition: transform 1.2s ease;
-          object-fit: cover;
-          object-position: center center;
           position: absolute;
-          top: 0;
-          left: 0;
+          inset: 0;
           width: 100%;
           height: 100%;
+          object-fit: cover;
+          object-position: center center;
+          transform: scale(1.04);
+          transition: transform 1.4s ease;
+          will-change: transform;
         }
-        .sh-snap-section:hover .sh-video { transform: scale(1); }
-
-        /* Small screens: no scale, anchor to top-center for better framing */
-        @media (max-width: 640px) {
-          .sh-video {
-            transform: scale(1) !important;
-            object-position: center 20%;
-          }
-        }
-
-        /* Tablets: slight scale, center framing */
-        @media (min-width: 641px) and (max-width: 1024px) {
-          .sh-video {
-            transform: scale(1.02);
-            object-position: center center;
-          }
+        @media (hover: hover) {
           .sh-snap-section:hover .sh-video { transform: scale(1); }
         }
-
-        /* Landscape mobile: no scale, fit naturally */
+        @media (hover: none), (max-width: 1024px) {
+          .sh-video { transform: scale(1) !important; }
+        }
+        @media (max-width: 640px) and (orientation: portrait) {
+          .sh-video { object-position: center 25%; }
+        }
         @media (max-width: 896px) and (orientation: landscape) {
-          .sh-video {
-            transform: scale(1) !important;
-            object-position: center center;
+          .sh-video { object-position: center center; }
+        }
+
+        /* ── Overlay gradient ── */
+        .sh-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            155deg,
+            rgba(0,0,0,.78) 0%,
+            rgba(0,0,0,.40) 45%,
+            rgba(0,0,0,.10) 100%
+          );
+        }
+        @media (max-width: 640px) {
+          .sh-overlay {
+            background: linear-gradient(
+              160deg,
+              rgba(0,0,0,.85) 0%,
+              rgba(0,0,0,.50) 50%,
+              rgba(0,0,0,.12) 100%
+            );
           }
         }
 
-        /* Button slide-fill effect */
+        /* ── Left decorative line ── */
+        .sh-deco-line {
+          position: absolute;
+          top: 0;
+          left: clamp(1rem, 5vw, 4rem);
+          width: 1px;
+          height: 100%;
+          z-index: 5;
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            rgba(255,255,255,.12),
+            transparent
+          );
+          pointer-events: none;
+        }
+        @media (max-width: 360px) { .sh-deco-line { display: none; } }
+
+        /* ── Section counter (vertical) ── */
+        .sh-counter {
+          position: absolute;
+          right: clamp(2.5rem, 5vw, 4rem);
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 10;
+          writing-mode: vertical-rl;
+          font-family: 'Jost', sans-serif;
+          font-weight: 200;
+          font-size: 0.8rem;
+          letter-spacing: 0.4em;
+          color: rgba(255,255,255,.28);
+          pointer-events: none;
+          user-select: none;
+        }
+        @media (max-width: 1024px) { .sh-counter { display: none; } }
+
+        /* ── Content block ── */
+        .sh-content {
+          position: relative;
+          z-index: 10;
+          width: 100%;
+          padding-left:  clamp(1.25rem, 5vw, 5rem);
+          padding-right: clamp(3.5rem,  12vw, 6rem);
+          padding-bottom: clamp(4vh, 8vh, 10vh);
+          max-width: 56rem;
+          box-sizing: border-box;
+        }
+        @media (max-width: 896px) and (orientation: landscape) {
+          .sh-content { padding-bottom: clamp(2vh, 4vh, 5vh); }
+        }
+
+        /* ── Eyebrow ── */
+        .sh-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          text-transform: uppercase;
+          font-family: 'Jost', sans-serif;
+          font-weight: 300;
+          font-size: clamp(0.62rem, 1.2vw, 0.75rem);
+          letter-spacing: 0.28em;
+          color: var(--accent);
+          margin-bottom: clamp(0.75rem, 2vh, 1.5rem);
+        }
+        .sh-eyebrow-line {
+          flex-shrink: 0;
+          height: 1px;
+          width: clamp(1.5rem, 3vw, 2.5rem);
+          background: var(--accent);
+        }
+
+        /* ── Title ── */
+        .sh-title {
+          font-family: 'Cormorant Garamond', serif;
+          font-weight: 300;
+          color: #fff;
+          margin: 0 0 clamp(0.75rem, 2.5vh, 2rem);
+          font-size: clamp(2.6rem, 8vw, 7rem);
+          line-height: 0.92;
+          letter-spacing: -0.01em;
+        }
+        @media (max-width: 896px) and (orientation: landscape) {
+          .sh-title { font-size: clamp(2rem, 8vw, 3.2rem); }
+        }
+
+        /* ── Description ── */
+        .sh-description {
+          font-family: 'Jost', sans-serif;
+          font-weight: 200;
+          font-size: clamp(0.875rem, 1.5vw, 1rem);
+          line-height: 1.75;
+          letter-spacing: 0.04em;
+          color: rgba(255,255,255,.65);
+          max-width: 28rem;
+          margin-bottom: clamp(1.5rem, 4vh, 2.75rem);
+        }
+        @media (max-width: 896px) and (orientation: landscape) {
+          .sh-description { display: none; }
+        }
+
+        /* ── CTA Button ── */
+        .sh-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          text-transform: uppercase;
+          font-family: 'Jost', sans-serif;
+          font-weight: 300;
+          font-size: clamp(0.65rem, 1.2vw, 0.72rem);
+          letter-spacing: 0.22em;
+          color: #fff;
+          background: transparent;
+          border: 1px solid rgba(255,255,255,.35);
+          padding: clamp(0.65rem, 1.5vh, 1rem) clamp(1.25rem, 3vw, 2rem);
+          cursor: pointer;
+          position: relative;
+          overflow: hidden;
+          transition: color 0.3s ease, border-color 0.3s ease;
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
+        }
         .sh-btn::before {
           content: '';
           position: absolute;
@@ -154,10 +327,17 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
           transform: translateX(-101%);
           transition: transform 0.4s cubic-bezier(0.76, 0, 0.24, 1);
         }
-        .sh-btn:hover::before { transform: translateX(0); }
-        .sh-btn:hover { color: #0a0a0a; border-color: var(--accent); }
+        @media (hover: hover) {
+          .sh-btn:hover::before { transform: translateX(0); }
+          .sh-btn:hover { color: #0a0a0a; border-color: var(--accent); }
+          .sh-btn:hover .sh-arrow { width: 1.8rem; }
+        }
+        @media (hover: none) {
+          .sh-btn:active::before { transform: translateX(0); }
+          .sh-btn:active { color: #0a0a0a; border-color: var(--accent); }
+        }
 
-        /* Animated arrow inside button */
+        /* ── Arrow inside button ── */
         .sh-arrow {
           position: relative;
           z-index: 1;
@@ -166,217 +346,127 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
           height: 1px;
           background: currentColor;
           transition: width 0.3s ease;
+          flex-shrink: 0;
         }
-        .sh-btn:hover .sh-arrow { width: 1.8rem; }
 
-        /* Staggered entrance animations */
+        /* ── Nav dots ── */
+        .sh-nav-dots {
+          position: fixed;
+          right: clamp(0.75rem, 2.5vw, 2.5rem);
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          gap: clamp(0.5rem, 1vh, 1rem);
+          transition: opacity 0.5s ease;
+        }
+        .sh-dot {
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background: rgba(255,255,255,.30);
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          transition: height 0.3s ease, border-radius 0.3s ease, background 0.3s ease, width 0.3s ease;
+          position: relative;
+        }
+        .sh-dot::after {
+          content: '';
+          position: absolute;
+          inset: -8px;
+        }
+        .sh-dot.active {
+          height: 24px;
+          border-radius: 2px;
+          background: #fff;
+        }
+        @media (max-width: 360px) {
+          .sh-dot { width: 3px; height: 3px; }
+          .sh-dot.active { height: 18px; }
+        }
+
+        /* ── Staggered entrance animations ── */
         @keyframes sh-up {
-          from { opacity: 0; transform: translateY(var(--y)); }
+          from { opacity: 0; transform: translateY(var(--dy, 20px)); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        .sh-a1 { opacity:0; animation: sh-up 0.8s 0.20s forwards ease-out; --y: 16px; }
-        .sh-a2 { opacity:0; animation: sh-up 0.9s 0.38s forwards ease-out; --y: 24px; }
-        .sh-a3 { opacity:0; animation: sh-up 0.9s 0.52s forwards ease-out; --y: 20px; }
-        .sh-a4 { opacity:0; animation: sh-up 0.9s 0.66s forwards ease-out; --y: 16px; }
+        .sh-a1 { opacity: 0; animation: sh-up 0.8s 0.20s forwards ease-out; --dy: 14px; }
+        .sh-a2 { opacity: 0; animation: sh-up 0.9s 0.36s forwards ease-out; --dy: 22px; }
+        .sh-a3 { opacity: 0; animation: sh-up 0.9s 0.50s forwards ease-out; --dy: 18px; }
+        .sh-a4 { opacity: 0; animation: sh-up 0.8s 0.64s forwards ease-out; --dy: 14px; }
 
-        /* Active nav dot pill */
-        .sh-dot-on { height: 24px !important; border-radius: 2px !important; background: #fff !important; }
-
-        /* Vertical text counter */
-        .sh-vertical { writing-mode: vertical-rl; }
-
-        /* ── Responsive overrides ────────────────────────────────────────── */
-
-        /* Nav dots: move closer to edge on small screens */
-        @media (max-width: 640px) {
-          .sh-nav-dots {
-            right: 1rem !important;
-            gap: 0.6rem !important;
+        @media (prefers-reduced-motion: reduce) {
+          .sh-a1, .sh-a2, .sh-a3, .sh-a4 {
+            animation: none;
+            opacity: 1;
           }
-
-          /* Section counter: hide on very small screens to save space */
-          .sh-counter { display: none !important; }
-
-          /* Left decorative line: subtler inset */
-          .sh-deco-line { left: 1rem !important; }
-
-          /* Content block: reduce horizontal & bottom padding */
-          .sh-content {
-            padding-left: 1.25rem !important;
-            padding-right: 3rem !important; /* keep clear of nav dots */
-            padding-bottom: 6vh !important;
-            max-width: 100% !important;
-          }
-
-          /* Title: tighter size floor */
-          .sh-title {
-            font-size: clamp(2.6rem, 13vw, 4.5rem) !important;
-            margin-bottom: 1.25rem !important;
-          }
-
-          /* Description: shorter measure */
-          .sh-description {
-            max-width: 100% !important;
-            margin-bottom: 2rem !important;
-          }
-
-          /* Button: slightly more compact */
-          .sh-btn {
-            padding: 0.75rem 1.4rem !important;
-          }
-
-          /* Eyebrow gap */
-          .sh-eyebrow { margin-bottom: 1rem !important; }
-        }
-
-        /* Tablet breakpoint */
-        @media (min-width: 641px) and (max-width: 1024px) {
-          .sh-nav-dots { right: 1.5rem !important; }
-
-          .sh-content {
-            padding-left: 4vw !important;
-            padding-right: 4rem !important;
-            padding-bottom: 7vh !important;
-            max-width: 80% !important;
-          }
-
-          .sh-title {
-            font-size: clamp(3rem, 9vw, 5.5rem) !important;
-          }
-
-          .sh-description {
-            max-width: 380px !important;
-          }
-        }
-
-        /* Ensure touch devices don't get the scale zoom */
-        @media (hover: none) and (pointer: coarse) {
-          .sh-video { transform: scale(1) !important; }
-          .sh-snap-section { height: 100dvh; }
-        }
-
-        /* Landscape mobile: shorten vertical padding so content fits */
-        @media (max-width: 896px) and (orientation: landscape) {
-          .sh-content {
-            padding-bottom: 4vh !important;
-          }
-          .sh-title {
-            font-size: clamp(2rem, 8vw, 3.5rem) !important;
-            margin-bottom: 0.75rem !important;
-          }
-          .sh-description {
-            display: none !important; /* collapse description to save vertical room */
-          }
-          .sh-eyebrow { margin-bottom: 0.5rem !important; }
+          .sh-video { transform: scale(1) !important; transition: none; }
+          .sh-btn::before { transition: none; }
+          .sh-dot { transition: none; }
         }
       `}</style>
 
-      {/* ───────────── Nav Dots ───────────── */}
+      {/* ── Nav Dots (fixed, outside scroll container) ── */}
       <div
-        className={`fixed right-10 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-4 transition-opacity duration-500 ${
-          showDots ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
+        className="sh-nav-dots"
+        style={{ opacity: showDots ? 1 : 0, pointerEvents: showDots ? "auto" : "none" }}
       >
         {sections.map((_, i) => (
           <button
             key={i}
             aria-label={`Go to slide ${i + 1}`}
             onClick={() => scrollToSection(i)}
-            className={`w-1 h-1 rounded-full bg-white/30 transition-all duration-300 ${
-              activeIndex === i ? "h-6 bg-white rounded-sm" : ""
-            }`}
+            className={`sh-dot${activeIndex === i ? " active" : ""}`}
           />
         ))}
       </div>
 
-      {/* ── Scroll container ────────────────────────────────────────────── */}
-      <div
-        ref={containerRef}
-        className="h-screen sh-snap-container sh-sans overflow-y-scroll snap-y snap-mandatory scroll-smooth"
-      >
+      {/* ── Snap scroll container ── */}
+      <div ref={containerRef} className="sh-snap-container">
         {sections.map((section, i) => (
           <section
             key={section.id}
-            ref={(el) => {
-              sectionRefs.current[i] = el;
-            }}
-            className="sh-snap-section relative h-screen w-full overflow-hidden flex items-end justify-start"
+            ref={(el) => { sectionRefs.current[i] = el; }}
+            className="sh-snap-section"
             style={{ "--accent": section.accent } as React.CSSProperties}
           >
             {/* Video background */}
-            <video autoPlay loop muted playsInline className="sh-video">
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="sh-video"
+              aria-hidden="true"
+            >
               <source src={section.video} type="video/mp4" />
             </video>
 
             {/* Gradient overlay */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(135deg,rgba(0,0,0,.72) 0%,rgba(0,0,0,.28) 55%,rgba(0,0,0,.08) 100%)",
-              }}
-            />
+            <div className="sh-overlay" aria-hidden="true" />
 
             {/* Left decorative line */}
-            <div
-              className="sh-deco-line absolute top-0 left-[5vw] w-px h-full z-5"
-              style={{
-                background:
-                  "linear-gradient(to bottom,transparent,rgba(255,255,255,.12),transparent)",
-              }}
-            />
+            <div className="sh-deco-line" aria-hidden="true" />
 
-            {/* Section counter — vertical text */}
-            <div
-              className="sh-counter sh-vertical sh-display absolute right-[5vw] top-1/2 -translate-y-1/2 z-10 text-white/30"
-              style={{
-                writingMode: "vertical-rl",
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 200,
-                fontSize: "0.9rem",
-                letterSpacing: "0.4em",
-              }}
-            >
+            {/* Section counter */}
+            <div className="sh-counter" aria-hidden="true">
               0{section.id} — 0{sections.length}
             </div>
 
-            {/* ── Animated content block ──────────────────────────────── */}
-            <div
-              key={`${animKey}-${i}`}
-              className="sh-content relative z-10 max-w-175 px-[5vw] pb-[8vh]"
-            >
-              {/* Eyebrow */}
-              <p
-                className="sh-eyebrow sh-a1 sh-sans flex items-center gap-3 uppercase mb-6"
-                style={{
-                  fontWeight: 300,
-                  fontSize: "0.72rem",
-                  letterSpacing: "0.28em",
-                  color: "var(--accent)",
-                }}
-              >
-                <span
-                  className="shrink-0 h-px w-8"
-                  style={{ background: "var(--accent)" }}
-                />
+            {/* ── Animated content block ── */}
+            <div key={`${animKey}-${i}`} className="sh-content">
+              <p className="sh-eyebrow sh-a1">
+                <span className="sh-eyebrow-line" aria-hidden="true" />
                 {section.eyebrow}
               </p>
 
-              {/* Title */}
-              <h1
-                className="sh-a2 sh-title sh-display font-light text-white m-0 mb-8"
-                style={{
-                  fontSize: "clamp(3.6rem, 8vw, 7rem)",
-                  lineHeight: 0.92,
-                  letterSpacing: "-0.01em",
-                }}
-              >
+              <h1 className="sh-title sh-a2">
                 {section.title.map((line, j) => (
-                  <span key={j} className="block">
+                  <span key={j} style={{ display: "block" }}>
                     {j === 0 ? (
-                      <em
-                        style={{ fontStyle: "italic", color: "var(--accent)" }}
-                      >
+                      <em style={{ fontStyle: "italic", color: "var(--accent)" }}>
                         {line}
                       </em>
                     ) : (
@@ -386,32 +476,13 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
                 ))}
               </h1>
 
-              {/* Description */}
-              <p
-                className="sh-description sh-a3 sh-sans text-white/65 max-w-85 mb-11"
-                style={{
-                  fontWeight: 200,
-                  fontSize: "1rem",
-                  lineHeight: 1.75,
-                  letterSpacing: "0.04em",
-                }}
-              >
-                {section.description}
-              </p>
+              <p className="sh-description sh-a3">{section.description}</p>
 
-              {/* CTA button */}
-              <button
-                className="sh-a4 sh-btn sh-sans inline-flex items-center gap-3 uppercase text-white bg-transparent cursor-pointer relative overflow-hidden transition-colors duration-300"
-                style={{
-                  fontWeight: 300,
-                  fontSize: "0.72rem",
-                  letterSpacing: "0.22em",
-                  border: "1px solid rgba(255,255,255,0.35)",
-                  padding: "1rem 2rem",
-                }}
-              >
-                <span className="relative z-1">{section.button}</span>
-                <span className="sh-arrow" />
+              <button className="sh-btn sh-a4">
+                <span style={{ position: "relative", zIndex: 1 }}>
+                  {section.button}
+                </span>
+                <span className="sh-arrow" aria-hidden="true" />
               </button>
             </div>
           </section>

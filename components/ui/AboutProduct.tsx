@@ -9,7 +9,7 @@ const AboutProduct = () => {
     { value: "98%", label: "Client satisfaction" },
   ];
   return (
-    <section className="w-full bg-neutral-100 py-20 overflow-hidden">
+    <section className="w-full bg-neutral-100 py-10 overflow-hidden">
       {/* Same horizontal padding as Navbar */}
       <div className="px-6 sm:px-12 lg:px-20 relative">
         <div className="grid md:grid-cols-2 gap-12 items-center">
