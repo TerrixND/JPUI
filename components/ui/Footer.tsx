@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const Footer = () => {
   return (
-    <footer className="w-full bg-white border-t border-gray-200 mt-24">
+    <footer className="w-full bg-white border-t border-gray-200 mt-6">
       <div className="max-w-7xl mx-auto px-6 sm:px-12 lg:px-20 py-16">
         
         {/* Top Section */}
@@ -24,10 +24,10 @@ const Footer = () => {
               Shop
             </h3>
             <ul className="mt-6 space-y-4 text-sm text-gray-500">
-              <li><Link href="#">Necklaces</Link></li>
-              <li><Link href="#">Rings</Link></li>
-              <li><Link href="#">Earrings</Link></li>
-              <li><Link href="#">Bracelets</Link></li>
+              <li><Link href="#">Most Asked</Link></li>
+              <li><Link href="#">Latest Items</Link></li>
+              <li><Link href="#">Polished</Link></li>
+              <li><Link href="#">Raw Stone</Link></li>
             </ul>
           </div>
 

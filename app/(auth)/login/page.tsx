@@ -85,7 +85,7 @@ const LoginPage = () => {
           <Link
             href={"/signup"}
             className="
-      flex-1 min-w-[160px]
+      flex-1 min-w-40
       group
       flex items-center justify-center gap-3
       px-4 py-3.5
@@ -111,7 +111,7 @@ const LoginPage = () => {
           <Link
             href={"/signup"}
             className="
-      flex-1 min-w-[160px]
+      flex-1 min-w-40
       group
       flex items-center justify-center gap-3
       px-4 py-3.5
@@ -137,7 +137,7 @@ const LoginPage = () => {
           <Link
             href={"/signup"}
             className="
-      flex-1 min-w-[160px]
+      flex-1 min-w-40
       group
       flex items-center justify-center gap-3
       px-4 py-3.5

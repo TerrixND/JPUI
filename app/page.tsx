@@ -2,31 +2,32 @@
 
 import AboutProduct from "@/components/ui/AboutProduct";
 import Footer from "@/components/ui/Footer";
-import Hero from "@/components/ui/Hero";
+import ScrollHero from "@/components/ui/ScrollHero";
 import Navbar from "@/components/ui/Navbar";
-import OurCollection from "@/components/ui/OurCollection";
+import NewArrivals from "@/components/ui/NewArrivals";
+import OurProcess from "@/components/ui/OurProcess";
+
 import {
   clearPendingSetupPayload,
   getPendingSetupPayloadForEmail,
   setupUser,
 } from "@/lib/setupUser";
+
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import React, { useEffect, useRef, useState } from "react";
+import LatestInfo from "@/components/ui/LatestInfo";
 
 const HomePage = () => {
   const [setupError, setSetupError] = useState("");
   const hasSyncedSetupRef = useRef(false);
+  const nextSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (hasSyncedSetupRef.current) {
-      return;
-    }
+    if (hasSyncedSetupRef.current) return;
     hasSyncedSetupRef.current = true;
 
     const syncSetupUserAfterCallback = async () => {
-      if (!isSupabaseConfigured) {
-        return;
-      }
+      if (!isSupabaseConfigured) return;
 
       try {
         const {
@@ -36,9 +37,7 @@ const HomePage = () => {
 
         if (sessionError) {
           if (
-            sessionError.message
-              .toLowerCase()
-              .includes("invalid refresh token")
+            sessionError.message.toLowerCase().includes("invalid refresh token")
           ) {
             await supabase.auth.signOut();
             return;
@@ -47,18 +46,14 @@ const HomePage = () => {
           throw new Error(sessionError.message);
         }
 
-        if (!session?.access_token) {
-          return;
-        }
+        if (!session?.access_token) return;
 
         const email = session.user?.email || "";
         const pendingPayload = email
           ? getPendingSetupPayloadForEmail(email)
           : null;
 
-        if (!pendingPayload) {
-          return;
-        }
+        if (!pendingPayload) return;
 
         await setupUser(session.access_token, pendingPayload);
         clearPendingSetupPayload();
@@ -75,18 +70,29 @@ const HomePage = () => {
   }, []);
 
   return (
-    <div>
+    <>
       <Navbar />
-      <Hero />
-      <AboutProduct />
-      <OurCollection/>
-      <Footer/>
-      {setupError && (
-        <p className="mt-3 text-sm text-red-600">
-          Account setup sync failed: {setupError}
-        </p>
-      )}
-    </div>
+      <main className="scroll-smooth">
+        <ScrollHero hideAtRef={nextSectionRef} />
+
+        {/* This section will hide nav dots when visible */}
+        <div
+          ref={nextSectionRef}
+        >
+          <AboutProduct />
+          <NewArrivals />
+          <OurProcess />
+          <LatestInfo />
+          <Footer />
+
+          {setupError && (
+            <p className="mt-3 text-sm text-red-600 text-center">
+              Account setup sync failed: {setupError}
+            </p>
+          )}
+        </div>
+      </main>
+    </>
   );
 };
 

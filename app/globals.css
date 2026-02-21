@@ -1,6 +1,27 @@
 @import "tailwindcss";
 
-
+@import "swiper/css";
+@import "swiper/css/navigation";
 body {
   font-family: "Poppins", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+/* .no-scrollbar::-webkit-scrollbar {
+  display: none;
+} */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+
+/* styles/globals.css  or tailwind base layer */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-snap-type: y proximity;
+  }
 }

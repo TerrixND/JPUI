@@ -1,14 +1,20 @@
 import { ChevronRight } from "@boxicons/react";
+import Link from "next/link";
 import React from "react";
 
 const AboutProduct = () => {
+  const stats = [
+    { value: "40+", label: "Years of craft" },
+    { value: "12K+", label: "Pieces sold" },
+    { value: "98%", label: "Client satisfaction" },
+  ];
   return (
-    <section className="w-full bg-gray-100 py-16 overflow-hidden">
+    <section className="w-full bg-neutral-100 py-20 overflow-hidden">
       {/* Same horizontal padding as Navbar */}
       <div className="px-6 sm:px-12 lg:px-20 relative">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* Image Wrapper */}
-          <div className="relative h-72 md:h-96 overflow-hidden rounded-lg group">
+          <div className="relative h-72 md:h-96 overflow-hidden group">
             {/* Gradient overlay */}
             <div className="absolute inset-0 bg-linear-to-t from-black/50 via-black/10 to-transparent z-10 pointer-events-none" />
 
@@ -25,32 +31,53 @@ const AboutProduct = () => {
             {/* Caption */}
             <div className="absolute bottom-0 left-0 right-0 z-30 px-5 py-4 translate-y-2 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-500">
               <p className="text-white text-xs tracking-[0.25em] uppercase font-light">
-                Jade Collection
+                Rare. Refined. Remarkable.
               </p>
             </div>
           </div>
 
-          {/* Content */}
-          <div className="space-y-5 z-10">
-            <span className="text-xs tracking-[0.3em] text-emerald-700 uppercase">
-              About Product
-            </span>
+          {/* ===== Right: Content ===== */}
+          <div className="flex flex-col justify-between h-full gap-10 lg:pl-10">
+            {/* Text block */}
+            <div className="space-y-5">
+              <span className="text-xs tracking-[0.3em] text-neutral-400 uppercase">
+                About Product
+              </span>
 
-            <h2 className="text-3xl sm:text-4xl font-semibold text-gray-900 leading-snug">
-              Rare. Refined. Remarkable.
-            </h2>
+              <h3 className="text-2xl lg:text-3xl font-light tracking-tight text-neutral-900 leading-snug">
+                Rare. Refined. Remarkable.
+              </h3>
 
-            <p className="text-gray-600 leading-relaxed text-base max-w-lg">
-              With over four decades of dedication, every jade piece is shaped
-              with precision and care. Our expert artisans transform rare stones
-              into timeless works of elegance — crafted to be treasured for
-              generations.
-            </p>
+              <p className="text-sm text-neutral-500 leading-relaxed max-w-md">
+                For more than 40 years, we have dedicated ourselves to the art
+                of jade craftsmanship. Each piece is carefully shaped with
+                precision and patience by our skilled artisans. We select rare
+                stones and transform them into elegant designs that reflect
+                timeless beauty. Every creation is made to be treasured today
+                and passed down for generations.
+              </p>
 
-            <button className="group inline-flex items-center gap-2 mt-3 px-6 py-2.5 border border-gray-900 text-gray-900 text-sm tracking-wide transition-all duration-300 hover:bg-gray-900 hover:text-white cursor-pointer">
-              <span>See More</span>
-              <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-            </button>
+              <Link
+                href="#"
+                className="inline-flex items-center gap-2 border border-neutral-300 px-6 py-2.5 text-sm tracking-widest uppercase text-neutral-500 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition duration-300"
+              >
+                See More →
+              </Link>
+            </div>
+
+            {/* ===== Stats row ===== */}
+            <div className="grid grid-cols-3 divide-x divide-neutral-200 border-t border-neutral-200 pt-8">
+              {stats.map((stat) => (
+                <div key={stat.label} className="px-4 first:pl-0">
+                  <p className="text-2xl font-light text-neutral-900">
+                    {stat.value}
+                  </p>
+                  <p className="text-xs text-neutral-400 mt-1 tracking-wide">
+                    {stat.label}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
