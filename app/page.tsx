@@ -70,7 +70,7 @@ const HomePage = () => {
   }, []);
 
   return (
-    <>
+    <div className="bg-transparent">
       <Navbar />
       <main className="scroll-smooth">
         <ScrollHero hideAtRef={nextSectionRef} />
@@ -92,7 +92,7 @@ const HomePage = () => {
           )}
         </div>
       </main>
-    </>
+    </div>
   );
 };
 
