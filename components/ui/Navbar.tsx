@@ -2,9 +2,21 @@
 
 import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import useAuth from "@/hooks/useAuth";
 import { usePathname } from "next/navigation";
+import supabase from "@/lib/supabase";
+import {
+  getDashboardBasePath,
+  mapBackendRoleToDashboardRole,
+} from "@/lib/roleChecker";
+
+type MeResponse = {
+  id: string | null;
+  role: string | null;
+  status: string | null;
+  isSetup: boolean;
+};
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const user = useAuth();
@@ -12,23 +24,30 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
-  
-  // 👇 Define which routes start with a white background
+  const [dashboardHref, setDashboardHref] = useState<string | null>(null);
+
   const whiteRoutes = ["/products", "/aboutus", "/profile", "/login", "/signup"];
   const startsWhite = whiteRoutes.includes(pathname);
 
   const isLight = isScrolled || startsWhite;
 
   const textColor = isLight ? "text-black" : "text-white";
-const iconColor = isLight ? "text-gray-700" : "text-white";
+  const iconColor = isLight ? "text-gray-700" : "text-white";
 
-  const navLinks = [
-    { label: "Home", href: "/" },
-    { label: "Products", href: "/products" },
-    { label: "About Us", href: "/aboutus" },
-  ];
+  const navLinks = useMemo(() => {
+    const links = [
+      { label: "Home", href: "/" },
+      { label: "Products", href: "/products" },
+      { label: "About Us", href: "/aboutus" },
+    ];
 
-  // 👇 Detect scroll
+    if (dashboardHref) {
+      links.push({ label: "Dashboard", href: dashboardHref });
+    }
+
+    return links;
+  }, [dashboardHref]);
+
   useEffect(() => {
     const handleScroll = () => {
       const threshold = heroMode ? window.innerHeight * 2.5 : 50;
@@ -38,6 +57,75 @@ const iconColor = isLight ? "text-gray-700" : "text-white";
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [heroMode]);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    const loadDashboardLink = async () => {
+      if (!user) {
+        if (!isDisposed) {
+          setDashboardHref(null);
+        }
+        return;
+      }
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session?.access_token) {
+          if (!isDisposed) {
+            setDashboardHref(null);
+          }
+          return;
+        }
+
+        const response = await fetch("/api/v1/user/me", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!isDisposed) {
+            setDashboardHref(null);
+          }
+          return;
+        }
+
+        const me = (await response.json().catch(() => null)) as MeResponse | null;
+        const dashboardRole = mapBackendRoleToDashboardRole(me?.role);
+        const userId = me?.id || "";
+        const isEligible =
+          Boolean(dashboardRole) &&
+          Boolean(userId) &&
+          me?.status === "ACTIVE" &&
+          Boolean(me?.isSetup);
+
+        if (!isDisposed) {
+          setDashboardHref(
+            isEligible && dashboardRole
+              ? getDashboardBasePath(dashboardRole, userId)
+              : null,
+          );
+        }
+      } catch {
+        if (!isDisposed) {
+          setDashboardHref(null);
+        }
+      }
+    };
+
+    void loadDashboardLink();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [user]);
 
   return (
     <div
