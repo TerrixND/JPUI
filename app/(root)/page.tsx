@@ -3,7 +3,6 @@
 import AboutProduct from "@/components/ui/AboutProduct";
 import Footer from "@/components/ui/Footer";
 import ScrollHero from "@/components/ui/ScrollHero";
-import Navbar from "@/components/ui/Navbar";
 import NewArrivals from "@/components/ui/NewArrivals";
 import OurProcess from "@/components/ui/OurProcess";
 
