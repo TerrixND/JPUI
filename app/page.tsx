@@ -36,10 +36,7 @@ const HomePage = () => {
         } = await supabase.auth.getSession();
 
         if (sessionError) {
-          if (
-            sessionError.message.toLowerCase().includes("invalid refresh token")
-          ) {
-            await supabase.auth.signOut();
+          if (sessionError.message.toLowerCase().includes("invalid refresh token")) {
             return;
           }
 

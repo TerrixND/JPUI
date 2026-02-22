@@ -100,7 +100,6 @@ export default function DashboardLayout({
             meBody?.message || "Unable to verify user role for dashboard access.";
 
           if (meResponse.status === 401) {
-            await supabase.auth.signOut().catch(() => undefined);
             setAuthState(initialAuthState);
             router.replace("/404");
             return;
