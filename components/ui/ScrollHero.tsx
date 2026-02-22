@@ -3,125 +3,137 @@
 import React, { useRef, useEffect, useState } from "react";
 
 interface ScrollHeroProps {
-    hideAtRef?: React.RefObject<HTMLElement | null>;
+  hideAtRef?: React.RefObject<HTMLElement | null>;
 }
 
 const sections = [
-    {
-        id: 1,
-        video: "/videos/hero-2.mp4",
-        eyebrow: "Heritage Collection",
-        title: ["Timeless", "Craftsmanship"],
-        description:
-            "Every jade piece is shaped with precision and decades of mastery.",
-        button: "Explore Heritage",
-        accent: "#C8A96E",
-    },
-    {
-        id: 2,
-        video: "/videos/hero-3.mp4",
-        eyebrow: "Provenance",
-        title: ["Rare.", "Pure.", "Powerful."],
-        description: "Sourced from the finest origins, refined into wearable art.",
-        button: "Discover Collection",
-        accent: "#8FB8A2",
-    },
-    {
-        id: 3,
-        video: "/videos/hero-4.mp4",
-        eyebrow: "New Season",
-        title: ["Luxury", "Redefined"],
-        description:
-            "Minimal form. Maximum elegance. Designed for the modern elite.",
-        button: "Shop Now",
-        accent: "#B8A9C9",
-    },
+  {
+    id: 1,
+    video: "/videos/hero-2.mp4",
+    eyebrow: "Heritage Collection",
+    title: ["Timeless", "Craftsmanship"],
+    description:
+      "Every jade piece is shaped with precision and decades of mastery.",
+    button: "Explore Heritage",
+    accent: "#C8A96E",
+  },
+  {
+    id: 2,
+    video: "/videos/hero-3.mp4",
+    eyebrow: "Provenance",
+    title: ["Rare.", "Pure.", "Powerful."],
+    description: "Sourced from the finest origins, refined into wearable art.",
+    button: "Discover Collection",
+    accent: "#8FB8A2",
+  },
+  {
+    id: 3,
+    video: "/videos/hero-4.mp4",
+    eyebrow: "New Season",
+    title: ["Luxury", "Redefined"],
+    description:
+      "Minimal form. Maximum elegance. Designed for the modern elite.",
+    button: "Shop Now",
+    accent: "#B8A9C9",
+  },
 ];
 
 const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
-    const [activeIndex, setActiveIndex] = useState(0);
-    const [animKey, setAnimKey] = useState(0);
-    const sectionRefs = useRef<(HTMLElement | null)[]>([]);
-    const heroRef = useRef<HTMLDivElement>(null);
-    const [showDots, setShowDots] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
+  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [showDots, setShowDots] = useState(true);
 
-    /* ── Mandatory snap within the hero, free scroll once past it ─────────
-     * While the viewport is inside the hero area → mandatory snap so each
-     * scroll gesture moves exactly one slide.
-     * Once scrollY reaches the content section → snap is removed so the
-     * rest of the page scrolls normally.
-     * ─────────────────────────────────────────────────────────────────── */
-    useEffect(() => {
-        document.documentElement.style.scrollSnapType = "y mandatory";
+  /* ── Mandatory snap within the hero, free scroll once past it ─────────
+   * While the viewport is inside the hero area → mandatory snap so each
+   * scroll gesture moves exactly one slide.
+   * Once scrollY reaches the content section → snap is removed so the
+   * rest of the page scrolls normally.
+   * ─────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    document.documentElement.style.scrollSnapType = "y mandatory";
 
-        const handleScroll = () => {
-            // Use the actual rendered hero height (immune to vh/dvh mismatches)
-            const heroEl = heroRef.current;
-            const heroEnd = heroEl
-                ? heroEl.offsetTop + heroEl.offsetHeight
-                : window.innerHeight * sections.length;
+    const handleScroll = () => {
+      // Use the actual rendered hero height (immune to vh/dvh mismatches)
+      const heroEl = heroRef.current;
+      const heroEnd = heroEl
+        ? heroEl.offsetTop + heroEl.offsetHeight
+        : window.innerHeight * sections.length;
 
-            if (window.scrollY > heroEnd + 50) {
-                // Deep in content — free scroll
-                if (document.documentElement.style.scrollSnapType !== "none") {
-                    document.documentElement.style.scrollSnapType = "none";
-                }
-            } else {
-                // In hero OR at the hero↔content boundary — mandatory snap.
-                // This covers both the hero section-by-section snapping AND
-                // the snap-back from content → hero on a single upward scroll.
-                if (document.documentElement.style.scrollSnapType !== "y mandatory") {
-                    document.documentElement.style.scrollSnapType = "y mandatory";
-                }
-            }
-        };
-
-        window.addEventListener("scroll", handleScroll, { passive: true });
-        return () => {
-            document.documentElement.style.scrollSnapType = "";
-            window.removeEventListener("scroll", handleScroll);
-        };
-    }, []);
-
-    useEffect(() => {
-        const observers = sectionRefs.current.map((ref, i) => {
-            if (!ref) return null;
-            const obs = new IntersectionObserver(
-                ([entry]) => {
-                    if (entry.isIntersecting) {
-                        setActiveIndex(i);
-                        setAnimKey((k) => k + 1);
-                    }
-                },
-                { threshold: 0.5 },
-            );
-            obs.observe(ref);
-            return obs;
-        });
-        return () => observers.forEach((obs) => obs?.disconnect());
-    }, []);
-
-    useEffect(() => {
-        if (!hideAtRef?.current) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setShowDots(!entry.isIntersecting),
-            { threshold: 0.1 },
-        );
-        observer.observe(hideAtRef.current);
-        return () => observer.disconnect();
-    }, [hideAtRef]);
-
-    const scrollToSection = (i: number) => {
-        sectionRefs.current[i]?.scrollIntoView({ behavior: "smooth" });
+      if (window.scrollY > heroEnd + 50) {
+        // Deep in content — free scroll
+        if (document.documentElement.style.scrollSnapType !== "none") {
+          document.documentElement.style.scrollSnapType = "none";
+        }
+      } else {
+        // In hero OR at the hero↔content boundary — mandatory snap.
+        // This covers both the hero section-by-section snapping AND
+        // the snap-back from content → hero on a single upward scroll.
+        if (document.documentElement.style.scrollSnapType !== "y mandatory") {
+          document.documentElement.style.scrollSnapType = "y mandatory";
+        }
+      }
     };
 
-    return (
-        <div ref={heroRef} className="bg-black">
-            <style>{`
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      document.documentElement.style.scrollSnapType = "";
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const observers = sectionRefs.current.map((ref, i) => {
+      if (!ref) return null;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setActiveIndex(i);
+            setAnimKey((k) => k + 1);
+          }
+        },
+        { threshold: 0.5 },
+      );
+      obs.observe(ref);
+      return obs;
+    });
+    return () => observers.forEach((obs) => obs?.disconnect());
+  }, []);
+
+  useEffect(() => {
+    if (!hideAtRef?.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowDots(!entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(hideAtRef.current);
+    return () => observer.disconnect();
+  }, [hideAtRef]);
+
+  const scrollToSection = (i: number) => {
+    sectionRefs.current[i]?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  return (
+    <div ref={heroRef} className="bg-black">
+      <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap');
 
         .sh-display { font-family: 'Cormorant Garamond', serif; }
         .sh-sans    { font-family: 'Jost', sans-serif; }
+
+        body {
+          font-family: "Poppins", sans-serif;
+          margin: 0;
+          padding: 0;
+          background: #000;
+        }
+        html {
+          scroll-behavior: smooth;
+          background: #000;
+        }
+
 
         /* ── Each snap section fills exactly one screen ── */
         .sh-snap-section {
@@ -393,85 +405,90 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
         }
       `}</style>
 
-            {/* ── Nav Dots (fixed, outside scroll container) ── */}
-            <div
-                className="sh-nav-dots"
-                style={{ opacity: showDots ? 1 : 0, pointerEvents: showDots ? "auto" : "none" }}
-            >
-                {sections.map((_, i) => (
-                    <button
-                        key={i}
-                        aria-label={`Go to slide ${i + 1}`}
-                        onClick={() => scrollToSection(i)}
-                        className={`sh-dot${activeIndex === i ? " active" : ""}`}
-                    />
-                ))}
-            </div>
+      {/* ── Nav Dots (fixed, outside scroll container) ── */}
+      <div
+        className="sh-nav-dots"
+        style={{
+          opacity: showDots ? 1 : 0,
+          pointerEvents: showDots ? "auto" : "none",
+        }}
+      >
+        {sections.map((_, i) => (
+          <button
+            key={i}
+            aria-label={`Go to slide ${i + 1}`}
+            onClick={() => scrollToSection(i)}
+            className={`sh-dot${activeIndex === i ? " active" : ""}`}
+          />
+        ))}
+      </div>
 
-            {sections.map((section, i) => (
-                    <section
-                        key={section.id}
-                        ref={(el) => { sectionRefs.current[i] = el; }}
-                        className="sh-snap-section"
-                        style={{ "--accent": section.accent } as React.CSSProperties}
-                    >
-                        {/* Video background */}
-                        <video
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="sh-video"
-                            aria-hidden="true"
-                        >
-                            <source src={section.video} type="video/mp4" />
-                        </video>
+      {sections.map((section, i) => (
+        <section
+          key={section.id}
+          ref={(el) => {
+            sectionRefs.current[i] = el;
+          }}
+          className="sh-snap-section"
+          style={{ "--accent": section.accent } as React.CSSProperties}
+        >
+          {/* Video background */}
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="sh-video"
+            aria-hidden="true"
+          >
+            <source src={section.video} type="video/mp4" />
+          </video>
 
-                        {/* Gradient overlay */}
-                        <div className="sh-overlay" aria-hidden="true" />
+          {/* Gradient overlay */}
+          <div className="sh-overlay" aria-hidden="true" />
 
-                        {/* Left decorative line */}
-                        <div className="sh-deco-line" aria-hidden="true" />
+          {/* Left decorative line */}
+          <div className="sh-deco-line" aria-hidden="true" />
 
-                        {/* Section counter */}
-                        <div className="sh-counter" aria-hidden="true">
-                            0{section.id} — 0{sections.length}
-                        </div>
+          {/* Section counter */}
+          <div className="sh-counter" aria-hidden="true">
+            0{section.id} — 0{sections.length}
+          </div>
 
-                        {/* ── Animated content block ── */}
-                        <div key={`${animKey}-${i}`} className="sh-content">
-                            <p className="sh-eyebrow sh-a1">
-                                <span className="sh-eyebrow-line" aria-hidden="true" />
-                                {section.eyebrow}
-                            </p>
+          {/* ── Animated content block ── */}
+          <div key={`${animKey}-${i}`} className="sh-content">
+            <p className="sh-eyebrow sh-a1">
+              <span className="sh-eyebrow-line" aria-hidden="true" />
+              {section.eyebrow}
+            </p>
 
-                            <h1 className="sh-title sh-a2">
-                                {section.title.map((line, j) => (
-                                    <span key={j} style={{ display: "block" }}>
-                    {j === 0 ? (
-                        <em style={{ fontStyle: "italic", color: "var(--accent)" }}>
-                            {line}
-                        </em>
-                    ) : (
-                        line
-                    )}
-                  </span>
-                                ))}
-                            </h1>
-
-                            <p className="sh-description sh-a3">{section.description}</p>
-
-                            <button className="sh-btn sh-a4">
-                <span style={{ position: "relative", zIndex: 1 }}>
-                  {section.button}
+            <h1 className="sh-title sh-a2">
+              {section.title.map((line, j) => (
+                <span key={j} style={{ display: "block" }}>
+                  {j === 0 ? (
+                    <em style={{ fontStyle: "italic", color: "var(--accent)" }}>
+                      {line}
+                    </em>
+                  ) : (
+                    line
+                  )}
                 </span>
-                                <span className="sh-arrow" aria-hidden="true" />
-                            </button>
-                        </div>
-                    </section>
-                ))}
-        </div>
-    );
+              ))}
+            </h1>
+
+            <p className="sh-description sh-a3">{section.description}</p>
+
+            <button className="sh-btn sh-a4">
+              <span style={{ position: "relative", zIndex: 1 }}>
+                {section.button}
+              </span>
+              <span className="sh-arrow" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 };
 
 export default ScrollHero;

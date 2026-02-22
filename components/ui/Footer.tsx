@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const Footer = () => {
   return (
-    <footer className="w-full bg-white border-t border-gray-200 mt-6">
+    <footer className="w-full bg-white border-t border-gray-200">
       <div className="max-w-7xl mx-auto px-6 sm:px-12 lg:px-20 py-16">
         
         {/* Top Section */}

@@ -103,7 +103,7 @@ const SignupPage = () => {
   };
 
   return (
-    <div className="lg:w-[100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
+    <div className="lg:w-[100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center mb-10">
       <div className="flex justify-between items-center flex-wrap mb-6 gap-4">
         <div className="">
           <h3 className="text-base font-semibold text-black">
@@ -145,7 +145,7 @@ const SignupPage = () => {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             label="Full Name"
-            placeholder="John Snow"
+            placeholder="Rain John"
             type="text"
           />
           <InputBox

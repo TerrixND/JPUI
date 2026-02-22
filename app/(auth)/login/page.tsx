@@ -59,7 +59,7 @@ const LoginPage = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           label="Email Address"
-          placeholder="john@gmail.com"
+          placeholder="you@gmail.com"
           type="text"
         />
         <InputBox
@@ -165,7 +165,7 @@ const LoginPage = () => {
           <p className="text-[13px] text-slate-800">
             Forgot{" "}
             <Link
-              href={"/signup"}
+              href={"/forgot-password"}
               className="font-medium text-emerald-700 underline"
             >
               Password?

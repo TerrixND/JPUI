@@ -8,37 +8,31 @@ const products = [
   {
     id: 1,
     name: "Emerald Harmony Necklace",
-    price: "$1,250",
     image: "/images/img1.png",
   },
   {
     id: 2,
     name: "Imperial Jade Ring",
-    price: "$890",
     image: "/images/img2.png",
   },
   {
     id: 3,
     name: "Celestial Drop Earrings",
-    price: "$640",
     image: "/images/img3.png",
   },
   {
     id: 4,
     name: "Serenity Jade Bracelet",
-    price: "$720",
     image: "/images/img4.png",
   },
   {
     id: 5,
     name: "Emerald Harmony Necklace",
-    price: "$1,250",
     image: "/images/img1.png",
   },
   {
     id: 6,
     name: "Imperial Jade Ring",
-    price: "$890",
     image: "/images/img2.png",
   },
 ];
@@ -108,6 +102,8 @@ const NewArrival = () => {
                   src={product.image}
                   alt={product.name}
                   fill
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  priority={product.id === 1}
                   className="object-contain transition duration-700 group-hover:scale-105"
                 />
 
@@ -119,7 +115,6 @@ const NewArrival = () => {
                 <h3 className="text-sm font-semibold text-neutral-900">
                   {product.name}
                 </h3>
-                <p className="text-sm text-neutral-500">{product.price}</p>
               </div>
             </div>
           ))}

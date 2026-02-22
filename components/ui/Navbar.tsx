@@ -4,15 +4,23 @@ import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import useAuth from "@/hooks/useAuth";
+import { usePathname } from "next/navigation";
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const user = useAuth();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
+  
+  // 👇 Define which routes start with a white background
+  const whiteRoutes = ["/products", "/aboutus", "/profile", "/login", "/signup"];
+  const startsWhite = whiteRoutes.includes(pathname);
 
-  const textColor = isScrolled ? "text-black" : "text-white";
-  const iconColor = isScrolled ? "text-gray-700" : "text-white";
+  const isLight = isScrolled || startsWhite;
+
+  const textColor = isLight ? "text-black" : "text-white";
+const iconColor = isLight ? "text-gray-700" : "text-white";
 
   const navLinks = [
     { label: "Home", href: "/" },
@@ -29,12 +37,12 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [heroMode]);
 
   return (
     <div
       className={`z-100 w-full fixed top-0 left-0 transition-all duration-300 ${
-        isScrolled ? "bg-white shadow-md" : "bg-transparent"
+        isLight ? "bg-white shadow-xs" : "bg-transparent"
       }`}
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
@@ -72,7 +80,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               <User className={`w-5 h-5 ${iconColor}`} />
             </Link>
           ) : (
-            <div className="hidden md:flex gap-3 items-center">
+            <div className="hidden md:flex gap-6 items-center">
               <Link
                 href="/login"
                 className={`text-sm ${textColor} hover:opacity-70 transition-opacity duration-200`}
@@ -82,7 +90,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               <Link
                 href="/signup"
                 className={`text-sm px-4 py-1.5 border rounded transition-colors duration-200 ${
-                  isScrolled
+                  isLight
                     ? "border-black text-black hover:bg-black hover:text-white"
                     : "border-white text-white hover:bg-white hover:text-black"
                 }`}
