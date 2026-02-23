@@ -49,11 +49,11 @@ const initialForm: ProductForm = {
   consignmentAgreementId: "",
 };
 
-const VISIBILITY_OPTIONS = ["PUBLIC", "PRIVATE", "RESTRICTED"];
-const TIER_OPTIONS = ["STANDARD", "PREMIUM", "EXCLUSIVE"];
-const STATUS_OPTIONS = ["AVAILABLE", "RESERVED", "SOLD", "TRANSFER_PENDING"];
-const CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ELITE"];
-const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNMENT"];
+const VISIBILITY_OPTIONS = ["PRIVATE", "PUBLIC", "TOP_SHELF", "TARGETED"];
+const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"];
+const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"];
+const CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"];
+const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNED"];
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -89,6 +89,21 @@ export default function AddProductPage() {
     setLoading(true);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      const accessToken = session?.access_token || "";
+
+      if (!accessToken) {
+        throw new Error("Missing access token. Please sign in again.");
+      }
+
       const payload = {
         sku: form.sku.trim(),
         name: form.name.trim() || null,
@@ -106,53 +121,44 @@ export default function AddProductPage() {
         status: form.status,
         minCustomerTier: form.minCustomerTier || null,
         sourceType: form.sourceType,
-        consignmentAgreementId:
-          form.sourceType === "CONSIGNMENT" && form.consignmentAgreementId.trim()
-            ? form.consignmentAgreementId.trim()
-            : null,
       };
 
-      let mediaPayload: Array<{ id: string; isPrimary: boolean }> = [];
+      let mediaIds: string[] = [];
 
       if (mediaFiles.length > 0) {
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw new Error(sessionError.message);
-        }
-
-        const accessToken = session?.access_token || "";
-
-        if (!accessToken) {
-          throw new Error("Missing access token. Please sign in again.");
-        }
-
         const uploadedMedia = await uploadMediaFiles({
           files: mediaFiles.map((mf) => mf.file),
           accessToken,
         });
 
-        mediaPayload = uploadedMedia.map((media, index) => ({
-          id: media.id,
-          isPrimary:
-            mediaFiles[index]?.type === "IMAGE" && Boolean(mediaFiles[index]?.isPrimary),
-        }));
+        mediaIds = uploadedMedia.map((media) => media.id);
       }
 
-      // TODO: Replace with actual API call — POST /admin/products
-      // Include `mediaPayload` in the product request once backend create-product contract is finalized.
       const createProductPayload = {
         ...payload,
-        media: mediaPayload,
+        mediaIds,
       };
 
-      console.log("Product payload:", createProductPayload);
+      const createResponse = await fetch("/api/v1/admin/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(createProductPayload),
+      });
 
-      // Simulate API delay
-      await new Promise((r) => setTimeout(r, 600));
+      const createBody = (await createResponse.json().catch(() => null)) as
+        | { message?: string; code?: string; reason?: string }
+        | null;
+
+      if (!createResponse.ok) {
+        const message = createBody?.message || "Failed to create product.";
+        const code = createBody?.code ? ` (code: ${createBody.code})` : "";
+        const reason = createBody?.reason ? ` (reason: ${createBody.reason})` : "";
+
+        throw new Error(`${message}${code}${reason}`);
+      }
 
       router.push(productsPath);
     } catch (caughtError) {
@@ -411,7 +417,7 @@ export default function AddProductPage() {
                 ))}
               </select>
             </div>
-            {form.sourceType === "CONSIGNMENT" && (
+            {form.sourceType === "CONSIGNED" && (
               <div>
                 <label className="block text-[13px] text-gray-700 mb-1.5">
                   Consignment Agreement ID
