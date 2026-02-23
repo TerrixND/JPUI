@@ -2,7 +2,10 @@
 
 import InputBox from "@/components/ui/InputBox";
 import {
+  bootstrapAdmin,
   clearPendingSetupPayload,
+  precheckSignup,
+  resolveOnboardingMode,
   setupUser,
   storePendingSetupPayload,
 } from "@/lib/setupUser";
@@ -57,7 +60,7 @@ const SignupPage = () => {
         );
       }
 
-      const normalizedEmail = email.trim();
+      const normalizedEmail = email.trim().toLowerCase();
 
       if (!normalizedEmail || !password) {
         throw new Error("Email and password are required.");
@@ -70,6 +73,12 @@ const SignupPage = () => {
         preferredLanguage: selected.code || undefined,
         city: city.trim() || undefined,
       };
+
+      const precheckResult = await precheckSignup({
+        email: normalizedEmail,
+        ...profilePayload,
+      });
+      const onboardingMode = resolveOnboardingMode(precheckResult);
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -84,14 +93,19 @@ const SignupPage = () => {
       }
 
       if (data.session?.access_token) {
-        await setupUser(data.session.access_token, profilePayload);
+        if (onboardingMode === "bootstrap-admin") {
+          await bootstrapAdmin(data.session.access_token, profilePayload);
+        } else {
+          await setupUser(data.session.access_token, profilePayload);
+        }
+
         clearPendingSetupPayload();
         router.replace("/");
         router.refresh();
         return;
       }
 
-      storePendingSetupPayload(normalizedEmail, profilePayload);
+      storePendingSetupPayload(normalizedEmail, profilePayload, onboardingMode);
       setMessage(
         "Sign up successful. Verify your email, then login to finish account setup.",
       );

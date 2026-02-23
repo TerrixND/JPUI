@@ -5,6 +5,9 @@ const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, "");
 const getApiBaseUrl = () =>
   process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
+const isBootstrapModeEnabled = () =>
+  Boolean(process.env.SUPER_ADMIN_BOOTSTRAP_SECRET?.trim());
+
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/auth/setup-user`;
+  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/auth/precheck-signup`;
 
   try {
     const targetOrigin = new URL(targetUrl).origin;
@@ -43,17 +46,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const authorization = request.headers.get("authorization");
-
-  if (!authorization) {
-    return NextResponse.json(
-      {
-        message: "Missing authorization header.",
-      },
-      { status: 401 },
-    );
-  }
-
   const body = await request.text();
 
   try {
@@ -61,7 +53,6 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authorization,
       },
       body,
       cache: "no-store",
@@ -70,6 +61,33 @@ export async function POST(request: NextRequest) {
     const upstreamBody = await upstreamResponse.text();
     const contentType =
       upstreamResponse.headers.get("content-type") || "application/json";
+
+    if (contentType.toLowerCase().includes("application/json")) {
+      try {
+        const parsed = JSON.parse(upstreamBody) as unknown;
+
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          const responseBody = parsed as Record<string, unknown>;
+          const bootstrapEnabled = isBootstrapModeEnabled();
+
+          if (typeof responseBody.bootstrapEnabled !== "boolean") {
+            responseBody.bootstrapEnabled = bootstrapEnabled;
+          }
+
+          if (typeof responseBody.onboardingMode !== "string") {
+            responseBody.onboardingMode = bootstrapEnabled
+              ? "bootstrap-admin"
+              : "setup-user";
+          }
+
+          return NextResponse.json(responseBody, {
+            status: upstreamResponse.status,
+          });
+        }
+      } catch {
+        // Fall through and return the raw upstream body.
+      }
+    }
 
     return new NextResponse(upstreamBody, {
       status: upstreamResponse.status,
@@ -83,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        message: `Unable to reach upstream account setup endpoint (${targetUrl}). ${message}`,
+        message: `Unable to reach upstream signup precheck endpoint (${targetUrl}). ${message}`,
       },
       { status: 502 },
     );

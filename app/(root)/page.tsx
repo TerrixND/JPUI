@@ -7,8 +7,9 @@ import NewArrivals from "@/components/ui/NewArrivals";
 import OurProcess from "@/components/ui/OurProcess";
 
 import {
+  bootstrapAdmin,
   clearPendingSetupPayload,
-  getPendingSetupPayloadForEmail,
+  getPendingSetupProfileForEmail,
   setupUser,
 } from "@/lib/setupUser";
 
@@ -45,13 +46,18 @@ const HomePage = () => {
         if (!session?.access_token) return;
 
         const email = session.user?.email || "";
-        const pendingPayload = email
-          ? getPendingSetupPayloadForEmail(email)
+        const pendingSetupProfile = email
+          ? getPendingSetupProfileForEmail(email)
           : null;
 
-        if (!pendingPayload) return;
+        if (!pendingSetupProfile) return;
 
-        await setupUser(session.access_token, pendingPayload);
+        if (pendingSetupProfile.onboardingMode === "bootstrap-admin") {
+          await bootstrapAdmin(session.access_token, pendingSetupProfile.payload);
+        } else {
+          await setupUser(session.access_token, pendingSetupProfile.payload);
+        }
+
         clearPendingSetupPayload();
       } catch (error) {
         setSetupError(
