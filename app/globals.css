@@ -21,6 +21,13 @@ html {
   scrollbar-width: none;
 }
 
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* styles/globals.css  or tailwind base layer */
 @layer base {
@@ -29,4 +36,5 @@ html {
     height: 100vh;
   }
 }
+
 

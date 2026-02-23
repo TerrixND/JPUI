@@ -1,51 +1,9 @@
 "use client";
+import { PRODUCTS } from "@/utils/data";
 import Image from "next/image";
+import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
-type Product = {
-  id: number;
-  name: string;
-  image: string;
-  popularity: number;
-  createdAt: number;
-  finish: "polished" | "raw";
-};
-
-const PRODUCTS: Product[] = [
-  { id: 1, name: "Emerald Harmony Necklace", image: "/images/img1.png", popularity: 120, createdAt: 20240110, finish: "polished" },
-  { id: 2, name: "Imperial Jade Ring", image: "/images/img2.png", popularity: 300, createdAt: 20240201, finish: "raw" },
-  { id: 3, name: "Celestial Drop Earrings", image: "/images/img3.png", popularity: 220, createdAt: 20240315, finish: "polished" },
-  { id: 4, name: "Serenity Jade Bracelet", image: "/images/img4.png", popularity: 180, createdAt: 20240402, finish: "raw" },
-  { id: 5, name: "Golden Vein Jade Pendant", image: "/images/img1.png", popularity: 260, createdAt: 20240511, finish: "polished" },
-  { id: 6, name: "Imperial Green Bangle", image: "/images/img2.png", popularity: 340, createdAt: 20240621, finish: "raw" },
-  { id: 7, name: "Lotus Carved Jade Ring", image: "/images/img3.png", popularity: 150, createdAt: 20240709, finish: "polished" },
-  { id: 8, name: "Harmony Stone Bracelet", image: "/images/img4.png", popularity: 210, createdAt: 20240814, finish: "raw" },
-  { id: 9, name: "Dynasty Jade Pendant", image: "/images/img1.png", popularity: 390, createdAt: 20240901, finish: "polished" },
-  { id: 10, name: "Eternal Glow Earrings", image: "/images/img2.png", popularity: 175, createdAt: 20240928, finish: "raw" },
-  { id: 11, name: "Imperial Carved Necklace", image: "/images/img3.png", popularity: 285, createdAt: 20241016, finish: "polished" },
-  { id: 12, name: "Serene Jade Drop Pendant", image: "/images/img4.png", popularity: 195, createdAt: 20241103, finish: "raw" },
-  { id: 13, name: "Celestial Harmony Ring", image: "/images/img1.png", popularity: 410, createdAt: 20241201, finish: "polished" },
-  { id: 14, name: "Golden Serenity Bangle", image: "/images/img2.png", popularity: 240, createdAt: 20241218, finish: "raw" },
-  { id: 15, name: "Dynasty Glow Bracelet", image: "/images/img3.png", popularity: 320, createdAt: 20250105, finish: "polished" },
-  { id: 16, name: "Emerald Lotus Earrings", image: "/images/img4.png", popularity: 205, createdAt: 20250122, finish: "raw" },
-
-  { id: 17, name: "Imperial Harmony Pendant", image: "/images/img1.png", popularity: 275, createdAt: 20250210, finish: "polished" },
-  { id: 18, name: "Jade Dynasty Ring", image: "/images/img2.png", popularity: 360, createdAt: 20250302, finish: "raw" },
-  { id: 19, name: "Celestial Glow Necklace", image: "/images/img3.png", popularity: 190, createdAt: 20250325, finish: "polished" },
-  { id: 20, name: "Golden Lotus Bracelet", image: "/images/img4.png", popularity: 230, createdAt: 20250414, finish: "raw" },
-  { id: 21, name: "Emerald Crown Pendant", image: "/images/img1.png", popularity: 410, createdAt: 20250501, finish: "polished" },
-  { id: 22, name: "Imperial Forest Ring", image: "/images/img2.png", popularity: 295, createdAt: 20250520, finish: "raw" },
-  { id: 23, name: "Serenity Glow Earrings", image: "/images/img3.png", popularity: 160, createdAt: 20250608, finish: "polished" },
-  { id: 24, name: "Jade Harmony Bangle", image: "/images/img4.png", popularity: 340, createdAt: 20250625, finish: "raw" },
-  { id: 25, name: "Golden Dynasty Necklace", image: "/images/img1.png", popularity: 380, createdAt: 20250711, finish: "polished" },
-  { id: 26, name: "Celestial Jade Bracelet", image: "/images/img2.png", popularity: 210, createdAt: 20250729, finish: "raw" },
-  { id: 27, name: "Emerald Vein Ring", image: "/images/img3.png", popularity: 185, createdAt: 20250813, finish: "polished" },
-  { id: 28, name: "Imperial Stone Pendant", image: "/images/img4.png", popularity: 325, createdAt: 20250902, finish: "raw" },
-  { id: 29, name: "Serene Harmony Necklace", image: "/images/img1.png", popularity: 260, createdAt: 20250918, finish: "polished" },
-  { id: 30, name: "Golden Glow Earrings", image: "/images/img2.png", popularity: 305, createdAt: 20251005, finish: "raw" },
-  { id: 31, name: "Dynasty Lotus Bracelet", image: "/images/img3.png", popularity: 445, createdAt: 20251022, finish: "polished" },
-  { id: 32, name: "Imperial Emerald Bangle", image: "/images/img4.png", popularity: 215, createdAt: 20251109, finish: "raw" },
-];
 
 const ITEMS_PER_PAGE = 16;
 
@@ -179,14 +137,14 @@ const ProductPage = () => {
         {/* Product Grid */}
         <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-14">
           {paginatedProducts.map((product) => (
-            <div key={product.id} className="group cursor-pointer">
+            <Link href={`/products/${product.id}`} key={product.id} className="group cursor-pointer">
               <div className="relative aspect-3/4 overflow-hidden bg-white">
                 <Image
                   src={product.image}
                   alt={product.name}
                   fill
                   sizes="(max-width: 768px) 50vw, 25vw"
-                  priority={product.id === 1}
+                  priority={product.id === "1"}
                   loading="eager"
                   className="object-contain transition duration-700 group-hover:scale-105"
                 />
@@ -197,7 +155,7 @@ const ProductPage = () => {
                   {product.name}
                 </h3>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
 

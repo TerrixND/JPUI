@@ -26,10 +26,16 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
 
-  const whiteRoutes = ["/products", "/aboutus", "/profile", "/login", "/signup"];
-  const startsWhite = whiteRoutes.includes(pathname);
+  const whiteRoutes = [
+    "/products",
+    "/aboutus",
+    "/profile",
+    "/login",
+    "/signup",
+  ];
+  const isWhiteRoute = whiteRoutes.some((route) => pathname.startsWith(route));
 
-  const isLight = isScrolled || startsWhite;
+  const isLight = isScrolled || isWhiteRoute;
 
   const textColor = isLight ? "text-black" : "text-white";
   const iconColor = isLight ? "text-gray-700" : "text-white";
@@ -97,7 +103,9 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
           return;
         }
 
-        const me = (await response.json().catch(() => null)) as MeResponse | null;
+        const me = (await response
+          .json()
+          .catch(() => null)) as MeResponse | null;
         const dashboardRole = mapBackendRoleToDashboardRole(me?.role);
         const userId = me?.id || "";
         const isEligible =
@@ -249,3 +257,4 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 };
 
 export default Navbar;
+
