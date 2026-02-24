@@ -1,5 +1,9 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import StatCard from "@/components/ui/dashboard/StatCard";
+import supabase from "@/lib/supabase";
 
 const stats = [
   {
@@ -68,7 +72,107 @@ const auditLog = [
   { action: "Product status updated", user: "admin@jadepalace.com", target: "Gadget X",       time: "5 hours ago" },
 ];
 
+type ApiErrorPayload = {
+  message?: string;
+  code?: string;
+  reason?: string;
+};
+
+type InventoryProfitSnapshot = {
+  totals: {
+    productCount: number;
+    pricedProductCount: number;
+    unpricedProductCount: number;
+    projectedRevenueMin: number;
+    projectedRevenueMax: number;
+    projectedNetProfitMin: number;
+    projectedNetProfitMax: number;
+  };
+};
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+const moneyRange = (min: number, max: number) => `${money.format(min)} - ${money.format(max)}`;
+
+const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
+  const message = payload?.message || fallback;
+  const code = payload?.code ? ` (code: ${payload.code})` : "";
+  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
+  return `${message}${code}${reason}`;
+};
+
 export default function AdminDashboard() {
+  const [profitSnapshot, setProfitSnapshot] = useState<InventoryProfitSnapshot | null>(null);
+  const [profitError, setProfitError] = useState("");
+  const [profitLoading, setProfitLoading] = useState(true);
+
+  const getAccessToken = useCallback(async () => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
+    }
+
+    const accessToken = session?.access_token || "";
+
+    if (!accessToken) {
+      throw new Error("Missing access token. Please sign in again.");
+    }
+
+    return accessToken;
+  }, []);
+
+  const loadProjectedProfit = useCallback(async () => {
+    setProfitLoading(true);
+    setProfitError("");
+
+    try {
+      const accessToken = await getAccessToken();
+
+      const response = await fetch("/api/v1/admin/analytics/inventory-profit?includeSold=true", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | ApiErrorPayload
+        | InventoryProfitSnapshot
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          toErrorMessage(payload as ApiErrorPayload | null, "Failed to load projected inventory profit."),
+        );
+      }
+
+      setProfitSnapshot(payload as InventoryProfitSnapshot);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load projected inventory profit.";
+
+      setProfitSnapshot(null);
+      setProfitError(message);
+    } finally {
+      setProfitLoading(false);
+    }
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    void loadProjectedProfit();
+  }, [loadProjectedProfit]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -81,6 +185,66 @@ export default function AdminDashboard() {
         {stats.map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Projected Inventory Profit</h2>
+          <span className="text-xs text-gray-400">GET /admin/analytics/inventory-profit?includeSold=true</span>
+        </div>
+
+        {profitLoading && (
+          <p className="text-sm text-gray-500">Loading projected results...</p>
+        )}
+
+        {!profitLoading && profitError && (
+          <p className="text-sm text-red-600">{profitError}</p>
+        )}
+
+        {!profitLoading && !profitError && profitSnapshot && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Tracked Products"
+              value={String(profitSnapshot.totals.productCount)}
+              accent="bg-blue-50 text-blue-600"
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              }
+            />
+            <StatCard
+              label="Priced / Unpriced"
+              value={`${profitSnapshot.totals.pricedProductCount}/${profitSnapshot.totals.unpricedProductCount}`}
+              accent="bg-emerald-50 text-emerald-600"
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <StatCard
+              label="Projected Revenue"
+              value={moneyRange(profitSnapshot.totals.projectedRevenueMin, profitSnapshot.totals.projectedRevenueMax)}
+              accent="bg-purple-50 text-purple-600"
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3a1 1 0 012 0v1a1 1 0 11-2 0V3zm4.22 2.22a1 1 0 011.415 0l.707.707a1 1 0 11-1.414 1.414l-.708-.707a1 1 0 010-1.414zM21 11a1 1 0 110 2h-1a1 1 0 110-2h1zM6.343 6.343a1 1 0 010 1.414l-.707.708A1 1 0 114.222 7.05l.707-.707a1 1 0 011.414 0zM4 11a1 1 0 110 2H3a1 1 0 110-2h1zm2.343 6.657a1 1 0 10-1.414 1.414l.707.707a1 1 0 001.414-1.414l-.707-.707zM12 20a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm6.364-2.343a1 1 0 00-1.414 0l-.707.707a1 1 0 001.414 1.414l.707-.707a1 1 0 000-1.414z" />
+                </svg>
+              }
+            />
+            <StatCard
+              label="Projected Net Profit"
+              value={moneyRange(profitSnapshot.totals.projectedNetProfitMin, profitSnapshot.totals.projectedNetProfitMax)}
+              accent="bg-amber-50 text-amber-600"
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l6-6 4 4 8-8M14 7h7v7" />
+                </svg>
+              }
+            />
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}

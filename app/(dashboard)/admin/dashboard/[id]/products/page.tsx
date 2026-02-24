@@ -1,55 +1,348 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import { ADMIN_PRODUCTS } from "@/utils/data";
+import supabase from "@/lib/supabase";
 
-/* ------------------------------------------------------------------ */
-/*  Badge helpers                                                      */
-/* ------------------------------------------------------------------ */
+type ApiErrorPayload = {
+  message?: string;
+  code?: string;
+  reason?: string;
+};
 
-function statusBadge(status: string) {
+type InventoryAnalyticsResponse = {
+  includeSold: boolean;
+  totals: {
+    productCount: number;
+    pricedProductCount: number;
+    unpricedProductCount: number;
+    projectedRevenueMin: number;
+    projectedRevenueMax: number;
+    projectedNetProfitMin: number;
+    projectedNetProfitMax: number;
+  };
+  inventory: InventoryProduct[];
+};
+
+type InventoryProduct = {
+  id: string;
+  sku: string;
+  name: string | null;
+  status: string;
+  media?: InventoryProductMediaRef[];
+  mediaIds?: string[];
+  pricing: {
+    buyPrice: number | null;
+    saleMinPrice: number | null;
+    saleMaxPrice: number | null;
+    isComplete: boolean;
+  };
+  commission: {
+    allocationRateTotal: number;
+    allocations: Array<{
+      id: string;
+      targetType: "BRANCH" | "USER";
+    }>;
+  };
+  estimate: {
+    netProfitMin: number | null;
+    netProfitMax: number | null;
+  };
+};
+
+type InventoryProductMediaRef = {
+  id?: string;
+  type?: string;
+  url?: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
+type AdminMediaUrlResponse = {
+  id?: string;
+  type?: string;
+  url?: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
+type ProductImageRef = {
+  mediaId: string;
+  url: string;
+};
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
+  const message = payload?.message || fallback;
+  const code = payload?.code ? ` (code: ${payload.code})` : "";
+  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
+  return `${message}${code}${reason}`;
+};
+
+const toMoney = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return money.format(value);
+};
+
+const moneyRange = (min: number | null | undefined, max: number | null | undefined) => {
+  if (min === null || min === undefined || max === null || max === undefined) {
+    return "-";
+  }
+
+  return `${money.format(min)} - ${money.format(max)}`;
+};
+
+const statusBadge = (status: string) => {
   switch (status) {
-    case "AVAILABLE":        return "bg-green-50 text-green-700";
-    case "RESERVED":         return "bg-amber-50 text-amber-700";
-    case "SOLD":             return "bg-gray-100 text-gray-600";
-    case "TRANSFER_PENDING": return "bg-blue-50 text-blue-700";
-    default:                 return "bg-gray-100 text-gray-600";
+    case "AVAILABLE":
+      return "bg-green-50 text-green-700";
+    case "PENDING":
+      return "bg-amber-50 text-amber-700";
+    case "BUSY":
+      return "bg-blue-50 text-blue-700";
+    case "SOLD":
+      return "bg-gray-100 text-gray-600";
+    default:
+      return "bg-gray-100 text-gray-600";
   }
-}
+};
 
-function tierBadge(tier: string) {
-  switch (tier) {
-    case "STANDARD":  return "bg-gray-100 text-gray-600";
-    case "PREMIUM":   return "bg-purple-50 text-purple-700";
-    case "EXCLUSIVE":  return "bg-amber-50 text-amber-700";
-    default:          return "bg-gray-100 text-gray-600";
-  }
-}
+const normalizeMediaType = (value: unknown) => String(value || "").trim().toUpperCase();
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
-function visibilityBadge(vis: string) {
-  switch (vis) {
-    case "PUBLIC":     return "bg-green-50 text-green-700";
-    case "PRIVATE":    return "bg-gray-100 text-gray-600";
-    case "RESTRICTED": return "bg-red-50 text-red-600";
-    default:           return "bg-gray-100 text-gray-600";
-  }
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-gray-900">{value}</p>
+    </div>
+  );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Page                                                               */
-/* ------------------------------------------------------------------ */
 
 export default function AdminProducts() {
   const { dashboardBasePath } = useRole();
+
+  const [includeSold, setIncludeSold] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
+  const [mediaByProductId, setMediaByProductId] = useState<Record<string, ProductImageRef>>({});
+  const refreshingProductIdsRef = useRef<Set<string>>(new Set());
+
+  const getAccessToken = useCallback(async () => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
+    }
+
+    const accessToken = session?.access_token || "";
+
+    if (!accessToken) {
+      throw new Error("Missing access token. Please sign in again.");
+    }
+
+    return accessToken;
+  }, []);
+
+  const fetchAdminMediaById = useCallback(
+    async (accessToken: string, mediaId: string) => {
+      const response = await fetch(`/api/v1/admin/media/${encodeURIComponent(mediaId)}/url`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | AdminMediaUrlResponse
+        | ApiErrorPayload
+        | null;
+
+      const resolvedId = String((payload as AdminMediaUrlResponse | null)?.id || mediaId).trim();
+      const resolvedType = normalizeMediaType((payload as AdminMediaUrlResponse | null)?.type);
+      const resolvedUrl = String((payload as AdminMediaUrlResponse | null)?.url || "").trim();
+
+      if (!resolvedId || !resolvedUrl || resolvedType !== "IMAGE") {
+        return null;
+      }
+
+      return {
+        mediaId: resolvedId,
+        url: resolvedUrl,
+      };
+    },
+    [],
+  );
+
+  const refreshProductImage = useCallback(
+    async (productId: string, mediaId: string) => {
+      if (!productId || !mediaId) {
+        return;
+      }
+
+      if (refreshingProductIdsRef.current.has(productId)) {
+        return;
+      }
+
+      refreshingProductIdsRef.current.add(productId);
+
+      try {
+        const accessToken = await getAccessToken();
+        const refreshedMedia = await fetchAdminMediaById(accessToken, mediaId);
+
+        if (!refreshedMedia) {
+          return;
+        }
+
+        setMediaByProductId((prev) => {
+          const current = prev[productId];
+          if (!current || current.mediaId !== mediaId) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            [productId]: refreshedMedia,
+          };
+        });
+      } catch {
+        // Keep stale URL if refresh fails; a future retry/interval can recover.
+      } finally {
+        refreshingProductIdsRef.current.delete(productId);
+      }
+    },
+    [fetchAdminMediaById, getAccessToken],
+  );
+
+  const loadAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const query = includeSold ? "?includeSold=true" : "";
+
+      const analyticsResponse = await fetch(`/api/v1/admin/analytics/inventory-profit${query}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      const analyticsPayload = (await analyticsResponse.json().catch(() => null)) as
+        | ApiErrorPayload
+        | InventoryAnalyticsResponse
+        | null;
+
+      if (!analyticsResponse.ok) {
+        throw new Error(
+          toErrorMessage(analyticsPayload as ApiErrorPayload | null, "Failed to load product analytics."),
+        );
+      }
+
+      const analyticsData = analyticsPayload as InventoryAnalyticsResponse;
+      const inventoryRows = Array.isArray(analyticsData?.inventory) ? analyticsData.inventory : [];
+
+      const mediaMap: Record<string, ProductImageRef> = {};
+      const mediaJobs = inventoryRows.map(async (product) => {
+        if (!product?.id) {
+          return;
+        }
+
+        const mediaRefs = Array.isArray(product.media) ? product.media : [];
+        const mediaIdSet = new Set<string>();
+
+        for (const mediaRef of mediaRefs) {
+          if (typeof mediaRef?.id === "string" && mediaRef.id.trim()) {
+            mediaIdSet.add(mediaRef.id.trim());
+          }
+        }
+
+        if (Array.isArray(product.mediaIds)) {
+          for (const mediaId of product.mediaIds) {
+            if (typeof mediaId === "string" && mediaId.trim()) {
+              mediaIdSet.add(mediaId.trim());
+            }
+          }
+        }
+
+        for (const mediaId of mediaIdSet) {
+          const media = await fetchAdminMediaById(accessToken, mediaId);
+
+          if (media) {
+            mediaMap[product.id] = media;
+            break;
+          }
+        }
+      });
+
+      await Promise.all(mediaJobs);
+
+      setMediaByProductId(mediaMap);
+      setAnalytics(analyticsData);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load product analytics.";
+
+      setError(message);
+      setAnalytics(null);
+      setMediaByProductId({});
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAdminMediaById, getAccessToken, includeSold]);
+
+  useEffect(() => {
+    void loadAnalytics();
+  }, [loadAnalytics]);
+
+  useEffect(() => {
+    const rows = Object.entries(mediaByProductId);
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      for (const [productId, media] of rows) {
+        void refreshProductImage(productId, media.mediaId);
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [mediaByProductId, refreshProductImage]);
+
+  const totalProducts = useMemo(() => analytics?.totals.productCount || 0, [analytics]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Create, update, and manage the product catalog."
+        description="Real-time pricing, allocations, projected profit, and media preview."
         action={
           <Link
             href={`${dashboardBasePath}/products/add`}
@@ -60,159 +353,177 @@ export default function AdminProducts() {
         }
       />
 
-      {/* API reference */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          "POST /admin/products",
-          "PATCH /admin/products/:id",
-          "PATCH /admin/products/:id/status",
-        ].map((ep) => (
-          <span
-            key={ep}
-            className="px-2.5 py-1 bg-gray-100 text-gray-500 text-[11px] font-mono rounded-md"
-          >
-            {ep}
-          </span>
-        ))}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIncludeSold(false)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            !includeSold
+              ? "bg-gray-900 text-white"
+              : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Active Inventory
+        </button>
+        <button
+          type="button"
+          onClick={() => setIncludeSold(true)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            includeSold
+              ? "bg-gray-900 text-white"
+              : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Include Sold
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
-                <th className="px-5 py-3 font-medium">Product</th>
-                <th className="px-5 py-3 font-medium">SKU</th>
-                <th className="px-5 py-3 font-medium">Tier</th>
-                <th className="px-5 py-3 font-medium">Visibility</th>
-                <th className="px-5 py-3 font-medium">Media</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ADMIN_PRODUCTS.map((p) => {
-                const primaryImage = p.media.find((m) => m.isPrimary && m.type === "IMAGE");
-                const fallbackImage = p.media.find((m) => m.type === "IMAGE");
-                const displayImage = primaryImage ?? fallbackImage;
-
-                return (
-                  <tr key={p.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                    {/* Product — image + name + color */}
-                    <td className="px-5 py-3">
-                      <Link
-                        href={`${dashboardBasePath}/products/${p.id}`}
-                        className="flex items-center gap-3 group"
-                      >
-                        <div className="shrink-0 w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center">
-                          {displayImage ? (
-                            <Image
-                              src={displayImage.url}
-                              alt={p.name ?? p.sku}
-                              width={40}
-                              height={40}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <svg
-                              className="w-5 h-5 text-gray-300"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
-                            {p.name ?? "Unnamed"}
-                          </p>
-                          {p.color && (
-                            <p className="text-xs text-gray-400 truncate">{p.color}</p>
-                          )}
-                        </div>
-                      </Link>
-                    </td>
-
-                    {/* SKU */}
-                    <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                      {p.sku}
-                    </td>
-
-                    {/* Tier */}
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${tierBadge(p.tier)}`}
-                      >
-                        {p.tier}
-                      </span>
-                    </td>
-
-                    {/* Visibility */}
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${visibilityBadge(p.visibility)}`}
-                      >
-                        {p.visibility}
-                      </span>
-                    </td>
-
-                    {/* Media count */}
-                    <td className="px-5 py-3 text-gray-500 text-xs">
-                      {p.media.length > 0 ? (
-                        <span>
-                          {p.media.filter((m) => m.type === "IMAGE").length > 0 && (
-                            <span className="text-blue-600">
-                              {p.media.filter((m) => m.type === "IMAGE").length} img
-                            </span>
-                          )}
-                          {p.media.filter((m) => m.type === "VIDEO").length > 0 && (
-                            <span className="text-purple-600 ml-1.5">
-                              {p.media.filter((m) => m.type === "VIDEO").length} vid
-                            </span>
-                          )}
-                          {p.media.filter((m) => m.type === "PDF").length > 0 && (
-                            <span className="text-orange-600 ml-1.5">
-                              {p.media.filter((m) => m.type === "PDF").length} pdf
-                            </span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">No media</span>
-                      )}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${statusBadge(p.status)}`}
-                      >
-                        {p.status.replace("_", " ")}
-                      </span>
-                    </td>
-
-                    {/* Source */}
-                    <td className="px-5 py-3 text-xs text-gray-500">
-                      {p.sourceType === "CONSIGNMENT" ? (
-                        <span className="text-amber-600">Consignment</span>
-                      ) : (
-                        <span>Owned</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {loading && (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
+          Loading product analytics...
         </div>
-      </div>
+      )}
+
+      {!loading && error && (
+        <div className="space-y-3">
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadAnalytics()}
+            className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && analytics && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile label="Products" value={String(analytics.totals.productCount)} />
+            <StatTile
+              label="Priced / Unpriced"
+              value={`${analytics.totals.pricedProductCount} / ${analytics.totals.unpricedProductCount}`}
+            />
+            <StatTile
+              label="Projected Revenue"
+              value={moneyRange(
+                analytics.totals.projectedRevenueMin,
+                analytics.totals.projectedRevenueMax,
+              )}
+            />
+            <StatTile
+              label="Projected Net Profit"
+              value={moneyRange(
+                analytics.totals.projectedNetProfitMin,
+                analytics.totals.projectedNetProfitMax,
+              )}
+            />
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                    <th className="px-5 py-3 font-medium">Product</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Buy Price</th>
+                    <th className="px-5 py-3 font-medium">Sale Range</th>
+                    <th className="px-5 py-3 font-medium">Allocation Rate</th>
+                    <th className="px-5 py-3 font-medium">Net Profit Range</th>
+                    <th className="px-5 py-3 font-medium">Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.inventory.map((item) => {
+                    const productImage = mediaByProductId[item.id];
+                    const productImageUrl = productImage?.url || "";
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-5 py-3">
+                          <Link href={`${dashboardBasePath}/products/${item.id}`} className="group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center shrink-0">
+                                {productImageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={productImageUrl}
+                                    alt={item.name || item.sku}
+                                    className="w-full h-full object-cover"
+                                    onError={() => {
+                                      if (productImage?.mediaId) {
+                                        void refreshProductImage(item.id, productImage.mediaId);
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <svg
+                                    className="w-5 h-5 text-gray-300"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={1.5}
+                                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="font-medium text-gray-900 group-hover:text-emerald-700 transition-colors">
+                                  {item.name || "Unnamed Product"}
+                                </p>
+                                <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                              </div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${statusBadge(item.status)}`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-gray-700">{toMoney(item.pricing.buyPrice)}</td>
+                        <td className="px-5 py-3 text-gray-700">
+                          {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
+                        </td>
+                        <td className="px-5 py-3 text-gray-700">
+                          {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
+                        </td>
+                        <td className="px-5 py-3 text-gray-700">
+                          {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
+                        </td>
+                        <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
+                      </tr>
+                    );
+                  })}
+
+                  {totalProducts === 0 && (
+                    <tr>
+                      <td className="px-5 py-10 text-center text-gray-400" colSpan={7}>
+                        No products found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

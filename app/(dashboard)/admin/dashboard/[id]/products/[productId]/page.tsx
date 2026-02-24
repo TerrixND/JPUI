@@ -1,62 +1,225 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import MediaUploader, {
-  type MediaFile,
-} from "@/components/ui/dashboard/MediaUploader";
-import { ADMIN_PRODUCTS, type AdminProduct, type AdminProductMedia } from "@/utils/data";
+import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
+import supabase from "@/lib/supabase";
+import { uploadMediaFiles } from "@/lib/mediaUpload";
 
-/* ------------------------------------------------------------------ */
-/*  Shared constants (same as add page)                                */
-/* ------------------------------------------------------------------ */
-
-const VISIBILITY_OPTIONS = ["PUBLIC", "PRIVATE", "RESTRICTED"];
-const TIER_OPTIONS = ["STANDARD", "PREMIUM", "EXCLUSIVE"];
-const STATUS_OPTIONS = ["AVAILABLE", "RESERVED", "SOLD", "TRANSFER_PENDING"];
-const CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ELITE"];
-const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNMENT"];
-
-/* ------------------------------------------------------------------ */
-/*  Badge helpers                                                      */
-/* ------------------------------------------------------------------ */
-
-const statusColor: Record<string, string> = {
-  AVAILABLE: "bg-green-50 text-green-700",
-  RESERVED: "bg-amber-50 text-amber-700",
-  SOLD: "bg-gray-100 text-gray-600",
-  TRANSFER_PENDING: "bg-blue-50 text-blue-700",
+type ApiErrorPayload = {
+  message?: string;
+  code?: string;
+  reason?: string;
 };
 
-const tierColor: Record<string, string> = {
-  STANDARD: "bg-gray-100 text-gray-600",
-  PREMIUM: "bg-purple-50 text-purple-700",
-  EXCLUSIVE: "bg-amber-50 text-amber-700",
+type BranchOption = {
+  id: string;
+  code: string;
+  name: string;
+  city: string | null;
+  status: string;
 };
 
-const visColor: Record<string, string> = {
-  PUBLIC: "bg-green-50 text-green-700",
-  PRIVATE: "bg-gray-100 text-gray-600",
-  RESTRICTED: "bg-red-50 text-red-600",
+type BranchAnalyticsResponse = {
+  branches?: BranchOption[];
 };
 
-function Badge({ label, map }: { label: string; map: Record<string, string> }) {
-  return (
-    <span
-      className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${map[label] ?? "bg-gray-100 text-gray-600"}`}
-    >
-      {label.replace("_", " ")}
-    </span>
-  );
-}
+type BranchMember = {
+  memberRole?: string;
+  user?: {
+    id?: string;
+    email?: string | null;
+    status?: string | null;
+    managerProfile?: {
+      displayName?: string | null;
+    } | null;
+    salespersonProfile?: {
+      displayName?: string | null;
+    } | null;
+    customerProfile?: {
+      displayName?: string | null;
+    } | null;
+  } | null;
+};
 
-/* ------------------------------------------------------------------ */
-/*  Sub-components                                                     */
-/* ------------------------------------------------------------------ */
+type ManagerOption = {
+  id: string;
+  label: string;
+};
+
+type InventoryAnalyticsResponse = {
+  inventory?: InventoryProduct[];
+};
+
+type InventoryProduct = {
+  id: string;
+  sku: string;
+  name: string | null;
+  status: string;
+  media?: InventoryProductMediaRef[];
+  mediaIds?: string[];
+  pricing: {
+    buyPrice: number | null;
+    saleMinPrice: number | null;
+    saleMaxPrice: number | null;
+    isComplete: boolean;
+  };
+  commission: {
+    allocationRateTotal: number;
+    allocations: InventoryCommissionAllocation[];
+  };
+};
+
+type InventoryCommissionAllocation = {
+  id: string;
+  targetType: "BRANCH" | "USER";
+  rate: number;
+  note: string | null;
+  beneficiary: {
+    userId: string | null;
+    branchId: string | null;
+    displayName: string | null;
+    userEmail: string | null;
+    branchName: string | null;
+  };
+};
+
+type InventoryProductMediaRef = {
+  id?: string;
+  type?: string;
+  url?: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
+type ProductMedia = {
+  id: string;
+  type: "IMAGE" | "VIDEO" | "CERTIFICATE";
+  url: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+};
+
+type AdminMediaUrlResponse = {
+  id?: string;
+  productId?: string | null;
+  type?: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  url?: string;
+};
+
+type EditForm = {
+  sku: string;
+  name: string;
+  status: string;
+  buyPrice: string;
+  saleMinPrice: string;
+  saleMaxPrice: string;
+};
+
+type AllocationRow = {
+  id: string;
+  targetType: "BRANCH" | "USER";
+  branchId: string;
+  managerBranchId: string;
+  userId: string;
+  userLabel: string;
+  rate: string;
+  note: string;
+};
+
+const initialForm: EditForm = {
+  sku: "",
+  name: "",
+  status: "",
+  buyPrice: "",
+  saleMinPrice: "",
+  saleMaxPrice: "",
+};
+
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
+const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
+  const message = payload?.message || fallback;
+  const code = payload?.code ? ` (code: ${payload.code})` : "";
+  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
+
+  return `${message}${code}${reason}`;
+};
+
+const formatBranchLabel = (branch: BranchOption) => {
+  const code = branch.code ? `${branch.code} - ` : "";
+  const city = branch.city ? ` (${branch.city})` : "";
+  const status = branch.status !== "ACTIVE" ? ` [${branch.status}]` : "";
+  return `${code}${branch.name}${city}${status}`;
+};
+
+const parseOptionalMoney = (value: string, fieldLabel: string) => {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${fieldLabel} must be a non-negative number.`);
+  }
+
+  return parsed;
+};
+
+const toDisplayMoney = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "";
+  }
+
+  return String(value);
+};
+
+const normalizeMediaType = (value: unknown): ProductMedia["type"] | null => {
+  const normalized = String(value || "").trim().toUpperCase();
+
+  if (normalized === "IMAGE" || normalized === "VIDEO" || normalized === "CERTIFICATE") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | null => {
+  const id = typeof payload?.id === "string" ? payload.id.trim() : "";
+  const url = typeof payload?.url === "string" ? payload.url.trim() : "";
+  const type = normalizeMediaType(payload?.type);
+
+  if (!id || !url || !type) {
+    return null;
+  }
+
+  return {
+    id,
+    url,
+    type,
+    mimeType: typeof payload?.mimeType === "string" ? payload.mimeType : null,
+    sizeBytes: typeof payload?.sizeBytes === "number" ? payload.sizeBytes : null,
+  };
+};
+
+const makeNewAllocation = (): AllocationRow => ({
+  id: `allocation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  targetType: "BRANCH",
+  branchId: "",
+  managerBranchId: "",
+  userId: "",
+  userLabel: "",
+  rate: "",
+  note: "",
+});
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -66,209 +229,562 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wider text-gray-400 mb-0.5">
-        {label}
-      </dt>
-      <dd className="text-sm text-gray-800">{children || <span className="text-gray-300">—</span>}</dd>
-    </div>
-  );
+function MediaTypeChip({ type }: { type: ProductMedia["type"] }) {
+  if (type === "IMAGE") {
+    return <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-medium">IMAGE</span>;
+  }
+
+  if (type === "VIDEO") {
+    return <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[11px] font-medium">VIDEO</span>;
+  }
+
+  return <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-[11px] font-medium">PDF</span>;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Media gallery icons                                                */
-/* ------------------------------------------------------------------ */
-
-function VideoOverlay() {
-  return (
-    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-      <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M8 5v14l11-7z" />
-      </svg>
-    </div>
-  );
-}
-
-function PdfOverlay() {
-  return (
-    <div className="absolute inset-0 bg-orange-50 flex flex-col items-center justify-center">
-      <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-        />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-6 3h4" />
-      </svg>
-      <span className="text-[10px] font-medium text-orange-600 mt-1">PDF</span>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Edit form types                                                    */
-/* ------------------------------------------------------------------ */
-
-type EditForm = {
-  sku: string;
-  name: string;
-  color: string;
-  weight: string;
-  length: string;
-  depth: string;
-  height: string;
-  importDate: string;
-  importId: string;
-  fromCompanyId: string;
-  visibility: string;
-  visibilityNote: string;
-  tier: string;
-  status: string;
-  minCustomerTier: string;
-  sourceType: string;
-  consignmentAgreementId: string;
-};
-
-function productToForm(p: AdminProduct): EditForm {
-  return {
-    sku: p.sku,
-    name: p.name ?? "",
-    color: p.color ?? "",
-    weight: p.weight != null ? String(p.weight) : "",
-    length: p.length != null ? String(p.length) : "",
-    depth: p.depth != null ? String(p.depth) : "",
-    height: p.height != null ? String(p.height) : "",
-    importDate: p.importDate ? p.importDate.slice(0, 10) : "",
-    importId: p.importId ?? "",
-    fromCompanyId: p.fromCompanyId ?? "",
-    visibility: p.visibility,
-    visibilityNote: p.visibilityNote ?? "",
-    tier: p.tier,
-    status: p.status,
-    minCustomerTier: p.minCustomerTier ?? "",
-    sourceType: p.sourceType,
-    consignmentAgreementId: p.consignmentAgreementId ?? "",
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/*  Existing media → MediaFile adapter (url-based, no real File)       */
-/* ------------------------------------------------------------------ */
-
-function existingMediaToFiles(media: AdminProductMedia[]): MediaFile[] {
-  return media.map((m) => ({
-    id: m.id,
-    file: new File([], m.url.split("/").pop() ?? "file", { type: "application/octet-stream" }),
-    type: m.type === "IMAGE" ? "IMAGE" : m.type === "VIDEO" ? "VIDEO" : "PDF",
-    preview: m.type === "IMAGE" ? m.url : "",
-    isPrimary: m.isPrimary,
-  }));
-}
-
-/* ------------------------------------------------------------------ */
-/*  Page                                                               */
-/* ------------------------------------------------------------------ */
-
-export default function ProductDetailPage() {
+export default function ProductEditPage() {
   const params = useParams();
+  const router = useRouter();
   const { dashboardBasePath } = useRole();
-  const productId = params.productId as string;
 
-  const product = useMemo(
-    () => ADMIN_PRODUCTS.find((p) => p.id === productId) ?? null,
-    [productId],
-  );
-
+  const productId = String(params.productId || "");
   const productsPath = `${dashboardBasePath}/products`;
 
-  /* ---- edit mode ---- */
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<EditForm>(() =>
-    product ? productToForm(product) : ({} as EditForm),
+  const [form, setForm] = useState<EditForm>(initialForm);
+  const [allocations, setAllocations] = useState<AllocationRow[]>([]);
+  const [existingMedia, setExistingMedia] = useState<ProductMedia[]>([]);
+  const [newMediaFiles, setNewMediaFiles] = useState<MediaFile[]>([]);
+  const [product, setProduct] = useState<InventoryProduct | null>(null);
+
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [managersByBranch, setManagersByBranch] = useState<Record<string, ManagerOption[]>>({});
+  const [loadingManagersByBranch, setLoadingManagersByBranch] = useState<Record<string, boolean>>(
+    {},
   );
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>(() =>
-    product ? existingMediaToFiles(product.media) : [],
-  );
+
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [lookupError, setLookupError] = useState("");
+  const [mediaHint, setMediaHint] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const refreshingMediaIdsRef = useRef<Set<string>>(new Set());
 
-  const updateField = (field: keyof EditForm, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const totalAllocationRate = useMemo(() => {
+    return allocations.reduce((sum, row) => {
+      const rate = Number(row.rate);
 
-  const handleStartEdit = () => {
-    if (product) {
-      setForm(productToForm(product));
-      setMediaFiles(existingMediaToFiles(product.media));
+      if (!Number.isFinite(rate)) {
+        return sum;
+      }
+
+      return sum + rate;
+    }, 0);
+  }, [allocations]);
+
+  const getAccessToken = useCallback(async () => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
     }
-    setError("");
-    setEditing(true);
-  };
 
-  const handleCancelEdit = () => {
-    setEditing(false);
-    setError("");
-  };
+    const accessToken = session?.access_token || "";
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+    if (!accessToken) {
+      throw new Error("Missing access token. Please sign in again.");
+    }
 
-    if (!form.sku.trim()) {
-      setError("SKU is required.");
+    return accessToken;
+  }, []);
+
+  const fetchAdminMediaById = useCallback(
+    async (accessToken: string, mediaId: string) => {
+      const response = await fetch(`/api/v1/admin/media/${encodeURIComponent(mediaId)}/url`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | AdminMediaUrlResponse
+        | ApiErrorPayload
+        | null;
+
+      return toProductMedia(payload as AdminMediaUrlResponse | null);
+    },
+    [],
+  );
+
+  const refreshSingleMediaUrl = useCallback(
+    async (mediaId: string) => {
+      if (!mediaId) {
+        return;
+      }
+
+      if (refreshingMediaIdsRef.current.has(mediaId)) {
+        return;
+      }
+
+      refreshingMediaIdsRef.current.add(mediaId);
+
+      try {
+        const accessToken = await getAccessToken();
+        const refreshedMedia = await fetchAdminMediaById(accessToken, mediaId);
+
+        if (!refreshedMedia) {
+          return;
+        }
+
+        setExistingMedia((prev) =>
+          prev.map((media) => (media.id === mediaId ? { ...media, url: refreshedMedia.url } : media)),
+        );
+      } catch {
+        // Keep current URL; subsequent retries/interval can refresh.
+      } finally {
+        refreshingMediaIdsRef.current.delete(mediaId);
+      }
+    },
+    [fetchAdminMediaById, getAccessToken],
+  );
+
+  const resolveExistingMediaFromAdmin = useCallback(
+    async (accessToken: string, targetProduct: InventoryProduct) => {
+      const orderedMediaIds: string[] = [];
+      const seenMediaIds = new Set<string>();
+
+      const mediaRefs = Array.isArray(targetProduct.media) ? targetProduct.media : [];
+      for (const mediaRef of mediaRefs) {
+        const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
+
+        if (mediaId && !seenMediaIds.has(mediaId)) {
+          seenMediaIds.add(mediaId);
+          orderedMediaIds.push(mediaId);
+        }
+      }
+
+      if (Array.isArray(targetProduct.mediaIds)) {
+        for (const mediaId of targetProduct.mediaIds) {
+          if (typeof mediaId !== "string" || !mediaId.trim()) {
+            continue;
+          }
+
+          const normalizedId = mediaId.trim();
+          if (!seenMediaIds.has(normalizedId)) {
+            seenMediaIds.add(normalizedId);
+            orderedMediaIds.push(normalizedId);
+          }
+        }
+      }
+
+      if (orderedMediaIds.length === 0) {
+        return {
+          media: [] as ProductMedia[],
+          hasReferences: false,
+        };
+      }
+
+      const mediaRows: ProductMedia[] = [];
+      for (const mediaId of orderedMediaIds) {
+        const media = await fetchAdminMediaById(accessToken, mediaId);
+
+        if (media) {
+          mediaRows.push(media);
+        }
+      }
+
+      return {
+        media: mediaRows,
+        hasReferences: true,
+      };
+    },
+    [fetchAdminMediaById],
+  );
+
+  const loadBranchManagers = useCallback(
+    async (branchId: string) => {
+      if (!branchId) {
+        return;
+      }
+
+      if (managersByBranch[branchId] || loadingManagersByBranch[branchId]) {
+        return;
+      }
+
+      setLoadingManagersByBranch((prev) => ({
+        ...prev,
+        [branchId]: true,
+      }));
+
+      try {
+        const accessToken = await getAccessToken();
+
+        const response = await fetch(`/api/v1/admin/branches/${branchId}/members`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | ApiErrorPayload
+          | BranchMember[]
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branch managers."),
+          );
+        }
+
+        const rows = Array.isArray(payload) ? payload : [];
+
+        const dedupe = new Set<string>();
+        const managers: ManagerOption[] = [];
+
+        for (const row of rows) {
+          const isManager = String(row?.memberRole || "").toUpperCase() === "MANAGER";
+          const userId = row?.user?.id || "";
+          const userStatus = String(row?.user?.status || "").toUpperCase();
+
+          if (!isManager || !userId || userStatus !== "ACTIVE" || dedupe.has(userId)) {
+            continue;
+          }
+
+          const label =
+            row?.user?.managerProfile?.displayName ||
+            row?.user?.salespersonProfile?.displayName ||
+            row?.user?.customerProfile?.displayName ||
+            row?.user?.email ||
+            userId;
+
+          managers.push({
+            id: userId,
+            label,
+          });
+
+          dedupe.add(userId);
+        }
+
+        setManagersByBranch((prev) => ({
+          ...prev,
+          [branchId]: managers,
+        }));
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to load branch managers.";
+
+        setLookupError(message);
+      } finally {
+        setLoadingManagersByBranch((prev) => ({
+          ...prev,
+          [branchId]: false,
+        }));
+      }
+    },
+    [getAccessToken, loadingManagersByBranch, managersByBranch],
+  );
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      setLoading(true);
+      setError("");
+      setLookupError("");
+      setMediaHint("");
+      setNotFound(false);
+
+      try {
+        const accessToken = await getAccessToken();
+
+        const [inventoryResponse, branchResponse] = await Promise.all([
+          fetch("/api/v1/admin/analytics/inventory-profit?includeSold=true", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          }),
+          fetch("/api/v1/admin/analytics/branches", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          }),
+        ]);
+
+        const inventoryPayload = (await inventoryResponse.json().catch(() => null)) as
+          | ApiErrorPayload
+          | InventoryAnalyticsResponse
+          | null;
+        const branchPayload = (await branchResponse.json().catch(() => null)) as
+          | ApiErrorPayload
+          | BranchAnalyticsResponse
+          | null;
+
+        if (!inventoryResponse.ok) {
+          throw new Error(
+            toErrorMessage(
+              inventoryPayload as ApiErrorPayload | null,
+              "Failed to load product analytics.",
+            ),
+          );
+        }
+
+        if (!branchResponse.ok) {
+          throw new Error(
+            toErrorMessage(branchPayload as ApiErrorPayload | null, "Failed to load branches."),
+          );
+        }
+
+        const inventory = Array.isArray((inventoryPayload as InventoryAnalyticsResponse)?.inventory)
+          ? ((inventoryPayload as InventoryAnalyticsResponse).inventory as InventoryProduct[])
+          : [];
+
+        const targetProduct = inventory.find((item) => item.id === productId) || null;
+
+        if (!targetProduct) {
+          setNotFound(true);
+          setProduct(null);
+          return;
+        }
+
+        const branchRows = Array.isArray((branchPayload as BranchAnalyticsResponse)?.branches)
+          ? ((branchPayload as BranchAnalyticsResponse).branches as BranchOption[])
+          : [];
+
+        setBranches(branchRows);
+        setProduct(targetProduct);
+        setForm({
+          sku: targetProduct.sku,
+          name: targetProduct.name || "",
+          status: targetProduct.status,
+          buyPrice: toDisplayMoney(targetProduct.pricing.buyPrice),
+          saleMinPrice: toDisplayMoney(targetProduct.pricing.saleMinPrice),
+          saleMaxPrice: toDisplayMoney(targetProduct.pricing.saleMaxPrice),
+        });
+
+        const nextAllocations = (targetProduct.commission.allocations || []).map((allocation) => ({
+          id: `existing-${allocation.id}`,
+          targetType: allocation.targetType,
+          branchId: allocation.targetType === "BRANCH" ? allocation.beneficiary.branchId || "" : "",
+          managerBranchId: "",
+          userId: allocation.targetType === "USER" ? allocation.beneficiary.userId || "" : "",
+          userLabel:
+            allocation.beneficiary.displayName ||
+            allocation.beneficiary.userEmail ||
+            allocation.beneficiary.userId ||
+            "",
+          rate: String(allocation.rate),
+          note: allocation.note || "",
+        }));
+
+        setAllocations(nextAllocations);
+        setNewMediaFiles([]);
+
+        const mediaResult = await resolveExistingMediaFromAdmin(accessToken, targetProduct);
+        setExistingMedia(mediaResult.media);
+
+        if (!mediaResult.hasReferences) {
+          setMediaHint(
+            "Existing media cannot be loaded yet because the current admin product analytics payload does not include media references for this product. You can still upload new media below.",
+          );
+        } else if (!mediaResult.media.length) {
+          setMediaHint("No existing media records could be resolved for this product.");
+        }
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to load product data.";
+
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!productId) {
+      setNotFound(true);
+      setLoading(false);
       return;
     }
 
-    setSaving(true);
+    void bootstrap();
+  }, [getAccessToken, productId, resolveExistingMediaFromAdmin]);
+
+  useEffect(() => {
+    if (!existingMedia.length) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      for (const media of existingMedia) {
+        void refreshSingleMediaUrl(media.id);
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [existingMedia, refreshSingleMediaUrl]);
+
+  const updateField = (field: keyof EditForm, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateAllocation = (allocationId: string, patch: Partial<AllocationRow>) => {
+    setAllocations((prev) =>
+      prev.map((row) => (row.id === allocationId ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const addAllocation = () => {
+    setAllocations((prev) => [...prev, makeNewAllocation()]);
+  };
+
+  const removeAllocation = (allocationId: string) => {
+    setAllocations((prev) => prev.filter((row) => row.id !== allocationId));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!product) {
+      setError("Product data is not loaded yet.");
+      return;
+    }
+
     try {
-      // TODO: Replace with actual API call — PATCH /admin/products/:id
-      const payload = {
-        sku: form.sku.trim(),
-        name: form.name.trim() || null,
-        color: form.color.trim() || null,
-        weight: form.weight ? parseFloat(form.weight) : null,
-        length: form.length ? parseFloat(form.length) : null,
-        depth: form.depth ? parseFloat(form.depth) : null,
-        height: form.height ? parseFloat(form.height) : null,
-        importDate: form.importDate || null,
-        importId: form.importId.trim() || null,
-        fromCompanyId: form.fromCompanyId.trim() || null,
-        visibility: form.visibility,
-        visibilityNote: form.visibilityNote.trim() || null,
-        tier: form.tier,
-        status: form.status,
-        minCustomerTier: form.minCustomerTier || null,
-        sourceType: form.sourceType,
-        consignmentAgreementId:
-          form.sourceType === "CONSIGNMENT" && form.consignmentAgreementId.trim()
-            ? form.consignmentAgreementId.trim()
-            : null,
-      };
+      const buyPrice = parseOptionalMoney(form.buyPrice, "Buy price");
+      const saleMinPrice = parseOptionalMoney(form.saleMinPrice, "Minimum sale price");
+      const saleMaxPrice = parseOptionalMoney(form.saleMaxPrice, "Maximum sale price");
 
-      const mediaPayload = mediaFiles.map((mf) => ({
-        id: mf.id,
-        file: mf.file,
-        type: mf.type,
-        isPrimary: mf.isPrimary,
-      }));
+      if (saleMinPrice !== null && saleMaxPrice !== null && saleMaxPrice < saleMinPrice) {
+        throw new Error("Maximum sale price must be greater than or equal to minimum sale price.");
+      }
 
-      console.log("Update payload:", payload);
-      console.log("Media files:", mediaPayload);
+      const normalizedAllocations = allocations.map((row, index) => {
+        const rate = Number(row.rate);
 
-      await new Promise((r) => setTimeout(r, 600));
+        if (!Number.isFinite(rate) || rate <= 0 || rate > 100) {
+          throw new Error(`Allocation #${index + 1} rate must be between 0 and 100.`);
+        }
 
-      setEditing(false);
-    } catch {
-      setError("Failed to save changes. Please try again.");
+        if (row.targetType === "BRANCH") {
+          if (!row.branchId) {
+            throw new Error(`Allocation #${index + 1} requires a branch.`);
+          }
+
+          return {
+            targetType: "BRANCH" as const,
+            branchId: row.branchId,
+            rate,
+            note: row.note.trim() || undefined,
+          };
+        }
+
+        if (!row.userId) {
+          throw new Error(`Allocation #${index + 1} requires a manager.`);
+        }
+
+        return {
+          targetType: "USER" as const,
+          userId: row.userId,
+          rate,
+          note: row.note.trim() || undefined,
+        };
+      });
+
+      const totalRate = normalizedAllocations.reduce((sum, row) => sum + row.rate, 0);
+      if (totalRate > 100) {
+        throw new Error("Total commission allocation rate cannot exceed 100%.");
+      }
+
+      setSaving(true);
+
+      const accessToken = await getAccessToken();
+
+      const response = await fetch(`/api/v1/admin/products/${product.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          sku: form.sku.trim(),
+          name: form.name.trim() || null,
+          buyPrice,
+          saleMinPrice,
+          saleMaxPrice,
+          commissionAllocations: normalizedAllocations,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+
+      if (!response.ok) {
+        throw new Error(toErrorMessage(payload, "Failed to update product."));
+      }
+
+      if (newMediaFiles.length > 0) {
+        await uploadMediaFiles({
+          files: newMediaFiles.map((item) => item.file),
+          accessToken,
+          productId: product.id,
+        });
+      }
+
+      router.push(productsPath);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to update product.";
+
+      setError(message);
     } finally {
       setSaving(false);
     }
   };
 
-  /* ---- Not found ---- */
-  if (!product) {
+  const inputCls =
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Edit Product"
+          action={
+            <Link
+              href={productsPath}
+              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Back to Products
+            </Link>
+          }
+        />
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
+          Loading product details...
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -282,424 +798,381 @@ export default function ProductDetailPage() {
             </Link>
           }
         />
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-          <p className="text-sm text-gray-500">
-            No product found with ID <span className="font-mono text-xs">{productId}</span>
-          </p>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
+          No product was found for id: <span className="font-mono">{productId}</span>
         </div>
       </div>
     );
   }
 
-  /* ---- helpers for view mode ---- */
-  const primaryImage = product.media.find((m) => m.isPrimary && m.type === "IMAGE");
-  const fallbackImage = product.media.find((m) => m.type === "IMAGE");
-  const heroImage = primaryImage ?? fallbackImage;
-
-  const inputCls =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
-
-  /* ================================================================ */
-  /*  EDIT MODE                                                        */
-  /* ================================================================ */
-  if (editing) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Edit Product"
-          description={product.sku}
-          action={
-            <button
-              onClick={handleCancelEdit}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-          }
-        />
-
-        <form onSubmit={handleSave} className="space-y-6">
-          {error && (
-            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          {/* Basic Info */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Basic Information</SectionHeading>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">
-                  SKU <span className="text-red-500">*</span>
-                </label>
-                <input type="text" value={form.sku} onChange={(e) => updateField("sku", e.target.value)} placeholder="e.g. JDE-IMP-2025-0001" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Name</label>
-                <input type="text" value={form.name} onChange={(e) => updateField("name", e.target.value)} placeholder="Product name" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Color</label>
-                <input type="text" value={form.color} onChange={(e) => updateField("color", e.target.value)} placeholder="e.g. Emerald Green" className={inputCls} />
-              </div>
-            </div>
-          </div>
-
-          {/* Dimensions */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Dimensions &amp; Weight</SectionHeading>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Weight (g)</label>
-                <input type="number" step="0.01" value={form.weight} onChange={(e) => updateField("weight", e.target.value)} placeholder="0.00" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Length (mm)</label>
-                <input type="number" step="0.01" value={form.length} onChange={(e) => updateField("length", e.target.value)} placeholder="0.00" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Depth (mm)</label>
-                <input type="number" step="0.01" value={form.depth} onChange={(e) => updateField("depth", e.target.value)} placeholder="0.00" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Height (mm)</label>
-                <input type="number" step="0.01" value={form.height} onChange={(e) => updateField("height", e.target.value)} placeholder="0.00" className={inputCls} />
-              </div>
-            </div>
-          </div>
-
-          {/* Import */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Import Details</SectionHeading>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Import Date</label>
-                <input type="date" value={form.importDate} onChange={(e) => updateField("importDate", e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Import ID</label>
-                <input type="text" value={form.importId} onChange={(e) => updateField("importId", e.target.value)} placeholder="e.g. IMP-2025-TH-7781" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">From Company ID</label>
-                <input type="text" value={form.fromCompanyId} onChange={(e) => updateField("fromCompanyId", e.target.value)} placeholder="e.g. company-7788" className={inputCls} />
-              </div>
-            </div>
-          </div>
-
-          {/* Classification */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Classification &amp; Visibility</SectionHeading>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Visibility</label>
-                <select value={form.visibility} onChange={(e) => updateField("visibility", e.target.value)} className={inputCls}>
-                  {VISIBILITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Tier</label>
-                <select value={form.tier} onChange={(e) => updateField("tier", e.target.value)} className={inputCls}>
-                  {TIER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Status</label>
-                <select value={form.status} onChange={(e) => updateField("status", e.target.value)} className={inputCls}>
-                  {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Min. Customer Tier</label>
-                <select value={form.minCustomerTier} onChange={(e) => updateField("minCustomerTier", e.target.value)} className={inputCls}>
-                  {CUSTOMER_TIER_OPTIONS.map((o) => <option key={o} value={o}>{o || "— None —"}</option>)}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-[13px] text-gray-700 mb-1.5">Visibility Note</label>
-                <input type="text" value={form.visibilityNote} onChange={(e) => updateField("visibilityNote", e.target.value)} placeholder="Optional note" className={inputCls} />
-              </div>
-            </div>
-          </div>
-
-          {/* Sourcing */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Sourcing</SectionHeading>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">Source Type</label>
-                <select value={form.sourceType} onChange={(e) => updateField("sourceType", e.target.value)} className={inputCls}>
-                  {SOURCE_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              {form.sourceType === "CONSIGNMENT" && (
-                <div>
-                  <label className="block text-[13px] text-gray-700 mb-1.5">Consignment Agreement ID</label>
-                  <input type="text" value={form.consignmentAgreementId} onChange={(e) => updateField("consignmentAgreementId", e.target.value)} placeholder="UUID" className={inputCls} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Media */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <SectionHeading>Media &amp; Documents</SectionHeading>
-            <p className="text-xs text-gray-500 mb-4">
-              Add or remove images, videos, and PDF documents. The first image is automatically set as primary.
-            </p>
-            <MediaUploader files={mediaFiles} onChange={setMediaFiles} maxFiles={10} maxSizeMB={50} />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button type="button" onClick={handleCancelEdit} className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
-  /* ================================================================ */
-  /*  VIEW MODE                                                        */
-  /* ================================================================ */
   return (
     <div className="space-y-6">
       <PageHeader
-        title={product.name ?? product.sku}
-        description={product.name ? product.sku : undefined}
+        title="Edit Product"
+        description={form.sku || undefined}
         action={
-          <div className="flex items-center gap-2">
-            <Link
-              href={productsPath}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Back
-            </Link>
-            <button
-              onClick={handleStartEdit}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Edit Product
-            </button>
-          </div>
+          <Link
+            href={productsPath}
+            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Back to Products
+          </Link>
         }
       />
 
-      {/* Hero + quick info */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Hero image */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="aspect-square bg-gray-100 relative flex items-center justify-center">
-              {heroImage ? (
-                <Image
-                  src={heroImage.url}
-                  alt={product.name ?? product.sku}
-                  fill
-                  className="object-cover"
-                />
-              ) : (
-                <svg className="w-16 h-16 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              )}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {lookupError && (
+          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+            {lookupError}
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <SectionHeading>Product Summary</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[12px] text-gray-500 mb-1">SKU</label>
+              <input type="text" value={form.sku} readOnly className={`${inputCls} text-gray-500`} />
+            </div>
+            <div>
+              <label className="block text-[12px] text-gray-500 mb-1">Name</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => updateField("name", e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] text-gray-500 mb-1">Status</label>
+              <input
+                type="text"
+                value={form.status}
+                readOnly
+                className={`${inputCls} text-gray-500`}
+              />
             </div>
           </div>
         </div>
 
-        {/* Quick info */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
-          <SectionHeading>Overview</SectionHeading>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
-            <Field label="SKU">
-              <span className="font-mono text-xs">{product.sku}</span>
-            </Field>
-            <Field label="Color">{product.color}</Field>
-            <Field label="Status"><Badge label={product.status} map={statusColor} /></Field>
-            <Field label="Tier"><Badge label={product.tier} map={tierColor} /></Field>
-            <Field label="Visibility"><Badge label={product.visibility} map={visColor} /></Field>
-            <Field label="Source">
-              {product.sourceType === "CONSIGNMENT" ? (
-                <span className="text-amber-600 font-medium text-xs">Consignment</span>
-              ) : (
-                "Owned"
-              )}
-            </Field>
-            <Field label="Min. Customer Tier">{product.minCustomerTier}</Field>
-            {product.visibilityNote && (
-              <div className="col-span-2 sm:col-span-3">
-                <Field label="Visibility Note">{product.visibilityNote}</Field>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Dimensions */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <SectionHeading>Dimensions &amp; Weight</SectionHeading>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
-          <Field label="Weight">{product.weight != null ? `${product.weight} g` : null}</Field>
-          <Field label="Length">{product.length != null ? `${product.length} mm` : null}</Field>
-          <Field label="Depth">{product.depth != null ? `${product.depth} mm` : null}</Field>
-          <Field label="Height">{product.height != null ? `${product.height} mm` : null}</Field>
-        </div>
-      </div>
-
-      {/* Import details */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <SectionHeading>Import Details</SectionHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
-          <Field label="Import Date">
-            {product.importDate
-              ? new Date(product.importDate).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : null}
-          </Field>
-          <Field label="Import ID">{product.importId}</Field>
-          <Field label="From Company">{product.fromCompanyId}</Field>
-        </div>
-      </div>
-
-      {/* Sourcing */}
-      {product.sourceType === "CONSIGNMENT" && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <SectionHeading>Consignment</SectionHeading>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            <Field label="Source Type">{product.sourceType}</Field>
-            <Field label="Agreement ID">
-              <span className="font-mono text-xs">{product.consignmentAgreementId}</span>
-            </Field>
+          <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[13px] text-gray-700 mb-1.5">Buy Price</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.buyPrice}
+                onChange={(e) => updateField("buyPrice", e.target.value)}
+                placeholder="1000"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Min Price</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.saleMinPrice}
+                onChange={(e) => updateField("saleMinPrice", e.target.value)}
+                placeholder="1300"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Max Price</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.saleMaxPrice}
+                onChange={(e) => updateField("saleMaxPrice", e.target.value)}
+                placeholder="1800"
+                className={inputCls}
+              />
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Media gallery */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <SectionHeading>Media &amp; Documents</SectionHeading>
-        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <SectionHeading>Commission Allocations</SectionHeading>
 
-        {product.media.length === 0 ? (
-          <div className="text-center py-10">
-            <svg className="w-12 h-12 text-gray-200 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p className="text-sm text-gray-400">No media files yet.</p>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <p className="text-xs text-gray-500">
+              Editing this array replaces existing backend allocations for this product.
+            </p>
             <button
-              onClick={handleStartEdit}
-              className="mt-3 text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+              type="button"
+              onClick={addAllocation}
+              className="px-3 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
             >
-              Add media
+              + Add Allocation
             </button>
           </div>
-        ) : (
-          <>
-            {/* Counters */}
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mb-4">
-              <span className="font-medium text-gray-700">
-                {product.media.length} file{product.media.length !== 1 && "s"}
-              </span>
-              {product.media.filter((m) => m.type === "IMAGE").length > 0 && (
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                  {product.media.filter((m) => m.type === "IMAGE").length} image{product.media.filter((m) => m.type === "IMAGE").length !== 1 && "s"}
-                </span>
-              )}
-              {product.media.filter((m) => m.type === "VIDEO").length > 0 && (
-                <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full">
-                  {product.media.filter((m) => m.type === "VIDEO").length} video{product.media.filter((m) => m.type === "VIDEO").length !== 1 && "s"}
-                </span>
-              )}
-              {product.media.filter((m) => m.type === "PDF").length > 0 && (
-                <span className="px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full">
-                  {product.media.filter((m) => m.type === "PDF").length} PDF{product.media.filter((m) => m.type === "PDF").length !== 1 && "s"}
-                </span>
-              )}
+
+          {allocations.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">
+              No allocations configured.
             </div>
+          ) : (
+            <div className="space-y-3">
+              {allocations.map((row, index) => {
+                const managers = row.managerBranchId ? managersByBranch[row.managerBranchId] || [] : [];
+                const isManagerLoading = row.managerBranchId
+                  ? Boolean(loadingManagersByBranch[row.managerBranchId])
+                  : false;
+                const hasCurrentUserOutsideBranchList =
+                  Boolean(row.userId) && !managers.some((manager) => manager.id === row.userId);
 
-            {/* Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {product.media.map((m) => (
-                <div
-                  key={m.id}
-                  className="relative aspect-square rounded-lg bg-gray-100 overflow-hidden border border-gray-200"
+                return (
+                  <div key={row.id} className="rounded-lg border border-gray-200 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-gray-700">Allocation #{index + 1}</h3>
+                      <button
+                        type="button"
+                        onClick={() => removeAllocation(row.id)}
+                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                      <div className="lg:col-span-2">
+                        <label className="block text-[12px] text-gray-700 mb-1.5">Target</label>
+                        <select
+                          value={row.targetType}
+                          onChange={(e) => {
+                            const nextTarget = e.target.value as "BRANCH" | "USER";
+
+                            updateAllocation(row.id, {
+                              targetType: nextTarget,
+                              branchId: "",
+                              managerBranchId: "",
+                              userId: "",
+                              userLabel: "",
+                            });
+                          }}
+                          className={inputCls}
+                        >
+                          <option value="BRANCH">BRANCH</option>
+                          <option value="USER">USER</option>
+                        </select>
+                      </div>
+
+                      {row.targetType === "BRANCH" ? (
+                        <div className="lg:col-span-4">
+                          <label className="block text-[12px] text-gray-700 mb-1.5">Branch</label>
+                          <select
+                            value={row.branchId}
+                            onChange={(e) => updateAllocation(row.id, { branchId: e.target.value })}
+                            className={inputCls}
+                          >
+                            <option value="">Select branch</option>
+                            {branches.map((branch) => (
+                              <option key={branch.id} value={branch.id}>
+                                {formatBranchLabel(branch)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="lg:col-span-4">
+                            <label className="block text-[12px] text-gray-700 mb-1.5">
+                              Manager Branch
+                            </label>
+                            <select
+                              value={row.managerBranchId}
+                              onChange={(e) => {
+                                const branchId = e.target.value;
+                                updateAllocation(row.id, {
+                                  managerBranchId: branchId,
+                                  userId: "",
+                                  userLabel: "",
+                                });
+
+                                if (branchId) {
+                                  void loadBranchManagers(branchId);
+                                }
+                              }}
+                              className={inputCls}
+                            >
+                              <option value="">Select branch</option>
+                              {branches.map((branch) => (
+                                <option key={branch.id} value={branch.id}>
+                                  {formatBranchLabel(branch)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="lg:col-span-3">
+                            <label className="block text-[12px] text-gray-700 mb-1.5">Manager</label>
+                            <select
+                              value={row.userId}
+                              onChange={(e) => updateAllocation(row.id, { userId: e.target.value })}
+                              disabled={(!row.managerBranchId && !row.userId) || isManagerLoading}
+                              className={inputCls}
+                            >
+                              <option value="">Select manager</option>
+                              {hasCurrentUserOutsideBranchList && (
+                                <option value={row.userId}>{row.userLabel || row.userId} (Current)</option>
+                              )}
+                              {managers.map((manager) => (
+                                <option key={manager.id} value={manager.id}>
+                                  {manager.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="lg:col-span-2">
+                        <label className="block text-[12px] text-gray-700 mb-1.5">Rate (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={row.rate}
+                          onChange={(e) => updateAllocation(row.id, { rate: e.target.value })}
+                          placeholder="3.5"
+                          className={inputCls}
+                        />
+                      </div>
+
+                      <div className="lg:col-span-12">
+                        <label className="block text-[12px] text-gray-700 mb-1.5">Note</label>
+                        <input
+                          type="text"
+                          value={row.note}
+                          onChange={(e) => updateAllocation(row.id, { note: e.target.value })}
+                          placeholder="Branch pool / Manager share"
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 text-xs">
+            <span className="text-gray-500">Total allocated rate: </span>
+            <span
+              className={
+                totalAllocationRate > 100 ? "text-red-600 font-semibold" : "text-gray-700 font-semibold"
+              }
+            >
+              {totalAllocationRate.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <SectionHeading>Media &amp; Documents</SectionHeading>
+
+          {mediaHint && (
+            <div className="mb-4 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs">
+              {mediaHint}
+            </div>
+          )}
+
+          {existingMedia.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500 mb-4">
+              No existing media found from read endpoint.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+              {existingMedia.map((media) => (
+                <a
+                  key={media.id}
+                  href={media.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-gray-200 overflow-hidden bg-white hover:border-gray-300 transition-colors"
                 >
-                  {m.type === "IMAGE" ? (
-                    <Image src={m.url} alt="" fill className="object-cover" />
-                  ) : m.type === "VIDEO" ? (
-                    <>
-                      <div className="w-full h-full bg-gray-800" />
-                      <VideoOverlay />
-                    </>
-                  ) : (
-                    <PdfOverlay />
-                  )}
-
-                  {/* Primary badge */}
-                  {m.isPrimary && (
-                    <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-amber-500 text-white text-[10px] font-semibold rounded">
-                      Primary
-                    </span>
-                  )}
-
-                  {/* Type chip */}
-                  <span
-                    className={`absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      m.type === "IMAGE"
-                        ? "bg-blue-600 text-white"
-                        : m.type === "VIDEO"
-                          ? "bg-purple-600 text-white"
-                          : "bg-orange-500 text-white"
-                    }`}
-                  >
-                    {m.type}
-                  </span>
-                </div>
+                  <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+                    {media.type === "IMAGE" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={media.url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => {
+                          void refreshSingleMediaUrl(media.id);
+                        }}
+                      />
+                    ) : media.type === "VIDEO" ? (
+                      <svg className="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    ) : (
+                      <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                        />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-6 3h4" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="px-2 py-2 flex items-center justify-between">
+                    <MediaTypeChip type={media.type} />
+                    <span className="text-[10px] text-gray-400 font-mono">{media.id.slice(0, 6)}</span>
+                  </div>
+                </a>
               ))}
             </div>
-          </>
-        )}
-      </div>
+          )}
 
-      {/* Meta */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <SectionHeading>Metadata</SectionHeading>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
-          <Field label="Created">
-            {new Date(product.createdAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Field>
-          <Field label="Updated">
-            {new Date(product.updatedAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Field>
-          <Field label="Submitted By">
-            <span className="font-mono text-xs">{product.submittedByUserId}</span>
-          </Field>
-          <Field label="Updated By">
-            <span className="font-mono text-xs">{product.updatedByUserId}</span>
-          </Field>
+          <p className="text-xs text-gray-500 mb-3">
+            Add new media files to this product. The current backend flow supports appending media records.
+          </p>
+          <MediaUploader
+            files={newMediaFiles}
+            onChange={setNewMediaFiles}
+            maxFiles={10}
+            maxSizeMB={50}
+            maxVideoSizeMB={500}
+          />
         </div>
-      </div>
+
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <Link
+            href={productsPath}
+            className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
