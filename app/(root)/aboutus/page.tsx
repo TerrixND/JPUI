@@ -36,7 +36,7 @@ export default function AboutUs() {
         <div className="w-10 h-px bg-green-600 mx-auto mb-8" />
 
         <p className="text-gray-500 leading-relaxed text-lg max-w-3xl mx-auto">
-          JadePalace Pt Co Ltd is Myanmar's trusted name in the sourcing,
+          JadePalace Pt Co Ltd is Myanmar&apos;s trusted name in the sourcing,
           certification, and global trade of fine jadeite jade — from the mines
           of Hpakant to collectors around the world.
         </p>
@@ -57,7 +57,7 @@ export default function AboutUs() {
 
               <p className="text-gray-500 leading-relaxed mb-4">
                 Founded in 1998 by U Kelvin in Mandalay, JadePalace began
-                as a small workshop with a bold vision — to bring Myanmar's
+                as a small workshop with a bold vision — to bring Myanmar&apos;s
                 finest jadeite to the world with honesty and care.
               </p>
 

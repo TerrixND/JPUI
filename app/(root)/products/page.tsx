@@ -6,6 +6,9 @@ import React, { useMemo, useState } from "react";
 
 
 const ITEMS_PER_PAGE = 16;
+const isSignedMediaUrl = (url: string) =>
+  /^https?:\/\//i.test(url) &&
+  /(?:[?&](x-amz-|token=|signature=|expires=|se=))/i.test(url);
 
 const ProductPage = () => {
   const [search, setSearch] = useState("");
@@ -146,6 +149,7 @@ const ProductPage = () => {
                   sizes="(max-width: 768px) 50vw, 25vw"
                   priority={product.id === "1"}
                   loading="eager"
+                  unoptimized={isSignedMediaUrl(product.image)}
                   className="object-contain transition duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-black/3 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-500" />

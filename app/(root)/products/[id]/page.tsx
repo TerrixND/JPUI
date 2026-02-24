@@ -1,8 +1,12 @@
 "use client";
 
 import { generateCertificateSvg } from "@/utils/data";
+import {
+  getPublicMediaUrl,
+  mapPageContextToMediaSection,
+} from "@/lib/apiClient";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const PRODUCT_DETAIL_DATA = {
   id: "c3a9e21d-5a88-4d91-b2a1-1122ff778899",
@@ -161,6 +165,17 @@ const PLACEHOLDER_SVG =
     <text x="300" y="430" text-anchor="middle" font-family="serif" font-size="11" fill="#a8a29e" letter-spacing="3">JADE PHOENIX</text>
   </svg>`);
 
+const PRODUCT_MEDIA_SECTION = mapPageContextToMediaSection("PRODUCT_DETAIL");
+const SIGNED_URL_REFRESH_MS = 10 * 60 * 1000;
+
+const looksLikeSignedMediaUrl = (url: string) =>
+  /^https?:\/\//i.test(url) &&
+  /(?:[?&](x-amz-|token=|signature=|expires=|se=))/i.test(url);
+
+const shouldResolvePublicMediaUrl = (mediaId: string, currentUrl: string) =>
+  Boolean(mediaId) &&
+  (looksLikeSignedMediaUrl(currentUrl) || !currentUrl.trim());
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 type Tab = "details" | "ownership" | "certificate";
@@ -171,6 +186,57 @@ export default function ProductDetailPhoenix() {
     product.media.find((m) => m.isPrimary) ?? product.media[0];
   const [activeMedia, setActiveMedia] = useState(primaryMedia);
   const [activeTab, setActiveTab] = useState<Tab>("details");
+  const [mediaUrlById, setMediaUrlById] = useState<Record<string, string>>({});
+
+  const refreshPublicMediaUrl = useCallback(async (mediaId: string) => {
+    const media = product.media.find((item) => item.id === mediaId);
+
+    if (!media || !shouldResolvePublicMediaUrl(media.id, media.url)) {
+      return "";
+    }
+
+    try {
+      const result = await getPublicMediaUrl(mediaId, PRODUCT_MEDIA_SECTION);
+
+      setMediaUrlById((prev) => ({
+        ...prev,
+        [mediaId]: result.url,
+      }));
+
+      return result.url;
+    } catch {
+      return "";
+    }
+  }, [product.media]);
+
+  useEffect(() => {
+    const refreshableMediaIds = product.media
+      .filter((media) => shouldResolvePublicMediaUrl(media.id, media.url))
+      .map((media) => media.id);
+
+    if (refreshableMediaIds.length === 0) {
+      return;
+    }
+
+    const kickoffTimer = window.setTimeout(() => {
+      for (const mediaId of refreshableMediaIds) {
+        void refreshPublicMediaUrl(mediaId);
+      }
+    }, 0);
+
+    const timer = window.setInterval(() => {
+      for (const mediaId of refreshableMediaIds) {
+        void refreshPublicMediaUrl(mediaId);
+      }
+    }, SIGNED_URL_REFRESH_MS);
+
+    return () => {
+      window.clearTimeout(kickoffTimer);
+      window.clearInterval(timer);
+    };
+  }, [product.media, refreshPublicMediaUrl]);
+
+  const activeMediaUrl = mediaUrlById[activeMedia.id] || activeMedia.url;
 
   const handleOpenCertificate = () => {
     const svgContent = generateCertificateSvg(product);
@@ -202,22 +268,30 @@ export default function ProductDetailPhoenix() {
             <div className="relative aspect-square bg-gradient-to-br from-stone-100 to-stone-200 rounded-xl overflow-hidden border border-stone-200 group shadow-sm">
               {activeMedia.type === "VIDEO" ? (
                 <video
-                  key={activeMedia.url}
-                  src={activeMedia.url}
+                  key={activeMediaUrl}
+                  src={activeMediaUrl}
                   className="w-full h-full object-cover"
                   autoPlay
                   loop
                   muted
                   playsInline
+                  onError={() => {
+                    void refreshPublicMediaUrl(activeMedia.id);
+                  }}
                 />
               ) : (
                 <img
-                  key={activeMedia.url}
-                  src={activeMedia.url}
+                  key={activeMediaUrl}
+                  src={activeMediaUrl}
                   alt={product.name}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = PLACEHOLDER_SVG;
+                    const target = e.target as HTMLImageElement;
+                    void refreshPublicMediaUrl(activeMedia.id).then((refreshedUrl) => {
+                      if (!refreshedUrl) {
+                        target.src = PLACEHOLDER_SVG;
+                      }
+                    });
                   }}
                 />
               )}
@@ -250,15 +324,21 @@ export default function ProductDetailPhoenix() {
                     </div>
                   ) : (
                     <img
-                      src={m.url}
+                      src={mediaUrlById[m.id] || m.url}
                       alt=""
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         const el = e.target as HTMLImageElement;
-                        el.style.display = "none";
-                        if (el.parentElement) {
-                          el.parentElement.innerHTML = `<div class="w-full h-full bg-emerald-50 flex items-center justify-center"><span class="text-emerald-400 text-xs font-sans">IMG</span></div>`;
-                        }
+                        void refreshPublicMediaUrl(m.id).then((refreshedUrl) => {
+                          if (refreshedUrl) {
+                            return;
+                          }
+
+                          el.style.display = "none";
+                          if (el.parentElement) {
+                            el.parentElement.innerHTML = `<div class="w-full h-full bg-emerald-50 flex items-center justify-center"><span class="text-emerald-400 text-xs font-sans">IMG</span></div>`;
+                          }
+                        });
                       }}
                     />
                   )}

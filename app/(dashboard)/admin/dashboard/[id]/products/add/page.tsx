@@ -8,6 +8,7 @@ import { useRole } from "@/components/ui/dashboard/RoleContext";
 import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
+import { type MediaAudience, type MediaSection } from "@/lib/apiClient";
 
 type ProductForm = {
   sku: string;
@@ -115,6 +116,13 @@ const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"];
 const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"];
 const CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"];
 const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNED"];
+const MEDIA_VISIBILITY_SECTIONS: MediaSection[] = [
+  "PRODUCT_PAGE",
+  "TOP_SHELF",
+  "VIP",
+  "PRIVATE",
+];
+const MEDIA_AUDIENCES: MediaAudience[] = ["PUBLIC", "TARGETED", "ADMIN_ONLY"];
 
 const createAllocationRow = (): AllocationRow => ({
   id: `allocation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -165,10 +173,15 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function AddProductPage() {
   const router = useRouter();
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, role } = useRole();
+  const isAdminRole = role === "admin";
 
   const [form, setForm] = useState<ProductForm>(initialForm);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaVisibilitySections, setMediaVisibilitySections] = useState<MediaSection[]>([
+    "PRODUCT_PAGE",
+  ]);
+  const [mediaAudience, setMediaAudience] = useState<MediaAudience>("PUBLIC");
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -343,6 +356,14 @@ export default function AddProductPage() {
     void loadBranches();
   }, [getAccessToken]);
 
+  useEffect(() => {
+    if (isAdminRole || mediaAudience !== "ADMIN_ONLY") {
+      return;
+    }
+
+    setMediaAudience("TARGETED");
+  }, [isAdminRole, mediaAudience]);
+
   const updateField = (field: keyof ProductForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -357,6 +378,30 @@ export default function AddProductPage() {
 
   const removeAllocation = (allocationId: string) => {
     setAllocations((prev) => prev.filter((row) => row.id !== allocationId));
+  };
+
+  const toggleMediaVisibilitySection = (section: MediaSection) => {
+    setMediaVisibilitySections((current) => {
+      if (current.includes(section)) {
+        return current.filter((item) => item !== section);
+      }
+
+      return [...current, section];
+    });
+  };
+
+  const ensureMediaUploadMetadata = () => {
+    if (mediaFiles.length === 0) {
+      return;
+    }
+
+    if (!mediaVisibilitySections.length) {
+      throw new Error("Select at least one media visibility section before uploading files.");
+    }
+
+    if (!isAdminRole && mediaAudience === "ADMIN_ONLY") {
+      throw new Error("ADMIN_ONLY audience can only be selected by admins.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -414,6 +459,7 @@ export default function AddProductPage() {
         throw new Error("Total commission allocation rate cannot exceed 100%.");
       }
 
+      ensureMediaUploadMetadata();
       setLoading(true);
 
       const accessToken = await getAccessToken();
@@ -451,6 +497,8 @@ export default function AddProductPage() {
         const uploadedMedia = await uploadMediaFiles({
           files: mediaFiles.map((mf) => mf.file),
           accessToken,
+          visibilitySections: mediaVisibilitySections,
+          audience: mediaAudience,
         });
 
         mediaIds = uploadedMedia.map((media) => media.id);
@@ -466,6 +514,7 @@ export default function AddProductPage() {
           ...payload,
           mediaIds,
         }),
+        cache: "no-store",
       });
 
       const createBody = (await createResponse.json().catch(() => null)) as ApiErrorPayload | null;
@@ -969,6 +1018,54 @@ export default function AddProductPage() {
             Upload product images, videos, and PDF documents. The first image is automatically set as
             the primary image.
           </p>
+
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+            <div>
+              <p className="text-[12px] font-medium text-gray-700 mb-2">Visibility Sections</p>
+              <div className="flex flex-wrap gap-2">
+                {MEDIA_VISIBILITY_SECTIONS.map((section) => {
+                  const checked = mediaVisibilitySections.includes(section);
+
+                  return (
+                    <label
+                      key={section}
+                      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                        checked
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleMediaVisibilitySection(section)}
+                        className="h-3.5 w-3.5 accent-emerald-600"
+                      />
+                      {section}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Audience</label>
+              <select
+                value={mediaAudience}
+                onChange={(e) => setMediaAudience(e.target.value as MediaAudience)}
+                className={inputCls}
+              >
+                {MEDIA_AUDIENCES.filter((audience) => isAdminRole || audience !== "ADMIN_ONLY").map(
+                  (audience) => (
+                    <option key={audience} value={audience}>
+                      {audience}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+          </div>
+
           <MediaUploader
             files={mediaFiles}
             onChange={setMediaFiles}

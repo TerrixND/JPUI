@@ -39,6 +39,9 @@ const products = [
 
 const CARD_WIDTH = 260; // must match Tailwind width below
 const GAP = 24; // gap-6 = 24px
+const isSignedMediaUrl = (url: string) =>
+  /^https?:\/\//i.test(url) &&
+  /(?:[?&](x-amz-|token=|signature=|expires=|se=))/i.test(url);
 
 const NewArrival = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,6 +107,7 @@ const NewArrival = () => {
                   fill
                   sizes="(max-width: 768px) 50vw, 25vw"
                   priority={product.id === 1}
+                  unoptimized={isSignedMediaUrl(product.image)}
                   className="object-contain transition duration-700 group-hover:scale-105"
                 />
 

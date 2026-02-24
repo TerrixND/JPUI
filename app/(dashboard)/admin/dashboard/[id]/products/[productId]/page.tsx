@@ -8,6 +8,12 @@ import { useRole } from "@/components/ui/dashboard/RoleContext";
 import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
+import {
+  getAdminMediaUrl,
+  type AdminMediaUrlResponse,
+  type MediaAudience,
+  type MediaSection,
+} from "@/lib/apiClient";
 
 type ApiErrorPayload = {
   message?: string;
@@ -59,7 +65,7 @@ type InventoryProduct = {
   sku: string;
   name: string | null;
   status: string;
-  media?: InventoryProductMediaRef[];
+  media?: Array<InventoryProductMediaRef | string>;
   mediaIds?: string[];
   pricing: {
     buyPrice: number | null;
@@ -97,19 +103,11 @@ type InventoryProductMediaRef = {
 
 type ProductMedia = {
   id: string;
-  type: "IMAGE" | "VIDEO" | "CERTIFICATE";
+  mediaId: string | null;
+  type: "IMAGE" | "VIDEO" | "PDF";
   url: string;
   mimeType: string | null;
   sizeBytes: number | null;
-};
-
-type AdminMediaUrlResponse = {
-  id?: string;
-  productId?: string | null;
-  type?: string;
-  mimeType?: string | null;
-  sizeBytes?: number | null;
-  url?: string;
 };
 
 type EditForm = {
@@ -140,6 +138,14 @@ const initialForm: EditForm = {
   saleMinPrice: "",
   saleMaxPrice: "",
 };
+
+const MEDIA_VISIBILITY_SECTIONS: MediaSection[] = [
+  "PRODUCT_PAGE",
+  "TOP_SHELF",
+  "VIP",
+  "PRIVATE",
+];
+const MEDIA_AUDIENCES: MediaAudience[] = ["PUBLIC", "TARGETED", "ADMIN_ONLY"];
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -182,10 +188,11 @@ const toDisplayMoney = (value: number | null | undefined) => {
   return String(value);
 };
 
+
 const normalizeMediaType = (value: unknown): ProductMedia["type"] | null => {
   const normalized = String(value || "").trim().toUpperCase();
 
-  if (normalized === "IMAGE" || normalized === "VIDEO" || normalized === "CERTIFICATE") {
+  if (normalized === "IMAGE" || normalized === "VIDEO" || normalized === "PDF") {
     return normalized;
   }
 
@@ -203,10 +210,48 @@ const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | n
 
   return {
     id,
+    mediaId: id,
     url,
     type,
     mimeType: typeof payload?.mimeType === "string" ? payload.mimeType : null,
     sizeBytes: typeof payload?.sizeBytes === "number" ? payload.sizeBytes : null,
+  };
+};
+
+const toInlineProductMedia = (
+  mediaRef: InventoryProductMediaRef,
+  fallbackIndex: number,
+): ProductMedia | null => {
+  const mediaUrl = typeof mediaRef.url === "string" ? mediaRef.url.trim() : "";
+  if (!mediaUrl) {
+    return null;
+  }
+
+  const normalizedMimeType =
+    typeof mediaRef.mimeType === "string" ? mediaRef.mimeType.trim().toLowerCase() : "";
+  const fallbackTypeFromMime = normalizedMimeType.startsWith("image/")
+    ? "IMAGE"
+    : normalizedMimeType.startsWith("video/")
+      ? "VIDEO"
+      : normalizedMimeType === "application/pdf"
+        ? "PDF"
+        : null;
+  const mediaType = normalizeMediaType(mediaRef.type) ?? fallbackTypeFromMime;
+
+  if (!mediaType) {
+    return null;
+  }
+
+  const mediaId = typeof mediaRef.id === "string" && mediaRef.id.trim() ? mediaRef.id.trim() : null;
+  const rowId = mediaId || `inline-${fallbackIndex}-${mediaUrl}`;
+
+  return {
+    id: rowId,
+    mediaId,
+    type: mediaType,
+    url: mediaUrl,
+    mimeType: normalizedMimeType || null,
+    sizeBytes: typeof mediaRef.sizeBytes === "number" ? mediaRef.sizeBytes : null,
   };
 };
 
@@ -244,7 +289,8 @@ function MediaTypeChip({ type }: { type: ProductMedia["type"] }) {
 export default function ProductEditPage() {
   const params = useParams();
   const router = useRouter();
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, role } = useRole();
+  const isAdminRole = role === "admin";
 
   const productId = String(params.productId || "");
   const productsPath = `${dashboardBasePath}/products`;
@@ -253,6 +299,10 @@ export default function ProductEditPage() {
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [existingMedia, setExistingMedia] = useState<ProductMedia[]>([]);
   const [newMediaFiles, setNewMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaVisibilitySections, setMediaVisibilitySections] = useState<MediaSection[]>([
+    "PRODUCT_PAGE",
+  ]);
+  const [mediaAudience, setMediaAudience] = useState<MediaAudience>("PUBLIC");
   const [product, setProduct] = useState<InventoryProduct | null>(null);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -302,31 +352,41 @@ export default function ProductEditPage() {
 
   const fetchAdminMediaById = useCallback(
     async (accessToken: string, mediaId: string) => {
-      const response = await fetch(`/api/v1/admin/media/${encodeURIComponent(mediaId)}/url`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        cache: "no-store",
-      });
+      try {
+        const payload = await getAdminMediaUrl({
+          mediaId,
+          accessToken,
+        });
 
-      if (!response.ok) {
+        return toProductMedia(payload);
+      } catch {
         return null;
       }
-
-      const payload = (await response.json().catch(() => null)) as
-        | AdminMediaUrlResponse
-        | ApiErrorPayload
-        | null;
-
-      return toProductMedia(payload as AdminMediaUrlResponse | null);
     },
     [],
   );
 
+  useEffect(() => {
+    if (isAdminRole || mediaAudience !== "ADMIN_ONLY") {
+      return;
+    }
+
+    setMediaAudience("TARGETED");
+  }, [isAdminRole, mediaAudience]);
+
+  const toggleMediaVisibilitySection = (section: MediaSection) => {
+    setMediaVisibilitySections((current) => {
+      if (current.includes(section)) {
+        return current.filter((item) => item !== section);
+      }
+
+      return [...current, section];
+    });
+  };
+
   const refreshSingleMediaUrl = useCallback(
-    async (mediaId: string) => {
-      if (!mediaId) {
+    async (mediaRowId: string, mediaId: string) => {
+      if (!mediaId || !mediaRowId) {
         return;
       }
 
@@ -345,7 +405,7 @@ export default function ProductEditPage() {
         }
 
         setExistingMedia((prev) =>
-          prev.map((media) => (media.id === mediaId ? { ...media, url: refreshedMedia.url } : media)),
+          prev.map((media) => (media.id === mediaRowId ? { ...media, url: refreshedMedia.url } : media)),
         );
       } catch {
         // Keep current URL; subsequent retries/interval can refresh.
@@ -360,14 +420,34 @@ export default function ProductEditPage() {
     async (accessToken: string, targetProduct: InventoryProduct) => {
       const orderedMediaIds: string[] = [];
       const seenMediaIds = new Set<string>();
+      const inlineMediaRows: ProductMedia[] = [];
+      const seenInlineKeys = new Set<string>();
 
       const mediaRefs = Array.isArray(targetProduct.media) ? targetProduct.media : [];
-      for (const mediaRef of mediaRefs) {
+      for (const [index, mediaRef] of mediaRefs.entries()) {
+        if (typeof mediaRef === "string") {
+          const mediaId = mediaRef.trim();
+          if (mediaId && !seenMediaIds.has(mediaId)) {
+            seenMediaIds.add(mediaId);
+            orderedMediaIds.push(mediaId);
+          }
+          continue;
+        }
+
         const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
 
         if (mediaId && !seenMediaIds.has(mediaId)) {
           seenMediaIds.add(mediaId);
           orderedMediaIds.push(mediaId);
+        }
+
+        const inlineMedia = toInlineProductMedia(mediaRef, index);
+        if (inlineMedia) {
+          const inlineKey = inlineMedia.mediaId ? `id:${inlineMedia.mediaId}` : `url:${inlineMedia.url}`;
+          if (!seenInlineKeys.has(inlineKey)) {
+            seenInlineKeys.add(inlineKey);
+            inlineMediaRows.push(inlineMedia);
+          }
         }
       }
 
@@ -385,7 +465,7 @@ export default function ProductEditPage() {
         }
       }
 
-      if (orderedMediaIds.length === 0) {
+      if (orderedMediaIds.length === 0 && inlineMediaRows.length === 0) {
         return {
           media: [] as ProductMedia[],
           hasReferences: false,
@@ -393,12 +473,24 @@ export default function ProductEditPage() {
       }
 
       const mediaRows: ProductMedia[] = [];
+      const resolvedKeys = new Set<string>();
       for (const mediaId of orderedMediaIds) {
         const media = await fetchAdminMediaById(accessToken, mediaId);
 
         if (media) {
+          const resolvedKey = media.mediaId ? `id:${media.mediaId}` : `url:${media.url}`;
+          resolvedKeys.add(resolvedKey);
           mediaRows.push(media);
         }
+      }
+
+      for (const inlineMedia of inlineMediaRows) {
+        const inlineKey = inlineMedia.mediaId ? `id:${inlineMedia.mediaId}` : `url:${inlineMedia.url}`;
+        if (resolvedKeys.has(inlineKey)) {
+          continue;
+        }
+        resolvedKeys.add(inlineKey);
+        mediaRows.push(inlineMedia);
       }
 
       return {
@@ -598,7 +690,7 @@ export default function ProductEditPage() {
 
         if (!mediaResult.hasReferences) {
           setMediaHint(
-            "Existing media cannot be loaded yet because the current admin product analytics payload does not include media references for this product. You can still upload new media below.",
+            "Existing media cannot be loaded because the admin inventory analytics payload does not include media references for this product. You can still upload new media below.",
           );
         } else if (!mediaResult.media.length) {
           setMediaHint("No existing media records could be resolved for this product.");
@@ -631,7 +723,9 @@ export default function ProductEditPage() {
 
     const interval = window.setInterval(() => {
       for (const media of existingMedia) {
-        void refreshSingleMediaUrl(media.id);
+        if (media.mediaId) {
+          void refreshSingleMediaUrl(media.id, media.mediaId);
+        }
       }
     }, REFRESH_INTERVAL_MS);
 
@@ -656,6 +750,20 @@ export default function ProductEditPage() {
 
   const removeAllocation = (allocationId: string) => {
     setAllocations((prev) => prev.filter((row) => row.id !== allocationId));
+  };
+
+  const ensureMediaUploadMetadata = () => {
+    if (newMediaFiles.length === 0) {
+      return;
+    }
+
+    if (!mediaVisibilitySections.length) {
+      throw new Error("Select at least one media visibility section before uploading files.");
+    }
+
+    if (!isAdminRole && mediaAudience === "ADMIN_ONLY") {
+      throw new Error("ADMIN_ONLY audience can only be selected by admins.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -713,6 +821,7 @@ export default function ProductEditPage() {
         throw new Error("Total commission allocation rate cannot exceed 100%.");
       }
 
+      ensureMediaUploadMetadata();
       setSaving(true);
 
       const accessToken = await getAccessToken();
@@ -731,6 +840,7 @@ export default function ProductEditPage() {
           saleMaxPrice,
           commissionAllocations: normalizedAllocations,
         }),
+        cache: "no-store",
       });
 
       const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
@@ -744,6 +854,8 @@ export default function ProductEditPage() {
           files: newMediaFiles.map((item) => item.file),
           accessToken,
           productId: product.id,
+          visibilitySections: mediaVisibilitySections,
+          audience: mediaAudience,
         });
       }
 
@@ -1090,6 +1202,53 @@ export default function ProductEditPage() {
             </div>
           )}
 
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+            <div>
+              <p className="text-[12px] font-medium text-gray-700 mb-2">Visibility Sections</p>
+              <div className="flex flex-wrap gap-2">
+                {MEDIA_VISIBILITY_SECTIONS.map((section) => {
+                  const checked = mediaVisibilitySections.includes(section);
+
+                  return (
+                    <label
+                      key={section}
+                      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                        checked
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleMediaVisibilitySection(section)}
+                        className="h-3.5 w-3.5 accent-emerald-600"
+                      />
+                      {section}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Audience</label>
+              <select
+                value={mediaAudience}
+                onChange={(e) => setMediaAudience(e.target.value as MediaAudience)}
+                className={inputCls}
+              >
+                {MEDIA_AUDIENCES.filter((audience) => isAdminRole || audience !== "ADMIN_ONLY").map(
+                  (audience) => (
+                    <option key={audience} value={audience}>
+                      {audience}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+          </div>
+
           {existingMedia.length === 0 ? (
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500 mb-4">
               No existing media found from read endpoint.
@@ -1112,18 +1271,26 @@ export default function ProductEditPage() {
                         alt=""
                         className="w-full h-full object-cover"
                         onError={() => {
-                          void refreshSingleMediaUrl(media.id);
+                          if (media.mediaId) {
+                            void refreshSingleMediaUrl(media.id, media.mediaId);
+                          }
                         }}
                       />
                     ) : media.type === "VIDEO" ? (
-                      <svg className="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
+                      <video
+                        key={media.url}
+                        src={media.url}
+                        className="w-full h-full object-cover"
+                        muted
+                        autoPlay
+                        loop
+                        playsInline
+                        onError={() => {
+                          if (media.mediaId) {
+                            void refreshSingleMediaUrl(media.id, media.mediaId);
+                          }
+                        }}
+                      />
                     ) : (
                       <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -1138,7 +1305,9 @@ export default function ProductEditPage() {
                   </div>
                   <div className="px-2 py-2 flex items-center justify-between">
                     <MediaTypeChip type={media.type} />
-                    <span className="text-[10px] text-gray-400 font-mono">{media.id.slice(0, 6)}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {media.mediaId ? media.mediaId.slice(0, 6) : "INLINE"}
+                    </span>
                   </div>
                 </a>
               ))}

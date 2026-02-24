@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
-const OtpPage = () => {
+const OtpPageContent = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const email = searchParams.get("email");
@@ -109,6 +109,14 @@ const OtpPage = () => {
         )}
       </div>
     </div>
+  );
+};
+
+const OtpPage = () => {
+  return (
+    <Suspense fallback={<div className="lg:w-[70%] h-full" />}>
+      <OtpPageContent />
+    </Suspense>
   );
 };
 

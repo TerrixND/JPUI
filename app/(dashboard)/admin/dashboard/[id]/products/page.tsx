@@ -5,6 +5,7 @@ import Link from "next/link";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
+import { getAdminMediaUrl } from "@/lib/apiClient";
 
 type ApiErrorPayload = {
   message?: string;
@@ -31,7 +32,7 @@ type InventoryProduct = {
   sku: string;
   name: string | null;
   status: string;
-  media?: InventoryProductMediaRef[];
+  media?: Array<InventoryProductMediaRef | string>;
   mediaIds?: string[];
   pricing: {
     buyPrice: number | null;
@@ -60,18 +61,11 @@ type InventoryProductMediaRef = {
   sizeBytes?: number | null;
 };
 
-type AdminMediaUrlResponse = {
-  id?: string;
-  type?: string;
-  url?: string;
-  mimeType?: string | null;
-  sizeBytes?: number | null;
-};
-
 type ProductImageRef = {
-  mediaId: string;
+  mediaId: string | null;
   url: string;
 };
+
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -118,6 +112,29 @@ const statusBadge = (status: string) => {
 };
 
 const normalizeMediaType = (value: unknown) => String(value || "").trim().toUpperCase();
+
+const toInlineImageRef = (mediaRef: InventoryProductMediaRef): ProductImageRef | null => {
+  const mediaUrl = typeof mediaRef.url === "string" ? mediaRef.url.trim() : "";
+  if (!mediaUrl) {
+    return null;
+  }
+
+  const mediaType = normalizeMediaType(mediaRef.type);
+  const mimeType = typeof mediaRef.mimeType === "string" ? mediaRef.mimeType.trim().toLowerCase() : "";
+  const isImage = mediaType === "IMAGE" || mimeType.startsWith("image/");
+
+  if (!isImage) {
+    return null;
+  }
+
+  const mediaId = typeof mediaRef.id === "string" && mediaRef.id.trim() ? mediaRef.id.trim() : null;
+
+  return {
+    mediaId,
+    url: mediaUrl,
+  };
+};
+
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -135,6 +152,7 @@ export default function AdminProducts() {
   const [includeSold, setIncludeSold] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [mediaHint, setMediaHint] = useState("");
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [mediaByProductId, setMediaByProductId] = useState<Record<string, ProductImageRef>>({});
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
@@ -160,35 +178,23 @@ export default function AdminProducts() {
 
   const fetchAdminMediaById = useCallback(
     async (accessToken: string, mediaId: string) => {
-      const response = await fetch(`/api/v1/admin/media/${encodeURIComponent(mediaId)}/url`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        cache: "no-store",
-      });
+      try {
+        const media = await getAdminMediaUrl({
+          mediaId,
+          accessToken,
+        });
 
-      if (!response.ok) {
+        if (String(media.type || "").trim().toUpperCase() !== "IMAGE") {
+          return null;
+        }
+
+        return {
+          mediaId: media.id,
+          url: media.url,
+        };
+      } catch {
         return null;
       }
-
-      const payload = (await response.json().catch(() => null)) as
-        | AdminMediaUrlResponse
-        | ApiErrorPayload
-        | null;
-
-      const resolvedId = String((payload as AdminMediaUrlResponse | null)?.id || mediaId).trim();
-      const resolvedType = normalizeMediaType((payload as AdminMediaUrlResponse | null)?.type);
-      const resolvedUrl = String((payload as AdminMediaUrlResponse | null)?.url || "").trim();
-
-      if (!resolvedId || !resolvedUrl || resolvedType !== "IMAGE") {
-        return null;
-      }
-
-      return {
-        mediaId: resolvedId,
-        url: resolvedUrl,
-      };
     },
     [],
   );
@@ -236,6 +242,7 @@ export default function AdminProducts() {
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
     setError("");
+    setMediaHint("");
 
     try {
       const accessToken = await getAccessToken();
@@ -262,6 +269,18 @@ export default function AdminProducts() {
 
       const analyticsData = analyticsPayload as InventoryAnalyticsResponse;
       const inventoryRows = Array.isArray(analyticsData?.inventory) ? analyticsData.inventory : [];
+      const hasMediaReferences = inventoryRows.some((product) => {
+        const hasMediaArray =
+          Array.isArray(product.media) &&
+          product.media.some((mediaRef) =>
+            typeof mediaRef === "string"
+              ? Boolean(mediaRef.trim())
+              : Boolean(mediaRef?.id?.trim() || mediaRef?.url?.trim()),
+          );
+        const hasMediaIds = Array.isArray(product.mediaIds) && product.mediaIds.some((id) => Boolean(id?.trim()));
+
+        return hasMediaArray || hasMediaIds;
+      });
 
       const mediaMap: Record<string, ProductImageRef> = {};
       const mediaJobs = inventoryRows.map(async (product) => {
@@ -271,10 +290,23 @@ export default function AdminProducts() {
 
         const mediaRefs = Array.isArray(product.media) ? product.media : [];
         const mediaIdSet = new Set<string>();
+        let inlineImageRef: ProductImageRef | null = null;
 
         for (const mediaRef of mediaRefs) {
-          if (typeof mediaRef?.id === "string" && mediaRef.id.trim()) {
+          if (typeof mediaRef === "string" && mediaRef.trim()) {
+            mediaIdSet.add(mediaRef.trim());
+            continue;
+          }
+
+          if (typeof mediaRef !== "string" && typeof mediaRef.id === "string" && mediaRef.id.trim()) {
             mediaIdSet.add(mediaRef.id.trim());
+          }
+
+          if (!inlineImageRef && typeof mediaRef !== "string") {
+            const resolvedInlineImage = toInlineImageRef(mediaRef);
+            if (resolvedInlineImage) {
+              inlineImageRef = resolvedInlineImage;
+            }
           }
         }
 
@@ -286,13 +318,22 @@ export default function AdminProducts() {
           }
         }
 
+        let resolvedImage: ProductImageRef | null = null;
         for (const mediaId of mediaIdSet) {
           const media = await fetchAdminMediaById(accessToken, mediaId);
 
           if (media) {
-            mediaMap[product.id] = media;
+            resolvedImage = media;
             break;
           }
+        }
+
+        if (!resolvedImage && inlineImageRef) {
+          resolvedImage = inlineImageRef;
+        }
+
+        if (resolvedImage) {
+          mediaMap[product.id] = resolvedImage;
         }
       });
 
@@ -300,6 +341,13 @@ export default function AdminProducts() {
 
       setMediaByProductId(mediaMap);
       setAnalytics(analyticsData);
+      if (!hasMediaReferences) {
+        setMediaHint(
+          "Media previews are unavailable because the inventory analytics response does not include media references for these products.",
+        );
+      } else if (Object.keys(mediaMap).length === 0) {
+        setMediaHint("Media references were found, but no image preview URLs could be resolved.");
+      }
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -307,6 +355,7 @@ export default function AdminProducts() {
           : "Failed to load product analytics.";
 
       setError(message);
+      setMediaHint("");
       setAnalytics(null);
       setMediaByProductId({});
     } finally {
@@ -327,7 +376,9 @@ export default function AdminProducts() {
 
     const interval = window.setInterval(() => {
       for (const [productId, media] of rows) {
-        void refreshProductImage(productId, media.mediaId);
+        if (media.mediaId) {
+          void refreshProductImage(productId, media.mediaId);
+        }
       }
     }, REFRESH_INTERVAL_MS);
 
@@ -401,6 +452,12 @@ export default function AdminProducts() {
 
       {!loading && !error && analytics && (
         <>
+          {mediaHint && (
+            <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              {mediaHint}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatTile label="Products" value={String(analytics.totals.productCount)} />
             <StatTile

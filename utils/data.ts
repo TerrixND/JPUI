@@ -446,8 +446,28 @@ export const formatDate = (iso: string) =>
 
 // ─── Certificate SVG — Clean & Minimal ───────────────────────────────────────
 
+type CertificateProduct = {
+  name: string;
+  sku: string;
+  color: string;
+  weight: number;
+  length: number;
+  height: number;
+  depth: number;
+  certificate: {
+    serialNumber: string;
+    registeredAt: string;
+    issuedBy: string;
+    authenticatedBy: string;
+    gemGrade: string;
+    origin: string;
+    currentHolder: string;
+    holderStatus: string;
+    holderNote: string;
+  };
+};
 
-export const generateCertificateSvg = (product: any) => {
+export const generateCertificateSvg = (product: CertificateProduct) => {
   const cert = product.certificate;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
