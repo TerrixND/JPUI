@@ -9,11 +9,20 @@ import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUp
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
 import {
+  type CustomerTier,
   getAdminMediaUrl,
   type AdminMediaUrlResponse,
-  type MediaAudience,
-  type MediaSection,
+  type MediaVisibilityPreset,
 } from "@/lib/apiClient";
+import {
+  CUSTOMER_TIER_OPTIONS as MEDIA_CUSTOMER_TIER_OPTIONS,
+  PUBLIC_MEDIA_VISIBILITY_PRESETS,
+  ROLE_MEDIA_VISIBILITY_PRESETS,
+  deriveVisibilityPresetFromMedia,
+  isPublicVisibilityPreset,
+  isRoleVisibilityPreset,
+  parseTargetUserIdsInput,
+} from "@/lib/mediaVisibility";
 
 type ApiErrorPayload = {
   message?: string;
@@ -93,6 +102,14 @@ type AdminProductMediaRef = {
   url?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  visibilitySections?: string[] | null;
+  audience?: string | null;
+  allowedRoles?: string[] | null;
+  minCustomerTier?: string | null;
+  visibilityPreset?: string | null;
+  targetUsers?: Array<{
+    userId?: string | null;
+  }> | null;
 };
 
 type AdminProductDetail = {
@@ -145,6 +162,14 @@ type InventoryProductMediaRef = {
   url?: string;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  visibilitySections?: string[] | null;
+  audience?: string | null;
+  allowedRoles?: string[] | null;
+  minCustomerTier?: string | null;
+  visibilityPreset?: string | null;
+  targetUsers?: Array<{
+    userId?: string | null;
+  }> | null;
 };
 
 type ProductMedia = {
@@ -154,6 +179,10 @@ type ProductMedia = {
   url: string;
   mimeType: string | null;
   sizeBytes: number | null;
+  visibilityPreset: MediaVisibilityPreset | null;
+  audience: string | null;
+  minCustomerTier: CustomerTier | null;
+  targetUserIds: string[];
 };
 
 type EditForm = {
@@ -184,14 +213,11 @@ const initialForm: EditForm = {
   saleMinPrice: "",
   saleMaxPrice: "",
 };
-
-const MEDIA_VISIBILITY_SECTIONS: MediaSection[] = [
-  "PRODUCT_PAGE",
-  "TOP_SHELF",
-  "VIP",
-  "PRIVATE",
-];
-const MEDIA_AUDIENCES: MediaAudience[] = ["PUBLIC", "TARGETED", "ADMIN_ONLY"];
+type PublicMediaVisibilityPreset = Extract<
+  MediaVisibilityPreset,
+  "PUBLIC" | "TOP_SHELF" | "USER_TIER" | "TARGETED_USER" | "PRIVATE"
+>;
+type RoleMediaVisibilityPreset = Extract<MediaVisibilityPreset, "ADMIN" | "MANAGER" | "SALES">;
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -202,6 +228,11 @@ const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
 
   return `${message}${code}${reason}`;
 };
+
+const mediaDeleteEndpoints = (mediaId: string) => [
+  `/api/v1/admin/media/${encodeURIComponent(mediaId)}`,
+  `/api/v1/media/${encodeURIComponent(mediaId)}`,
+];
 
 const formatBranchLabel = (branch: BranchOption) => {
   const code = branch.code ? `${branch.code} - ` : "";
@@ -251,12 +282,32 @@ const toDisplayMoney = (value: number | null | undefined) => {
 const normalizeMediaType = (value: unknown): ProductMedia["type"] | null => {
   const normalized = String(value || "").trim().toUpperCase();
 
+  if (normalized === "CERTIFICATE") {
+    return "PDF";
+  }
+
   if (normalized === "IMAGE" || normalized === "VIDEO" || normalized === "PDF") {
     return normalized;
   }
 
   return null;
 };
+
+const normalizeCustomerTier = (value: unknown): CustomerTier | null => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "REGULAR" || normalized === "VIP" || normalized === "ULTRA_VIP") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const extractTargetUserIds = (targetUsers: Array<{ userId?: string | null }> | null | undefined) =>
+  [...new Set(
+    (Array.isArray(targetUsers) ? targetUsers : [])
+      .map((row) => String(row?.userId || "").trim())
+      .filter(Boolean),
+  )];
 
 const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | null => {
   const id = typeof payload?.id === "string" ? payload.id.trim() : "";
@@ -267,6 +318,15 @@ const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | n
     return null;
   }
 
+  const visibilityPreset = deriveVisibilityPresetFromMedia({
+    visibilityPreset: payload?.visibilityPreset || null,
+    audience: payload?.audience || null,
+    visibilitySections: payload?.visibilitySections || [],
+    allowedRoles: payload?.allowedRoles || [],
+    minCustomerTier: payload?.minCustomerTier || null,
+    targetUsers: payload?.targetUsers || [],
+  });
+
   return {
     id,
     mediaId: id,
@@ -274,6 +334,10 @@ const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | n
     type,
     mimeType: typeof payload?.mimeType === "string" ? payload.mimeType : null,
     sizeBytes: typeof payload?.sizeBytes === "number" ? payload.sizeBytes : null,
+    visibilityPreset,
+    audience: payload?.audience ? String(payload.audience).toUpperCase() : null,
+    minCustomerTier: normalizeCustomerTier(payload?.minCustomerTier),
+    targetUserIds: extractTargetUserIds(payload?.targetUsers),
   };
 };
 
@@ -289,6 +353,18 @@ const toInventoryProduct = (payload: AdminProductDetail): InventoryProduct => {
       url: typeof mediaRef?.url === "string" ? mediaRef.url : undefined,
       mimeType: typeof mediaRef?.mimeType === "string" ? mediaRef.mimeType : null,
       sizeBytes: typeof mediaRef?.sizeBytes === "number" ? mediaRef.sizeBytes : null,
+      visibilitySections: Array.isArray(mediaRef?.visibilitySections)
+        ? mediaRef.visibilitySections
+        : null,
+      audience: typeof mediaRef?.audience === "string" ? mediaRef.audience : null,
+      allowedRoles: Array.isArray(mediaRef?.allowedRoles) ? mediaRef.allowedRoles : null,
+      minCustomerTier:
+        typeof mediaRef?.minCustomerTier === "string" ? mediaRef.minCustomerTier : null,
+      visibilityPreset:
+        typeof mediaRef?.visibilityPreset === "string" ? mediaRef.visibilityPreset : null,
+      targetUsers: Array.isArray(mediaRef?.targetUsers)
+        ? mediaRef.targetUsers
+        : null,
     }))
     .filter((mediaRef) =>
       Boolean(
@@ -385,6 +461,14 @@ const toInlineProductMedia = (
 
   const mediaId = typeof mediaRef.id === "string" && mediaRef.id.trim() ? mediaRef.id.trim() : null;
   const rowId = mediaId || `inline-${fallbackIndex}-${mediaUrl}`;
+  const visibilityPreset = deriveVisibilityPresetFromMedia({
+    visibilityPreset: mediaRef.visibilityPreset || null,
+    audience: mediaRef.audience || null,
+    visibilitySections: mediaRef.visibilitySections || [],
+    allowedRoles: mediaRef.allowedRoles || [],
+    minCustomerTier: mediaRef.minCustomerTier || null,
+    targetUsers: mediaRef.targetUsers || [],
+  });
 
   return {
     id: rowId,
@@ -393,6 +477,10 @@ const toInlineProductMedia = (
     url: mediaUrl,
     mimeType: normalizedMimeType || null,
     sizeBytes: typeof mediaRef.sizeBytes === "number" ? mediaRef.sizeBytes : null,
+    visibilityPreset,
+    audience: mediaRef.audience ? String(mediaRef.audience).toUpperCase() : null,
+    minCustomerTier: normalizeCustomerTier(mediaRef.minCustomerTier),
+    targetUserIds: extractTargetUserIds(mediaRef.targetUsers),
   };
 };
 
@@ -427,11 +515,115 @@ function MediaTypeChip({ type }: { type: ProductMedia["type"] }) {
   return <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-[11px] font-medium">PDF</span>;
 }
 
+function VisibilityPresetChip({
+  preset,
+}: {
+  preset: MediaVisibilityPreset | null;
+}) {
+  if (!preset) {
+    return (
+      <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[11px] font-medium">
+        UNSET
+      </span>
+    );
+  }
+
+  const isRolePreset = isRoleVisibilityPreset(preset);
+
+  return (
+    <span
+      className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+        isRolePreset ? "bg-indigo-50 text-indigo-700" : "bg-emerald-50 text-emerald-700"
+      }`}
+    >
+      {preset.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function ExistingMediaCard({
+  media,
+  deleting,
+  onDelete,
+  onRefresh,
+}: {
+  media: ProductMedia;
+  deleting: boolean;
+  onDelete: (media: ProductMedia) => void;
+  onRefresh: (rowId: string, mediaId: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+      <a href={media.url} target="_blank" rel="noreferrer" className="block">
+        <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+          {media.type === "IMAGE" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={media.url}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => {
+                if (media.mediaId) {
+                  onRefresh(media.id, media.mediaId);
+                }
+              }}
+            />
+          ) : media.type === "VIDEO" ? (
+            <video
+              key={media.url}
+              src={media.url}
+              className="w-full h-full object-cover"
+              muted
+              autoPlay
+              loop
+              playsInline
+              onError={() => {
+                if (media.mediaId) {
+                  onRefresh(media.id, media.mediaId);
+                }
+              }}
+            />
+          ) : (
+            <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-6 3h4" />
+            </svg>
+          )}
+        </div>
+      </a>
+
+      <div className="px-2 py-2 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <MediaTypeChip type={media.type} />
+          <VisibilityPresetChip preset={media.visibilityPreset} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-gray-400 font-mono">
+            {media.mediaId ? media.mediaId.slice(0, 8) : "INLINE"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onDelete(media)}
+            disabled={deleting}
+            className="px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductEditPage() {
   const params = useParams();
   const router = useRouter();
-  const { dashboardBasePath, role } = useRole();
-  const isAdminRole = role === "admin";
+  const { dashboardBasePath } = useRole();
 
   const productId = String(params.productId || "");
   const productsPath = `${dashboardBasePath}/products`;
@@ -439,11 +631,15 @@ export default function ProductEditPage() {
   const [form, setForm] = useState<EditForm>(initialForm);
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [existingMedia, setExistingMedia] = useState<ProductMedia[]>([]);
-  const [newMediaFiles, setNewMediaFiles] = useState<MediaFile[]>([]);
-  const [mediaVisibilitySections, setMediaVisibilitySections] = useState<MediaSection[]>([
-    "PRODUCT_PAGE",
-  ]);
-  const [mediaAudience, setMediaAudience] = useState<MediaAudience>("PUBLIC");
+  const [publicVisibilityPreset, setPublicVisibilityPreset] = useState<PublicMediaVisibilityPreset>("PUBLIC");
+  const [publicMinCustomerTier, setPublicMinCustomerTier] = useState<CustomerTier | "">("");
+  const [publicTargetUserIdsInput, setPublicTargetUserIdsInput] = useState("");
+  const [publicThumbnailFiles, setPublicThumbnailFiles] = useState<MediaFile[]>([]);
+  const [publicVideoFiles, setPublicVideoFiles] = useState<MediaFile[]>([]);
+  const [publicGalleryFiles, setPublicGalleryFiles] = useState<MediaFile[]>([]);
+  const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
+  const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
+  const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
   const [product, setProduct] = useState<InventoryProduct | null>(null);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -458,6 +654,7 @@ export default function ProductEditPage() {
   const [lookupError, setLookupError] = useState("");
   const [mediaHint, setMediaHint] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const refreshingMediaIdsRef = useRef<Set<string>>(new Set());
 
   const totalAllocationRate = useMemo(() => {
@@ -506,24 +703,6 @@ export default function ProductEditPage() {
     },
     [],
   );
-
-  useEffect(() => {
-    if (isAdminRole || mediaAudience !== "ADMIN_ONLY") {
-      return;
-    }
-
-    setMediaAudience("TARGETED");
-  }, [isAdminRole, mediaAudience]);
-
-  const toggleMediaVisibilitySection = (section: MediaSection) => {
-    setMediaVisibilitySections((current) => {
-      if (current.includes(section)) {
-        return current.filter((item) => item !== section);
-      }
-
-      return [...current, section];
-    });
-  };
 
   const refreshSingleMediaUrl = useCallback(
     async (mediaRowId: string, mediaId: string) => {
@@ -792,7 +971,15 @@ export default function ProductEditPage() {
         }));
 
         setAllocations(nextAllocations);
-        setNewMediaFiles([]);
+        setPublicThumbnailFiles([]);
+        setPublicVideoFiles([]);
+        setPublicGalleryFiles([]);
+        setPublicCertificateFiles([]);
+        setPublicVisibilityPreset("PUBLIC");
+        setPublicMinCustomerTier("");
+        setPublicTargetUserIdsInput("");
+        setRoleMediaFiles([]);
+        setRoleVisibilityPreset("ADMIN");
 
         const mediaResult = await resolveExistingMediaFromAdmin(accessToken, targetProduct);
         setExistingMedia(mediaResult.media);
@@ -861,17 +1048,126 @@ export default function ProductEditPage() {
     setAllocations((prev) => prev.filter((row) => row.id !== allocationId));
   };
 
-  const ensureMediaUploadMetadata = () => {
-    if (newMediaFiles.length === 0) {
+  const existingPublicMedia = useMemo(
+    () => existingMedia.filter((media) => isPublicVisibilityPreset(media.visibilityPreset)),
+    [existingMedia],
+  );
+  const existingRoleMedia = useMemo(
+    () => existingMedia.filter((media) => isRoleVisibilityPreset(media.visibilityPreset)),
+    [existingMedia],
+  );
+  const existingOtherMedia = useMemo(
+    () =>
+      existingMedia.filter(
+        (media) =>
+          !isPublicVisibilityPreset(media.visibilityPreset) &&
+          !isRoleVisibilityPreset(media.visibilityPreset),
+      ),
+    [existingMedia],
+  );
+
+  const hasAnyPublicMediaUpload =
+    publicThumbnailFiles.length > 0 ||
+    publicVideoFiles.length > 0 ||
+    publicGalleryFiles.length > 0 ||
+    publicCertificateFiles.length > 0;
+  const hasAnyMediaUpload = hasAnyPublicMediaUpload || roleMediaFiles.length > 0;
+
+  const handleDeleteExistingMedia = async (media: ProductMedia) => {
+    const mediaId = media.mediaId || media.id;
+    if (!mediaId) {
       return;
     }
 
-    if (!mediaVisibilitySections.length) {
-      throw new Error("Select at least one media visibility section before uploading files.");
+    const confirmed = window.confirm("Delete this media file from the product?");
+    if (!confirmed) {
+      return;
     }
 
-    if (!isAdminRole && mediaAudience === "ADMIN_ONLY") {
-      throw new Error("ADMIN_ONLY audience can only be selected by admins.");
+    setError("");
+    setDeletingMediaId(mediaId);
+
+    try {
+      const accessToken = await getAccessToken();
+      let deleted = false;
+      let endpointUnsupported = false;
+
+      for (const endpoint of mediaDeleteEndpoints(mediaId)) {
+        const response = await fetch(endpoint, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            reason: "Deleted from product edit page",
+          }),
+          cache: "no-store",
+        });
+
+        const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+
+        if (response.ok) {
+          deleted = true;
+          break;
+        }
+
+        if (response.status === 404 || response.status === 405) {
+          endpointUnsupported = true;
+          continue;
+        }
+
+        throw new Error(toErrorMessage(payload, "Failed to delete media."));
+      }
+
+      if (!deleted) {
+        if (endpointUnsupported) {
+          throw new Error(
+            "Media delete endpoint is not available in the API yet. Add DELETE /api/v1/admin/media/:mediaId or DELETE /api/v1/media/:mediaId.",
+          );
+        }
+
+        throw new Error("Failed to delete media.");
+      }
+
+      setExistingMedia((prev) =>
+        prev.filter((row) => (row.mediaId || row.id) !== mediaId),
+      );
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : "Failed to delete media.";
+      setError(message);
+    } finally {
+      setDeletingMediaId(null);
+    }
+  };
+
+  const ensureMediaUploadMetadata = () => {
+    if (!hasAnyMediaUpload) {
+      return;
+    }
+
+    if (!hasAnyPublicMediaUpload) {
+      return;
+    }
+
+    if (!publicThumbnailFiles.length) {
+      throw new Error("Public media requires a thumbnail image.");
+    }
+
+    if (!publicVideoFiles.length) {
+      throw new Error("Public media requires at least one video.");
+    }
+
+    if (publicVisibilityPreset === "USER_TIER" && !publicMinCustomerTier) {
+      throw new Error("Select a minimum customer tier for USER_TIER public media.");
+    }
+
+    if (
+      publicVisibilityPreset === "TARGETED_USER" &&
+      parseTargetUserIdsInput(publicTargetUserIdsInput).length === 0
+    ) {
+      throw new Error("Provide at least one target user id for TARGETED_USER public media.");
     }
   };
 
@@ -958,13 +1254,36 @@ export default function ProductEditPage() {
         throw new Error(toErrorMessage(payload, "Failed to update product."));
       }
 
-      if (newMediaFiles.length > 0) {
+      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
+
+      if (hasAnyPublicMediaUpload) {
+        const publicFiles = [
+          ...publicThumbnailFiles,
+          ...publicVideoFiles,
+          ...publicGalleryFiles,
+          ...publicCertificateFiles,
+        ].map((mediaFile) => mediaFile.file);
+
         await uploadMediaFiles({
-          files: newMediaFiles.map((item) => item.file),
+          files: publicFiles,
           accessToken,
           productId: product.id,
-          visibilitySections: mediaVisibilitySections,
-          audience: mediaAudience,
+          visibilityPreset: publicVisibilityPreset,
+          ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
+            ? { minCustomerTier: publicMinCustomerTier }
+            : {}),
+          ...(publicVisibilityPreset === "TARGETED_USER"
+            ? { targetUserIds: publicTargetUserIds }
+            : {}),
+        });
+      }
+
+      if (roleMediaFiles.length > 0) {
+        await uploadMediaFiles({
+          files: roleMediaFiles.map((mediaFile) => mediaFile.file),
+          accessToken,
+          productId: product.id,
+          visibilityPreset: roleVisibilityPreset,
         });
       }
 
@@ -1303,7 +1622,7 @@ export default function ProductEditPage() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <SectionHeading>Media &amp; Documents</SectionHeading>
+          <SectionHeading>Public Media Upload</SectionHeading>
 
           {mediaHint && (
             <div className="mb-4 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs">
@@ -1311,127 +1630,220 @@ export default function ProductEditPage() {
             </div>
           )}
 
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-            <div>
-              <p className="text-[12px] font-medium text-gray-700 mb-2">Visibility Sections</p>
-              <div className="flex flex-wrap gap-2">
-                {MEDIA_VISIBILITY_SECTIONS.map((section) => {
-                  const checked = mediaVisibilitySections.includes(section);
+          <p className="text-xs text-gray-500 mb-4">
+            Delete outdated media, then upload replacements using the public visibility preset.
+          </p>
 
-                  return (
-                    <label
-                      key={section}
-                      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
-                        checked
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleMediaVisibilitySection(section)}
-                        className="h-3.5 w-3.5 accent-emerald-600"
-                      />
-                      {section}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Audience</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Public Visibility
+              </label>
               <select
-                value={mediaAudience}
-                onChange={(e) => setMediaAudience(e.target.value as MediaAudience)}
+                value={publicVisibilityPreset}
+                onChange={(e) => setPublicVisibilityPreset(e.target.value as PublicMediaVisibilityPreset)}
                 className={inputCls}
               >
-                {MEDIA_AUDIENCES.filter((audience) => isAdminRole || audience !== "ADMIN_ONLY").map(
-                  (audience) => (
-                    <option key={audience} value={audience}>
-                      {audience}
-                    </option>
-                  ),
-                )}
+                {PUBLIC_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset.replace(/_/g, " ")}
+                  </option>
+                ))}
               </select>
             </div>
+
+            {publicVisibilityPreset === "USER_TIER" && (
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                  Min Customer Tier
+                </label>
+                <select
+                  value={publicMinCustomerTier}
+                  onChange={(e) => setPublicMinCustomerTier(e.target.value as CustomerTier | "")}
+                  className={inputCls}
+                >
+                  <option value="">Select tier</option>
+                  {MEDIA_CUSTOMER_TIER_OPTIONS.map((tier) => (
+                    <option key={tier} value={tier}>
+                      {tier}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {publicVisibilityPreset === "TARGETED_USER" && (
+              <div className="md:col-span-2">
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                  Target User IDs
+                </label>
+                <textarea
+                  value={publicTargetUserIdsInput}
+                  onChange={(e) => setPublicTargetUserIdsInput(e.target.value)}
+                  rows={3}
+                  placeholder="Enter user IDs separated by commas or new lines"
+                  className={inputCls}
+                />
+              </div>
+            )}
           </div>
 
-          {existingMedia.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500 mb-4">
-              No existing media found from read endpoint.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-              {existingMedia.map((media) => (
-                <a
-                  key={media.id}
-                  href={media.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg border border-gray-200 overflow-hidden bg-white hover:border-gray-300 transition-colors"
-                >
-                  <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
-                    {media.type === "IMAGE" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={media.url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        onError={() => {
-                          if (media.mediaId) {
-                            void refreshSingleMediaUrl(media.id, media.mediaId);
-                          }
-                        }}
-                      />
-                    ) : media.type === "VIDEO" ? (
-                      <video
-                        key={media.url}
-                        src={media.url}
-                        className="w-full h-full object-cover"
-                        muted
-                        autoPlay
-                        loop
-                        playsInline
-                        onError={() => {
-                          if (media.mediaId) {
-                            void refreshSingleMediaUrl(media.id, media.mediaId);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                        />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-6 3h4" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="px-2 py-2 flex items-center justify-between">
-                    <MediaTypeChip type={media.type} />
-                    <span className="text-[10px] text-gray-400 font-mono">
-                      {media.mediaId ? media.mediaId.slice(0, 6) : "INLINE"}
-                    </span>
-                  </div>
-                </a>
-              ))}
+          <div className="mb-5">
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Public Media</p>
+            {existingPublicMedia.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+                No public media found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {existingPublicMedia.map((media) => (
+                  <ExistingMediaCard
+                    key={media.id}
+                    media={media}
+                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    onDelete={(target) => {
+                      void handleDeleteExistingMedia(target);
+                    }}
+                    onRefresh={(rowId, mediaId) => {
+                      void refreshSingleMediaUrl(rowId, mediaId);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {existingOtherMedia.length > 0 && (
+            <div className="mb-5">
+              <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Media (Unclassified)</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {existingOtherMedia.map((media) => (
+                  <ExistingMediaCard
+                    key={media.id}
+                    media={media}
+                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    onDelete={(target) => {
+                      void handleDeleteExistingMedia(target);
+                    }}
+                    onRefresh={(rowId, mediaId) => {
+                      void refreshSingleMediaUrl(rowId, mediaId);
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
-          <p className="text-xs text-gray-500 mb-3">
-            Add new media files to this product. The current backend flow supports appending media records.
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Thumbnail Image</p>
+              <MediaUploader
+                files={publicThumbnailFiles}
+                onChange={setPublicThumbnailFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload one primary thumbnail image (required when public media is used)."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Feature Video (Required)</p>
+              <MediaUploader
+                files={publicVideoFiles}
+                onChange={setPublicVideoFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["VIDEO"]}
+                helperText="Upload one product video (required when public media is used)."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">More Images</p>
+              <MediaUploader
+                files={publicGalleryFiles}
+                onChange={setPublicGalleryFiles}
+                maxFiles={12}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload additional gallery images."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Certificate File</p>
+              <MediaUploader
+                files={publicCertificateFiles}
+                onChange={setPublicCertificateFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["PDF"]}
+                helperText="Upload one PDF certificate file."
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <SectionHeading>Role Based Media Upload</SectionHeading>
+          <p className="text-xs text-gray-500 mb-4">
+            Upload internal media with access limited to one role preset.
           </p>
+
+          <div className="mb-4">
+            <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+              Role Visibility
+            </label>
+            <select
+              value={roleVisibilityPreset}
+              onChange={(e) => setRoleVisibilityPreset(e.target.value as RoleMediaVisibilityPreset)}
+              className={inputCls}
+            >
+              {ROLE_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {preset}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-5">
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Role Based Media</p>
+            {existingRoleMedia.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+                No role-based media found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {existingRoleMedia.map((media) => (
+                  <ExistingMediaCard
+                    key={media.id}
+                    media={media}
+                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    onDelete={(target) => {
+                      void handleDeleteExistingMedia(target);
+                    }}
+                    onRefresh={(rowId, mediaId) => {
+                      void refreshSingleMediaUrl(rowId, mediaId);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
           <MediaUploader
-            files={newMediaFiles}
-            onChange={setNewMediaFiles}
-            maxFiles={10}
+            files={roleMediaFiles}
+            onChange={setRoleMediaFiles}
+            maxFiles={20}
             maxSizeMB={50}
             maxVideoSizeMB={500}
+            allowedTypes={["IMAGE", "VIDEO", "PDF"]}
           />
         </div>
 

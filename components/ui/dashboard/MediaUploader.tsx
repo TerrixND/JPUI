@@ -22,13 +22,35 @@ interface MediaUploaderProps {
   maxFiles?: number;
   maxSizeMB?: number;
   maxVideoSizeMB?: number;
+  allowedTypes?: MediaFileType[];
+  helperText?: string;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const ACCEPT_STRING = "image/*,video/*,application/pdf";
+const ACCEPT_BY_TYPE: Record<MediaFileType, string> = {
+  IMAGE: "image/*",
+  VIDEO: "video/*",
+  PDF: "application/pdf",
+};
+
+const buildAcceptString = (allowedTypes?: MediaFileType[]) => {
+  const types = allowedTypes?.length ? allowedTypes : (["IMAGE", "VIDEO", "PDF"] as MediaFileType[]);
+  return types.map((type) => ACCEPT_BY_TYPE[type]).join(",");
+};
+
+const toAllowedTypesLabel = (allowedTypes?: MediaFileType[]) => {
+  const types = allowedTypes?.length ? allowedTypes : (["IMAGE", "VIDEO", "PDF"] as MediaFileType[]);
+  if (types.length === 1) {
+    return types[0];
+  }
+  if (types.length === 2) {
+    return `${types[0]} and ${types[1]}`;
+  }
+  return `${types.slice(0, -1).join(", ")}, and ${types[types.length - 1]}`;
+};
 
 const resolveType = (mime: string): MediaFileType | null => {
   const normalized = mime.trim().toLowerCase();
@@ -142,10 +164,14 @@ export default function MediaUploader({
   maxFiles = 10,
   maxSizeMB = 50,
   maxVideoSizeMB = 500,
+  allowedTypes,
+  helperText,
 }: MediaUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
+  const acceptedFileTypesLabel = toAllowedTypesLabel(allowedTypes);
+  const acceptString = buildAcceptString(allowedTypes);
 
   /* — process incoming File objects — */
   const processFiles = useCallback(
@@ -168,6 +194,11 @@ export default function MediaUploader({
           setError(
             `"${file.name}" is not supported. Upload images, videos, or PDFs.`,
           );
+          continue;
+        }
+
+        if (allowedTypes?.length && !allowedTypes.includes(type)) {
+          setError(`"${file.name}" is not allowed in this uploader. Allowed: ${acceptedFileTypesLabel}.`);
           continue;
         }
 
@@ -198,7 +229,7 @@ export default function MediaUploader({
         onChange([...files, ...newMediaFiles]);
       }
     },
-    [files, maxFiles, maxSizeMB, maxVideoSizeMB, onChange],
+    [acceptedFileTypesLabel, allowedTypes, files, maxFiles, maxSizeMB, maxVideoSizeMB, onChange],
   );
 
   /* — drag events — */
@@ -282,14 +313,18 @@ export default function MediaUploader({
           or drag & drop files here
         </p>
         <p className="text-xs text-gray-400">
-          Images (image/*) &bull; Videos (video/*) &bull; PDF (application/pdf)
-          &mdash; Images/PDF up to {maxSizeMB} MB each, videos up to {maxVideoSizeMB} MB
+          {helperText || (
+            <>
+              Images (image/*) &bull; Videos (video/*) &bull; PDF (application/pdf)
+              &mdash; Images/PDF up to {maxSizeMB} MB each, videos up to {maxVideoSizeMB} MB
+            </>
+          )}
         </p>
 
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT_STRING}
+          accept={acceptString}
           multiple
           className="hidden"
           onChange={(e) => {

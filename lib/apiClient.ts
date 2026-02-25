@@ -2,8 +2,19 @@ export const API_BASE_PATH = "/api/v1";
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "");
 
 export type MediaSection = "PRODUCT_PAGE" | "TOP_SHELF" | "VIP" | "PRIVATE";
-export type MediaAudience = "PUBLIC" | "TARGETED" | "ADMIN_ONLY";
-export type MediaType = "IMAGE" | "VIDEO" | "PDF";
+export type MediaAudience = "PUBLIC" | "TARGETED" | "ADMIN_ONLY" | "ROLE_BASED" | "PRIVATE";
+export type MediaType = "IMAGE" | "VIDEO" | "PDF" | "CERTIFICATE";
+export type MediaRole = "ADMIN" | "MANAGER" | "SALES";
+export type CustomerTier = "REGULAR" | "VIP" | "ULTRA_VIP";
+export type MediaVisibilityPreset =
+  | "PUBLIC"
+  | "TOP_SHELF"
+  | "USER_TIER"
+  | "TARGETED_USER"
+  | "PRIVATE"
+  | "ADMIN"
+  | "MANAGER"
+  | "SALES";
 
 type ApiErrorPayload = {
   message?: unknown;
@@ -57,6 +68,10 @@ export type MediaRecord = {
   createdAt: string;
   visibilitySections: MediaSection[];
   audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUserIds: string[];
+  visibilityPreset: MediaVisibilityPreset | null;
 };
 
 export type PublicMediaUrlResponse = {
@@ -74,6 +89,14 @@ export type AdminMediaUrlResponse = {
   mimeType: string | null;
   sizeBytes: number | null;
   url: string;
+  visibilitySections: MediaSection[];
+  audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUsers: Array<{
+    userId: string;
+  }>;
+  visibilityPreset: MediaVisibilityPreset | null;
 };
 
 export type AdminAuditLogRow = {
@@ -154,6 +177,28 @@ export type AdminLogBackupFile = {
   generatedAt: string | null;
   type: string | null;
   raw: JsonRecord;
+};
+
+export type LogHistoryType = "all" | "internal" | "audit" | "product" | "other";
+
+export type AdminLogHistoryItem = {
+  fileName: string;
+  relativePath: string | null;
+  category: string | null;
+  sizeBytes: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  data: unknown;
+  parseError: string | null;
+  raw: JsonRecord;
+};
+
+export type AdminLogHistoryResponse = {
+  type: LogHistoryType;
+  limit: number;
+  count: number;
+  items: AdminLogHistoryItem[];
+  raw: unknown;
 };
 
 export type StaffRuleBranch = {
@@ -406,6 +451,40 @@ const normalizeMediaRecord = (payload: unknown): MediaRecord | null => {
     : [];
 
   const audience = asString(candidate.audience).toUpperCase();
+  const allowedRoles = Array.isArray(candidate.allowedRoles)
+    ? candidate.allowedRoles
+        .map((role) => asString(role).toUpperCase())
+        .filter((role): role is MediaRole => role === "ADMIN" || role === "MANAGER" || role === "SALES")
+    : [];
+
+  const targetUserIdsFromTargetUsers = Array.isArray(candidate.targetUsers)
+    ? candidate.targetUsers
+        .map((row) => asRecord(row))
+        .map((row) => asString(row?.userId))
+        .filter(Boolean)
+    : [];
+  const targetUserIdsFromFlatList = Array.isArray(candidate.targetUserIds)
+    ? candidate.targetUserIds.map((entry) => asString(entry)).filter(Boolean)
+    : [];
+  const targetUserIds = [...new Set([...targetUserIdsFromTargetUsers, ...targetUserIdsFromFlatList])];
+
+  const minCustomerTierRaw = asString(candidate.minCustomerTier).toUpperCase();
+  const minCustomerTier =
+    minCustomerTierRaw === "REGULAR" || minCustomerTierRaw === "VIP" || minCustomerTierRaw === "ULTRA_VIP"
+      ? (minCustomerTierRaw as CustomerTier)
+      : null;
+  const visibilityPresetRaw = asString(candidate.visibilityPreset).toUpperCase().replace(/[\s-]+/g, "_");
+  const visibilityPreset =
+    visibilityPresetRaw === "PUBLIC" ||
+    visibilityPresetRaw === "TOP_SHELF" ||
+    visibilityPresetRaw === "USER_TIER" ||
+    visibilityPresetRaw === "TARGETED_USER" ||
+    visibilityPresetRaw === "PRIVATE" ||
+    visibilityPresetRaw === "ADMIN" ||
+    visibilityPresetRaw === "MANAGER" ||
+    visibilityPresetRaw === "SALES"
+      ? (visibilityPresetRaw as MediaVisibilityPreset)
+      : null;
 
   return {
     id,
@@ -422,15 +501,36 @@ const normalizeMediaRecord = (payload: unknown): MediaRecord | null => {
     createdAt,
     visibilitySections,
     audience:
-      audience === "PUBLIC" || audience === "TARGETED" || audience === "ADMIN_ONLY"
+      audience === "PUBLIC" ||
+      audience === "TARGETED" ||
+      audience === "ADMIN_ONLY" ||
+      audience === "ROLE_BASED" ||
+      audience === "PRIVATE"
         ? (audience as MediaAudience)
         : null,
+    allowedRoles,
+    minCustomerTier,
+    targetUserIds,
+    visibilityPreset,
   };
 };
 
 const normalizeMediaUrlResponse = (
   payload: unknown,
-): Pick<AdminMediaUrlResponse, "id" | "type" | "mimeType" | "sizeBytes" | "url"> | null => {
+): Pick<
+  AdminMediaUrlResponse,
+  | "id"
+  | "type"
+  | "mimeType"
+  | "sizeBytes"
+  | "url"
+  | "visibilitySections"
+  | "audience"
+  | "allowedRoles"
+  | "minCustomerTier"
+  | "targetUsers"
+  | "visibilityPreset"
+> | null => {
   const root = asRecord(payload);
   if (!root) {
     return null;
@@ -443,12 +543,64 @@ const normalizeMediaUrlResponse = (
     return null;
   }
 
+  const visibilitySections = Array.isArray(root.visibilitySections)
+    ? root.visibilitySections
+        .map((item) => asString(item).toUpperCase())
+        .filter(
+          (item): item is MediaSection =>
+            item === "PRODUCT_PAGE" || item === "TOP_SHELF" || item === "VIP" || item === "PRIVATE",
+        )
+    : [];
+  const audienceRaw = asString(root.audience).toUpperCase();
+  const audience =
+    audienceRaw === "PUBLIC" ||
+    audienceRaw === "TARGETED" ||
+    audienceRaw === "ADMIN_ONLY" ||
+    audienceRaw === "ROLE_BASED" ||
+    audienceRaw === "PRIVATE"
+      ? (audienceRaw as MediaAudience)
+      : null;
+  const allowedRoles = Array.isArray(root.allowedRoles)
+    ? root.allowedRoles
+        .map((role) => asString(role).toUpperCase())
+        .filter((role): role is MediaRole => role === "ADMIN" || role === "MANAGER" || role === "SALES")
+    : [];
+  const minCustomerTierRaw = asString(root.minCustomerTier).toUpperCase();
+  const minCustomerTier =
+    minCustomerTierRaw === "REGULAR" || minCustomerTierRaw === "VIP" || minCustomerTierRaw === "ULTRA_VIP"
+      ? (minCustomerTierRaw as CustomerTier)
+      : null;
+  const targetUsers = Array.isArray(root.targetUsers)
+    ? root.targetUsers
+        .map((row) => asRecord(row))
+        .map((row) => ({ userId: asString(row?.userId) }))
+        .filter((row) => Boolean(row.userId))
+    : [];
+  const visibilityPresetRaw = asString(root.visibilityPreset).toUpperCase().replace(/[\s-]+/g, "_");
+  const visibilityPreset =
+    visibilityPresetRaw === "PUBLIC" ||
+    visibilityPresetRaw === "TOP_SHELF" ||
+    visibilityPresetRaw === "USER_TIER" ||
+    visibilityPresetRaw === "TARGETED_USER" ||
+    visibilityPresetRaw === "PRIVATE" ||
+    visibilityPresetRaw === "ADMIN" ||
+    visibilityPresetRaw === "MANAGER" ||
+    visibilityPresetRaw === "SALES"
+      ? (visibilityPresetRaw as MediaVisibilityPreset)
+      : null;
+
   return {
     id,
     url,
     type: asNullableString(root.type),
     mimeType: asNullableString(root.mimeType),
     sizeBytes: asFiniteNumber(root.sizeBytes),
+    visibilitySections,
+    audience,
+    allowedRoles,
+    minCustomerTier,
+    targetUsers,
+    visibilityPreset,
   };
 };
 
@@ -465,15 +617,36 @@ const normalizeAuditRow = (rawRow: unknown): AdminAuditLogRow | null => {
     return null;
   }
 
+  const actorUser = asRecord(row.actorUser);
+  const metadata = row.metadata ?? row.details ?? null;
+  const metadataRecord = asRecord(metadata);
+  const metadataMessage =
+    asNullableString(metadataRecord?.message) ||
+    asNullableString(metadataRecord?.reason) ||
+    asNullableString(metadataRecord?.note);
+
   return {
     id,
     action,
-    actorId: asNullableString(row.actorId) || asNullableString(row.userId),
-    actorEmail: asNullableString(row.actorEmail) || asNullableString(row.userEmail),
-    targetType: asNullableString(row.targetType) || asNullableString(row.resourceType),
-    targetId: asNullableString(row.targetId) || asNullableString(row.resourceId),
-    message: asNullableString(row.message),
-    details: row.details ?? row.metadata ?? null,
+    actorId:
+      asNullableString(row.actorUserId) ||
+      asNullableString(row.actorId) ||
+      asNullableString(row.userId) ||
+      asNullableString(actorUser?.id),
+    actorEmail:
+      asNullableString(row.actorEmail) ||
+      asNullableString(row.userEmail) ||
+      asNullableString(actorUser?.email),
+    targetType:
+      asNullableString(row.entityType) ||
+      asNullableString(row.targetType) ||
+      asNullableString(row.resourceType),
+    targetId:
+      asNullableString(row.entityId) ||
+      asNullableString(row.targetId) ||
+      asNullableString(row.resourceId),
+    message: asNullableString(row.message) || metadataMessage,
+    details: metadata,
     createdAt: asNullableString(row.createdAt) || asNullableString(row.timestamp),
     ipAddress: asNullableString(row.ipAddress) || asNullableString(row.ip),
     userAgent: asNullableString(row.userAgent),
@@ -564,6 +737,10 @@ const extractAuditRows = (payload: unknown) => {
     return [];
   }
 
+  if (Array.isArray(root.records)) {
+    return root.records;
+  }
+
   if (Array.isArray(root.items)) {
     return root.items;
   }
@@ -624,6 +801,46 @@ const extractBackupRows = (payload: unknown): unknown[] => {
 
   if (Array.isArray(root.backups)) {
     return root.backups;
+  }
+
+  if (Array.isArray(root.data)) {
+    return root.data;
+  }
+
+  return [];
+};
+
+const normalizeLogHistoryType = (value: unknown): LogHistoryType => {
+  const normalized = asString(value).toLowerCase();
+  if (
+    normalized === "all" ||
+    normalized === "internal" ||
+    normalized === "audit" ||
+    normalized === "product" ||
+    normalized === "other"
+  ) {
+    return normalized;
+  }
+
+  return "all";
+};
+
+const extractLogHistoryRows = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  if (Array.isArray(root.items)) {
+    return root.items;
+  }
+
+  if (Array.isArray(root.files)) {
+    return root.files;
   }
 
   if (Array.isArray(root.data)) {
@@ -715,6 +932,10 @@ export const createMediaRecord = async ({
   productId,
   visibilitySections,
   audience,
+  visibilityPreset,
+  allowedRoles,
+  minCustomerTier,
+  targetUserIds,
 }: {
   accessToken: string;
   key: string;
@@ -723,6 +944,10 @@ export const createMediaRecord = async ({
   productId?: string;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
+  visibilityPreset?: MediaVisibilityPreset;
+  allowedRoles?: MediaRole[];
+  minCustomerTier?: CustomerTier;
+  targetUserIds?: string[];
 }): Promise<MediaRecord> => {
   const payload = await fetchJson({
     path: `${API_BASE_PATH}/media`,
@@ -738,6 +963,10 @@ export const createMediaRecord = async ({
       ...(productId ? { productId } : {}),
       ...(visibilitySections?.length ? { visibilitySections } : {}),
       ...(audience ? { audience } : {}),
+      ...(visibilityPreset ? { visibilityPreset } : {}),
+      ...(allowedRoles?.length ? { allowedRoles } : {}),
+      ...(minCustomerTier ? { minCustomerTier } : {}),
+      ...(targetUserIds?.length ? { targetUserIds } : {}),
     }),
     fallbackErrorMessage: "Failed to create media record.",
   });
@@ -821,8 +1050,12 @@ export const getAdminAuditLogs = async ({
   accessToken,
   page,
   limit,
+  actorUserId,
   actorId,
+  branchId,
   action,
+  entityType,
+  entityId,
   query,
   from,
   to,
@@ -830,8 +1063,12 @@ export const getAdminAuditLogs = async ({
   accessToken: string;
   page?: number;
   limit?: number;
+  actorUserId?: string;
   actorId?: string;
+  branchId?: string;
   action?: string;
+  entityType?: string;
+  entityId?: string;
   query?: string;
   from?: string;
   to?: string;
@@ -846,12 +1083,26 @@ export const getAdminAuditLogs = async ({
     search.set("limit", String(limit));
   }
 
-  if (actorId) {
-    search.set("actorId", actorId);
+  if (actorUserId) {
+    search.set("actorUserId", actorUserId);
+  } else if (actorId) {
+    search.set("actorUserId", actorId);
+  }
+
+  if (branchId) {
+    search.set("branchId", branchId);
   }
 
   if (action) {
     search.set("action", action);
+  }
+
+  if (entityType) {
+    search.set("entityType", entityType);
+  }
+
+  if (entityId) {
+    search.set("entityId", entityId);
   }
 
   if (query) {
@@ -1123,6 +1374,68 @@ export const getAdminLogBackups = async ({
 
   return {
     files,
+    raw: payload,
+  };
+};
+
+export const getAdminLogHistory = async ({
+  accessToken,
+  type = "all",
+  limit = 200,
+}: {
+  accessToken: string;
+  type?: LogHistoryType;
+  limit?: number;
+}): Promise<AdminLogHistoryResponse> => {
+  const query = new URLSearchParams({
+    type,
+    limit: String(Math.max(1, Math.min(1000, Math.floor(limit || 200)))),
+  });
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/log/history?${query.toString()}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load log history.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const items: AdminLogHistoryItem[] = [];
+
+  for (const row of extractLogHistoryRows(payload)) {
+    const item = asRecord(row);
+    if (!item) {
+      continue;
+    }
+
+    const fileName = asString(item.fileName) || asString(item.name);
+    if (!fileName) {
+      continue;
+    }
+
+    items.push({
+      fileName,
+      relativePath: asNullableString(item.relativePath),
+      category: asNullableString(item.category),
+      sizeBytes: asFiniteNumber(item.sizeBytes),
+      createdAt: asNullableString(item.createdAt),
+      updatedAt: asNullableString(item.updatedAt),
+      data: item.data ?? null,
+      parseError: asNullableString(item.parseError),
+      raw: item,
+    });
+  }
+
+  const countValue = asFiniteNumber(root.count);
+
+  return {
+    type: normalizeLogHistoryType(root.type ?? type),
+    limit: asPositiveInt(root.limit) ?? Math.max(1, Math.min(1000, Math.floor(limit || 200))),
+    count:
+      countValue !== null && Number.isInteger(countValue) && countValue >= 0
+        ? countValue
+        : items.length,
+    items,
     raw: payload,
   };
 };

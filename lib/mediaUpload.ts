@@ -2,9 +2,12 @@ import {
   createMediaPresign,
   createMediaRecord,
   uploadFileToPresignedUrl,
+  type CustomerTier,
   type MediaAudience,
+  type MediaRole,
   type MediaRecord,
   type MediaSection,
+  type MediaVisibilityPreset,
 } from "@/lib/apiClient";
 
 const IMAGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
@@ -55,12 +58,20 @@ export const uploadSingleMediaFile = async ({
   productId,
   visibilitySections,
   audience,
+  visibilityPreset,
+  allowedRoles,
+  minCustomerTier,
+  targetUserIds,
 }: {
   file: File;
   accessToken: string;
   productId?: string;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
+  visibilityPreset?: MediaVisibilityPreset;
+  allowedRoles?: MediaRole[];
+  minCustomerTier?: CustomerTier;
+  targetUserIds?: string[];
 }): Promise<MediaRecord> => {
   const validationError = validateMediaFileForUpload(file);
   if (validationError) {
@@ -105,6 +116,10 @@ export const uploadSingleMediaFile = async ({
       productId,
       visibilitySections,
       audience,
+      visibilityPreset,
+      allowedRoles,
+      minCustomerTier,
+      targetUserIds,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown network error.";
@@ -119,12 +134,20 @@ export const uploadMediaFiles = async ({
   productId,
   visibilitySections,
   audience,
+  visibilityPreset,
+  allowedRoles,
+  minCustomerTier,
+  targetUserIds,
 }: {
   files: File[];
   accessToken: string;
   productId?: string;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
+  visibilityPreset?: MediaVisibilityPreset;
+  allowedRoles?: MediaRole[];
+  minCustomerTier?: CustomerTier;
+  targetUserIds?: string[];
 }) => {
   const uploaded: MediaRecord[] = [];
 
@@ -135,6 +158,10 @@ export const uploadMediaFiles = async ({
       productId,
       visibilitySections,
       audience,
+      visibilityPreset,
+      allowedRoles,
+      minCustomerTier,
+      targetUserIds,
     });
 
     uploaded.push(media);

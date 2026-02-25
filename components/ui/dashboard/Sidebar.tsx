@@ -19,6 +19,7 @@ const adminNav: NavItem[] = [
   { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
   { label: "Errors", pathSuffix: "errors", icon: "file" },
   { label: "Logs & Backups", pathSuffix: "logs", icon: "file" },
+  { label: "Log History", pathSuffix: "log-history", icon: "history" },
 ];
 
 const managerNav: NavItem[] = [
@@ -170,6 +171,17 @@ function NavIcon({ icon }: { icon: string }) {
             strokeLinejoin="round"
             strokeWidth={2}
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      );
+    case "history":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M3 12a9 9 0 109-9 9 9 0 00-6.364 2.636L3 8m0-5v5h5m4 0v5l3 2"
           />
         </svg>
       );

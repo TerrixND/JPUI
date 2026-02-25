@@ -173,6 +173,7 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mediaHint, setMediaHint] = useState("");
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [mediaByProductId, setMediaByProductId] = useState<Record<string, ProductImageRef>>({});
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
@@ -319,12 +320,15 @@ export default function AdminProducts() {
 
       setMediaByProductId(mediaMap);
       setAnalytics(analyticsData);
-      if (!hasMediaReferences) {
-        setMediaHint(
-          "Media previews are unavailable because the admin products response does not include media references for these products.",
-        );
-      } else if (Object.keys(mediaMap).length === 0) {
-        setMediaHint("Media references were found, but no image previews could be resolved.");
+
+      if (productRows.length > 0) {
+        if (!hasMediaReferences) {
+          setMediaHint(
+            "Media previews are unavailable because the admin products response does not include media references for these products.",
+          );
+        } else if (Object.keys(mediaMap).length === 0) {
+          setMediaHint("Media references were found, but no image previews could be resolved.");
+        }
       }
     } catch (caughtError) {
       const message =
@@ -366,6 +370,49 @@ export default function AdminProducts() {
   }, [mediaByProductId, refreshProductImage]);
 
   const totalProducts = useMemo(() => analytics?.totals.productCount || 0, [analytics]);
+
+  const handleDeleteProduct = useCallback(
+    async (product: InventoryProduct) => {
+      const label = product.name || product.sku || product.id;
+      const confirmed = window.confirm(`Delete product "${label}"? This will archive the product.`);
+      if (!confirmed) {
+        return;
+      }
+
+      const reasonInput = window.prompt("Optional delete reason:", "");
+      const reason = String(reasonInput || "").trim();
+
+      setError("");
+      setDeletingProductId(product.id);
+
+      try {
+        const accessToken = await getAccessToken();
+        const response = await fetch(`/api/v1/admin/products/${encodeURIComponent(product.id)}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(reason ? { reason } : {}),
+          cache: "no-store",
+        });
+
+        const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+        if (!response.ok) {
+          throw new Error(toErrorMessage(payload, "Failed to delete product."));
+        }
+
+        await loadData();
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error ? caughtError.message : "Failed to delete product.";
+        setError(message);
+      } finally {
+        setDeletingProductId(null);
+      }
+    },
+    [getAccessToken, loadData],
+  );
 
   return (
     <div className="space-y-6">
@@ -470,6 +517,7 @@ export default function AdminProducts() {
                     <th className="px-5 py-3 font-medium">Allocation Rate</th>
                     <th className="px-5 py-3 font-medium">Net Profit Range</th>
                     <th className="px-5 py-3 font-medium">Rows</th>
+                    <th className="px-5 py-3 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -542,13 +590,33 @@ export default function AdminProducts() {
                           {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
                         </td>
                         <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`${dashboardBasePath}/products/${item.id}`}
+                              className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleDeleteProduct(item);
+                              }}
+                              disabled={deletingProductId === item.id}
+                              className="px-2.5 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {deletingProductId === item.id ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
 
                   {totalProducts === 0 && (
                     <tr>
-                      <td className="px-5 py-10 text-center text-gray-400" colSpan={7}>
+                      <td className="px-5 py-10 text-center text-gray-400" colSpan={8}>
                         No products found.
                       </td>
                     </tr>

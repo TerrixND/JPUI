@@ -89,7 +89,7 @@ export default function AdminLogs() {
   const [appliedFilters, setAppliedFilters] = useState<Filters>(initialFilters);
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(25);
+  const [limit, setLimit] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 

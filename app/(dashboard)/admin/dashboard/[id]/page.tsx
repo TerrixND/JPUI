@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import supabase from "@/lib/supabase";
+import { getAdminAuditLogs, type AdminAuditLogRow } from "@/lib/apiClient";
 
 /* ------------------------------------------------------------------ */
 /* Mock data (will be replaced with real API calls later)              */
@@ -67,14 +68,6 @@ const branchOverview = [
   { name: "South Bay", code: "SBY", members: 8, revenue: "$22,600", growth: "N/A", status: "New" },
 ];
 
-const auditLog = [
-  { action: "Product created", user: "admin@jadepalace.com", target: "Widget Pro Max", time: "5 min ago", color: "bg-emerald-400" },
-  { action: "User status changed", user: "admin@jadepalace.com", target: "jackson.lee", time: "22 min ago", color: "bg-blue-400" },
-  { action: "Inventory approved", user: "admin@jadepalace.com", target: "REQ-1042", time: "1 hour ago", color: "bg-purple-400" },
-  { action: "Staff rule created", user: "admin@jadepalace.com", target: "SALES onboarding", time: "3 hours ago", color: "bg-amber-400" },
-  { action: "Product status updated", user: "admin@jadepalace.com", target: "Gadget X", time: "5 hours ago", color: "bg-gray-400" },
-];
-
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
 /* ------------------------------------------------------------------ */
@@ -119,6 +112,33 @@ const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
   return `${message}${code}${reason}`;
 };
 
+const formatRelativeTime = (value: string | null) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const toActivityDotColor = (action: string, index: number) => {
+  const normalized = String(action || "").toUpperCase();
+  if (normalized.includes("DELETE") || normalized.includes("REMOVE")) return "bg-red-400";
+  if (normalized.includes("CREATE")) return "bg-emerald-400";
+  if (normalized.includes("UPDATE") || normalized.includes("STATUS")) return "bg-blue-400";
+  if (normalized.includes("APPROVE")) return "bg-purple-400";
+
+  const fallback = ["bg-emerald-400", "bg-blue-400", "bg-purple-400", "bg-amber-400", "bg-gray-400"];
+  return fallback[index % fallback.length];
+};
+
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
@@ -127,6 +147,9 @@ export default function AdminDashboard() {
   const [profitSnapshot, setProfitSnapshot] = useState<InventoryProfitSnapshot | null>(null);
   const [profitError, setProfitError] = useState("");
   const [profitLoading, setProfitLoading] = useState(true);
+  const [recentActivity, setRecentActivity] = useState<AdminAuditLogRow[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState("");
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -187,9 +210,39 @@ export default function AdminDashboard() {
     }
   }, [getAccessToken]);
 
+  const loadRecentActivity = useCallback(async () => {
+    setActivityLoading(true);
+    setActivityError("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await getAdminAuditLogs({
+        accessToken,
+        page: 1,
+        limit: 8,
+      });
+
+      setRecentActivity(response.items);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load recent activity.";
+
+      setRecentActivity([]);
+      setActivityError(message);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [getAccessToken]);
+
   useEffect(() => {
     void loadProjectedProfit();
   }, [loadProjectedProfit]);
+
+  useEffect(() => {
+    void loadRecentActivity();
+  }, [loadRecentActivity]);
 
   const t = profitSnapshot?.totals;
 
@@ -461,34 +514,67 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+            {!activityLoading && !activityError && (
+              <button
+                type="button"
+                onClick={() => void loadRecentActivity()}
+                className="ml-auto p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                title="Refresh"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
-            <div className="px-5 py-3 space-y-0.5">
-              {auditLog.map((item, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 py-2.5 group"
+            {activityLoading ? (
+              <div className="px-5 py-8 text-sm text-gray-500">Loading recent activity...</div>
+            ) : activityError ? (
+              <div className="px-5 py-8 text-center">
+                <p className="text-sm text-red-600">{activityError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadRecentActivity()}
+                  className="mt-2 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
                 >
-                  {/* Timeline dot + connector */}
-                  <div className="flex flex-col items-center pt-1.5 shrink-0">
-                    <span className={`w-2 h-2 rounded-full ${item.color}`} />
-                    {i < auditLog.length - 1 && (
-                      <span className="w-px flex-1 bg-gray-100 mt-1" />
-                    )}
-                  </div>
+                  Retry
+                </button>
+              </div>
+            ) : recentActivity.length === 0 ? (
+              <div className="px-5 py-8 text-sm text-gray-500">No recent audit activity found.</div>
+            ) : (
+              <div className="px-5 py-3 space-y-0.5">
+                {recentActivity.map((item, index) => {
+                  const target = item.targetId || item.targetType || "Record";
+                  const actor = item.actorEmail || item.actorId || "system";
+                  const timeLabel = formatRelativeTime(item.createdAt) || "recently";
 
-                  {/* Content */}
-                  <div className="min-w-0 pb-2">
-                    <p className="text-sm text-gray-700 leading-snug">
-                      <span className="text-gray-500">{item.action}</span>
-                      {" "}
-                      <span className="font-medium text-gray-900">{item.target}</span>
-                    </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{item.time}</p>
-                  </div>
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-start gap-3 py-2.5 group"
+                    >
+                      <div className="flex flex-col items-center pt-1.5 shrink-0">
+                        <span className={`w-2 h-2 rounded-full ${toActivityDotColor(item.action, index)}`} />
+                        {index < recentActivity.length - 1 && (
+                          <span className="w-px flex-1 bg-gray-100 mt-1" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 pb-2">
+                        <p className="text-sm text-gray-700 leading-snug">
+                          <span className="text-gray-500">{item.action}</span>
+                          {" "}
+                          <span className="font-medium text-gray-900">{target}</span>
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{timeLabel} · {actor}</p>
+                      </div>
+                    </div>
+                  );
+                })}
                 </div>
-              ))}
-            </div>
+            )}
           </div>
           {/* Footer link */}
           <div className="px-5 py-3 border-t border-gray-100 shrink-0">

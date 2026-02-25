@@ -8,7 +8,13 @@ import { useRole } from "@/components/ui/dashboard/RoleContext";
 import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
-import { type MediaAudience, type MediaSection } from "@/lib/apiClient";
+import { type CustomerTier, type MediaVisibilityPreset } from "@/lib/apiClient";
+import {
+  CUSTOMER_TIER_OPTIONS as MEDIA_CUSTOMER_TIER_OPTIONS,
+  PUBLIC_MEDIA_VISIBILITY_PRESETS,
+  ROLE_MEDIA_VISIBILITY_PRESETS,
+  parseTargetUserIdsInput,
+} from "@/lib/mediaVisibility";
 
 type ProductForm = {
   sku: string;
@@ -114,15 +120,13 @@ const initialForm: ProductForm = {
 const VISIBILITY_OPTIONS = ["PRIVATE", "PUBLIC", "TOP_SHELF", "TARGETED"];
 const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"];
 const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"];
-const CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"];
+const PRODUCT_CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"];
 const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNED"];
-const MEDIA_VISIBILITY_SECTIONS: MediaSection[] = [
-  "PRODUCT_PAGE",
-  "TOP_SHELF",
-  "VIP",
-  "PRIVATE",
-];
-const MEDIA_AUDIENCES: MediaAudience[] = ["PUBLIC", "TARGETED", "ADMIN_ONLY"];
+type PublicMediaVisibilityPreset = Extract<
+  MediaVisibilityPreset,
+  "PUBLIC" | "TOP_SHELF" | "USER_TIER" | "TARGETED_USER" | "PRIVATE"
+>;
+type RoleMediaVisibilityPreset = Extract<MediaVisibilityPreset, "ADMIN" | "MANAGER" | "SALES">;
 
 const createAllocationRow = (): AllocationRow => ({
   id: `allocation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -173,15 +177,18 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function AddProductPage() {
   const router = useRouter();
-  const { dashboardBasePath, role } = useRole();
-  const isAdminRole = role === "admin";
+  const { dashboardBasePath } = useRole();
 
   const [form, setForm] = useState<ProductForm>(initialForm);
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
-  const [mediaVisibilitySections, setMediaVisibilitySections] = useState<MediaSection[]>([
-    "PRODUCT_PAGE",
-  ]);
-  const [mediaAudience, setMediaAudience] = useState<MediaAudience>("PUBLIC");
+  const [publicVisibilityPreset, setPublicVisibilityPreset] = useState<PublicMediaVisibilityPreset>("PUBLIC");
+  const [publicMinCustomerTier, setPublicMinCustomerTier] = useState<CustomerTier | "">("");
+  const [publicTargetUserIdsInput, setPublicTargetUserIdsInput] = useState("");
+  const [publicThumbnailFiles, setPublicThumbnailFiles] = useState<MediaFile[]>([]);
+  const [publicVideoFiles, setPublicVideoFiles] = useState<MediaFile[]>([]);
+  const [publicGalleryFiles, setPublicGalleryFiles] = useState<MediaFile[]>([]);
+  const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
+  const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
+  const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -356,14 +363,6 @@ export default function AddProductPage() {
     void loadBranches();
   }, [getAccessToken]);
 
-  useEffect(() => {
-    if (isAdminRole || mediaAudience !== "ADMIN_ONLY") {
-      return;
-    }
-
-    setMediaAudience("TARGETED");
-  }, [isAdminRole, mediaAudience]);
-
   const updateField = (field: keyof ProductForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -380,27 +379,39 @@ export default function AddProductPage() {
     setAllocations((prev) => prev.filter((row) => row.id !== allocationId));
   };
 
-  const toggleMediaVisibilitySection = (section: MediaSection) => {
-    setMediaVisibilitySections((current) => {
-      if (current.includes(section)) {
-        return current.filter((item) => item !== section);
-      }
-
-      return [...current, section];
-    });
-  };
+  const hasAnyPublicMedia =
+    publicThumbnailFiles.length > 0 ||
+    publicVideoFiles.length > 0 ||
+    publicGalleryFiles.length > 0 ||
+    publicCertificateFiles.length > 0;
+  const hasAnyMedia = hasAnyPublicMedia || roleMediaFiles.length > 0;
 
   const ensureMediaUploadMetadata = () => {
-    if (mediaFiles.length === 0) {
+    if (!hasAnyMedia) {
       return;
     }
 
-    if (!mediaVisibilitySections.length) {
-      throw new Error("Select at least one media visibility section before uploading files.");
+    if (!hasAnyPublicMedia) {
+      return;
     }
 
-    if (!isAdminRole && mediaAudience === "ADMIN_ONLY") {
-      throw new Error("ADMIN_ONLY audience can only be selected by admins.");
+    if (!publicThumbnailFiles.length) {
+      throw new Error("Public media requires a thumbnail image.");
+    }
+
+    if (!publicVideoFiles.length) {
+      throw new Error("Public media requires at least one video.");
+    }
+
+    if (publicVisibilityPreset === "USER_TIER" && !publicMinCustomerTier) {
+      throw new Error("Select a minimum customer tier for USER_TIER public media.");
+    }
+
+    if (
+      publicVisibilityPreset === "TARGETED_USER" &&
+      parseTargetUserIdsInput(publicTargetUserIdsInput).length === 0
+    ) {
+      throw new Error("Provide at least one target user id for TARGETED_USER public media.");
     }
   };
 
@@ -491,17 +502,40 @@ export default function AddProductPage() {
         commissionAllocations: normalizedAllocations,
       };
 
-      let mediaIds: string[] = [];
+      const mediaIds: string[] = [];
+      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
 
-      if (mediaFiles.length > 0) {
-        const uploadedMedia = await uploadMediaFiles({
-          files: mediaFiles.map((mf) => mf.file),
+      if (hasAnyPublicMedia) {
+        const publicFiles = [
+          ...publicThumbnailFiles,
+          ...publicVideoFiles,
+          ...publicGalleryFiles,
+          ...publicCertificateFiles,
+        ].map((mediaFile) => mediaFile.file);
+
+        const uploadedPublicMedia = await uploadMediaFiles({
+          files: publicFiles,
           accessToken,
-          visibilitySections: mediaVisibilitySections,
-          audience: mediaAudience,
+          visibilityPreset: publicVisibilityPreset,
+          ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
+            ? { minCustomerTier: publicMinCustomerTier }
+            : {}),
+          ...(publicVisibilityPreset === "TARGETED_USER"
+            ? { targetUserIds: publicTargetUserIds }
+            : {}),
         });
 
-        mediaIds = uploadedMedia.map((media) => media.id);
+        mediaIds.push(...uploadedPublicMedia.map((media) => media.id));
+      }
+
+      if (roleMediaFiles.length > 0) {
+        const uploadedRoleMedia = await uploadMediaFiles({
+          files: roleMediaFiles.map((mediaFile) => mediaFile.file),
+          accessToken,
+          visibilityPreset: roleVisibilityPreset,
+        });
+
+        mediaIds.push(...uploadedRoleMedia.map((media) => media.id));
       }
 
       const createResponse = await fetch("/api/v1/admin/products", {
@@ -958,7 +992,7 @@ export default function AddProductPage() {
                 onChange={(e) => updateField("minCustomerTier", e.target.value)}
                 className={inputCls}
               >
-                {CUSTOMER_TIER_OPTIONS.map((opt) => (
+                {PRODUCT_CUSTOMER_TIER_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt || "None"}
                   </option>
@@ -1013,65 +1047,151 @@ export default function AddProductPage() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <SectionHeading>Media &amp; Documents</SectionHeading>
+          <SectionHeading>Public Media Upload</SectionHeading>
           <p className="text-xs text-gray-500 mb-4">
-            Upload product images, videos, and PDF documents. The first image is automatically set as
-            the primary image.
+            Use one public preset for customer-facing media. Thumbnail and video are required when
+            uploading public media.
           </p>
 
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <p className="text-[12px] font-medium text-gray-700 mb-2">Visibility Sections</p>
-              <div className="flex flex-wrap gap-2">
-                {MEDIA_VISIBILITY_SECTIONS.map((section) => {
-                  const checked = mediaVisibilitySections.includes(section);
-
-                  return (
-                    <label
-                      key={section}
-                      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
-                        checked
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleMediaVisibilitySection(section)}
-                        className="h-3.5 w-3.5 accent-emerald-600"
-                      />
-                      {section}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Audience</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Public Visibility
+              </label>
               <select
-                value={mediaAudience}
-                onChange={(e) => setMediaAudience(e.target.value as MediaAudience)}
+                value={publicVisibilityPreset}
+                onChange={(e) => setPublicVisibilityPreset(e.target.value as PublicMediaVisibilityPreset)}
                 className={inputCls}
               >
-                {MEDIA_AUDIENCES.filter((audience) => isAdminRole || audience !== "ADMIN_ONLY").map(
-                  (audience) => (
-                    <option key={audience} value={audience}>
-                      {audience}
-                    </option>
-                  ),
-                )}
+                {PUBLIC_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset.replace(/_/g, " ")}
+                  </option>
+                ))}
               </select>
             </div>
+
+            {publicVisibilityPreset === "USER_TIER" && (
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                  Min Customer Tier
+                </label>
+                <select
+                  value={publicMinCustomerTier}
+                  onChange={(e) => setPublicMinCustomerTier(e.target.value as CustomerTier | "")}
+                  className={inputCls}
+                >
+                  <option value="">Select tier</option>
+                  {MEDIA_CUSTOMER_TIER_OPTIONS.map((tier) => (
+                    <option key={tier} value={tier}>
+                      {tier}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {publicVisibilityPreset === "TARGETED_USER" && (
+              <div className="md:col-span-2">
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                  Target User IDs
+                </label>
+                <textarea
+                  value={publicTargetUserIdsInput}
+                  onChange={(e) => setPublicTargetUserIdsInput(e.target.value)}
+                  rows={3}
+                  placeholder="Enter user IDs separated by commas or new lines"
+                  className={inputCls}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Thumbnail Image</p>
+              <MediaUploader
+                files={publicThumbnailFiles}
+                onChange={setPublicThumbnailFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload one primary thumbnail image (required when public media is used)."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Feature Video (Required)</p>
+              <MediaUploader
+                files={publicVideoFiles}
+                onChange={setPublicVideoFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["VIDEO"]}
+                helperText="Upload one product video (required when public media is used)."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">More Images</p>
+              <MediaUploader
+                files={publicGalleryFiles}
+                onChange={setPublicGalleryFiles}
+                maxFiles={12}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload additional gallery images."
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Certificate File</p>
+              <MediaUploader
+                files={publicCertificateFiles}
+                onChange={setPublicCertificateFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["PDF"]}
+                helperText="Upload one PDF certificate file."
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <SectionHeading>Role Based Media Upload</SectionHeading>
+          <p className="text-xs text-gray-500 mb-4">
+            Upload internal media and restrict access to one role preset.
+          </p>
+
+          <div className="mb-4">
+            <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+              Role Visibility
+            </label>
+            <select
+              value={roleVisibilityPreset}
+              onChange={(e) => setRoleVisibilityPreset(e.target.value as RoleMediaVisibilityPreset)}
+              className={inputCls}
+            >
+              {ROLE_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {preset}
+                </option>
+              ))}
+            </select>
           </div>
 
           <MediaUploader
-            files={mediaFiles}
-            onChange={setMediaFiles}
-            maxFiles={10}
+            files={roleMediaFiles}
+            onChange={setRoleMediaFiles}
+            maxFiles={20}
             maxSizeMB={50}
             maxVideoSizeMB={500}
+            allowedTypes={["IMAGE", "VIDEO", "PDF"]}
           />
         </div>
 
