@@ -157,12 +157,54 @@ const toProductImageRef = (product: AdminProductListItem): ProductImageRef | nul
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
-function StatTile({ label, value }: { label: string; value: string }) {
+/* ────────────── icons ────────────── */
+function PackageIcon({ className }: { className?: string }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-gray-900">{value}</p>
-    </div>
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  );
+}
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+    </svg>
+  );
+}
+function TrendingUpIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  );
+}
+function DollarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+function AlertTriangleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M10.29 3.86l-8.6 14.86A2 2 0 003.38 22h17.24a2 2 0 001.7-3.28l-8.6-14.86a2 2 0 00-3.42 0z" />
+    </svg>
+  );
+}
+function ImagePlaceholderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+function EmptyBoxIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
   );
 }
 
@@ -422,18 +464,22 @@ export default function AdminProducts() {
         action={
           <Link
             href={`${dashboardBasePath}/products/add`}
-            className="inline-block px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
           >
-            + New Product
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Product
           </Link>
         }
       />
 
+      {/* ───── toggle tabs ───── */}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => setIncludeSold(false)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             !includeSold
               ? "bg-gray-900 text-white"
               : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -444,7 +490,7 @@ export default function AdminProducts() {
         <button
           type="button"
           onClick={() => setIncludeSold(true)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             includeSold
               ? "bg-gray-900 text-white"
               : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -454,21 +500,53 @@ export default function AdminProducts() {
         </button>
       </div>
 
+      {/* ───── loading skeleton ───── */}
       {loading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
-          Loading products...
+        <div className="space-y-4">
+          {/* stat skeleton */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+                <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
+                <div className="h-6 w-28 rounded bg-gray-100 animate-pulse" />
+              </div>
+            ))}
+          </div>
+          {/* table skeleton */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200">
+              <div className="h-4 w-32 rounded bg-gray-100 animate-pulse" />
+            </div>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="px-5 py-4 flex items-center gap-4 border-b border-gray-50">
+                <div className="w-12 h-12 rounded-lg bg-gray-100 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-40 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                </div>
+                <div className="hidden sm:flex items-center gap-6">
+                  <div className="h-5 w-16 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-3 w-16 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* ───── error state ───── */}
       {!loading && error && (
-        <div className="space-y-3">
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            {error}
+        <div className="flex items-start gap-3 px-4 py-4 bg-red-50 border border-red-200 rounded-xl">
+          <AlertTriangleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-red-800">Failed to load products</p>
+            <p className="text-sm text-red-700 mt-0.5">{error}</p>
           </div>
           <button
             type="button"
             onClick={() => void loadData()}
-            className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            className="shrink-0 px-3.5 py-1.5 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
           >
             Retry
           </button>
@@ -477,124 +555,269 @@ export default function AdminProducts() {
 
       {!loading && !error && analytics && (
         <>
+          {/* media hint */}
           {mediaHint && (
-            <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-              {mediaHint}
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-amber-700">{mediaHint}</p>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile label="Products" value={String(analytics.totals.productCount)} />
-            <StatTile
-              label="Priced / Unpriced"
-              value={`${analytics.totals.pricedProductCount} / ${analytics.totals.unpricedProductCount}`}
-            />
-            <StatTile
-              label="Projected Revenue"
-              value={moneyRange(
-                analytics.totals.projectedRevenueMin,
-                analytics.totals.projectedRevenueMax,
-              )}
-            />
-            <StatTile
-              label="Projected Net Profit"
-              value={moneyRange(
-                analytics.totals.projectedNetProfitMin,
-                analytics.totals.projectedNetProfitMax,
-              )}
-            />
+          {/* ───── stat cards ───── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-emerald-50 text-emerald-600">
+                <PackageIcon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Products</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">{analytics.totals.productCount}</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-blue-50 text-blue-600">
+                <TagIcon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Priced / Unpriced</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">
+                  {analytics.totals.pricedProductCount} / {analytics.totals.unpricedProductCount}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-purple-50 text-purple-600">
+                <TrendingUpIcon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Proj. Revenue</p>
+                <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">
+                  {moneyRange(analytics.totals.projectedRevenueMin, analytics.totals.projectedRevenueMax)}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-amber-50 text-amber-600">
+                <DollarIcon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Proj. Net Profit</p>
+                <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">
+                  {moneyRange(analytics.totals.projectedNetProfitMin, analytics.totals.projectedNetProfitMax)}
+                </p>
+              </div>
+            </div>
           </div>
 
+          {/* ───── product table (desktop) ───── */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
-                    <th className="px-5 py-3 font-medium">Product</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Buy Price</th>
-                    <th className="px-5 py-3 font-medium">Sale Range</th>
-                    <th className="px-5 py-3 font-medium">Allocation Rate</th>
-                    <th className="px-5 py-3 font-medium">Net Profit Range</th>
-                    <th className="px-5 py-3 font-medium">Rows</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics.inventory.map((item) => {
-                    const productImage = mediaByProductId[item.id];
-                    const productImageUrl = productImage?.url || "";
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-gray-900">Inventory</h2>
+              <p className="text-xs text-gray-500">{analytics.inventory.length} product(s)</p>
+            </div>
 
-                    return (
-                      <tr
-                        key={item.id}
-                        className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="px-5 py-3">
-                          <Link href={`${dashboardBasePath}/products/${item.id}`} className="group">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center shrink-0">
-                                {productImageUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={productImageUrl}
-                                    alt={item.name || item.sku}
-                                    className="w-full h-full object-cover"
-                                    onError={() => {
-                                      if (productImage?.mediaId) {
-                                        void refreshProductImage(item.id, productImage.mediaId);
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                  <svg
-                                    className="w-5 h-5 text-gray-300"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={1.5}
-                                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            {/* empty state */}
+            {totalProducts === 0 && (
+              <div className="px-5 py-16 flex flex-col items-center gap-3">
+                <EmptyBoxIcon className="w-10 h-10 text-gray-300" />
+                <p className="text-sm text-gray-500">No products found.</p>
+                <Link
+                  href={`${dashboardBasePath}/products/add`}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                >
+                  Add your first product
+                </Link>
+              </div>
+            )}
+
+            {/* desktop table */}
+            {totalProducts > 0 && (
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                      <th className="px-5 py-3 font-medium">Product</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
+                      <th className="px-5 py-3 font-medium">Buy Price</th>
+                      <th className="px-5 py-3 font-medium">Sale Range</th>
+                      <th className="px-5 py-3 font-medium">Allocation Rate</th>
+                      <th className="px-5 py-3 font-medium">Net Profit Range</th>
+                      <th className="px-5 py-3 font-medium">Rows</th>
+                      <th className="px-5 py-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.inventory.map((item) => {
+                      const productImage = mediaByProductId[item.id];
+                      const productImageUrl = productImage?.url || "";
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors"
+                        >
+                          <td className="px-5 py-3">
+                            <Link href={`${dashboardBasePath}/products/${item.id}`} className="group">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center shrink-0">
+                                  {productImageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={productImageUrl}
+                                      alt={item.name || item.sku}
+                                      className="w-full h-full object-cover"
+                                      onError={() => {
+                                        if (productImage?.mediaId) {
+                                          void refreshProductImage(item.id, productImage.mediaId);
+                                        }
+                                      }}
                                     />
-                                  </svg>
-                                )}
-                              </div>
+                                  ) : (
+                                    <ImagePlaceholderIcon className="w-5 h-5 text-gray-300" />
+                                  )}
+                                </div>
 
-                              <div>
-                                <p className="font-medium text-gray-900 group-hover:text-emerald-700 transition-colors">
-                                  {item.name || "Unnamed Product"}
-                                </p>
-                                <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-gray-900 group-hover:text-emerald-700 transition-colors truncate">
+                                    {item.name || "Unnamed Product"}
+                                  </p>
+                                  <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                                </div>
                               </div>
+                            </Link>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${statusBadge(item.status)}`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-gray-700">{toMoney(item.pricing.buyPrice)}</td>
+                          <td className="px-5 py-3 text-gray-700">
+                            {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
+                          </td>
+                          <td className="px-5 py-3 text-gray-700">
+                            {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
+                          </td>
+                          <td className="px-5 py-3 text-gray-700">
+                            {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <Link
+                                href={`${dashboardBasePath}/products/${item.id}`}
+                                className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                              >
+                                Edit
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleDeleteProduct(item);
+                                }}
+                                disabled={deletingProductId === item.id}
+                                className="px-2.5 py-1 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {deletingProductId === item.id ? "Deleting..." : "Delete"}
+                              </button>
                             </div>
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${statusBadge(item.status)}`}
-                          >
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-gray-700">{toMoney(item.pricing.buyPrice)}</td>
-                        <td className="px-5 py-3 text-gray-700">
-                          {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
-                        </td>
-                        <td className="px-5 py-3 text-gray-700">
-                          {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
-                        </td>
-                        <td className="px-5 py-3 text-gray-700">
-                          {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
-                        </td>
-                        <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* mobile / tablet card view */}
+            {totalProducts > 0 && (
+              <div className="lg:hidden divide-y divide-gray-100">
+                {analytics.inventory.map((item) => {
+                  const productImage = mediaByProductId[item.id];
+                  const productImageUrl = productImage?.url || "";
+
+                  return (
+                    <div key={item.id} className="px-4 py-4">
+                      <div className="flex items-start gap-3">
+                        {/* image */}
+                        <Link
+                          href={`${dashboardBasePath}/products/${item.id}`}
+                          className="shrink-0"
+                        >
+                          <div className="w-14 h-14 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center">
+                            {productImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={productImageUrl}
+                                alt={item.name || item.sku}
+                                className="w-full h-full object-cover"
+                                onError={() => {
+                                  if (productImage?.mediaId) {
+                                    void refreshProductImage(item.id, productImage.mediaId);
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <ImagePlaceholderIcon className="w-6 h-6 text-gray-300" />
+                            )}
+                          </div>
+                        </Link>
+
+                        {/* info */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <Link href={`${dashboardBasePath}/products/${item.id}`} className="min-w-0">
+                              <p className="font-medium text-gray-900 truncate hover:text-emerald-700 transition-colors">
+                                {item.name || "Unnamed Product"}
+                              </p>
+                              <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                            </Link>
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${statusBadge(item.status)}`}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
+
+                          {/* details grid */}
+                          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                            <div>
+                              <span className="text-gray-400">Buy:</span>{" "}
+                              <span className="text-gray-700 font-medium">{toMoney(item.pricing.buyPrice)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Sale:</span>{" "}
+                              <span className="text-gray-700 font-medium">
+                                {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Alloc:</span>{" "}
+                              <span className="text-gray-700 font-medium">
+                                {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Profit:</span>{" "}
+                              <span className="text-gray-700 font-medium">
+                                {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* actions */}
+                          <div className="mt-3 flex items-center gap-2">
                             <Link
                               href={`${dashboardBasePath}/products/${item.id}`}
-                              className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                              className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                             >
                               Edit
                             </Link>
@@ -604,26 +827,18 @@ export default function AdminProducts() {
                                 void handleDeleteProduct(item);
                               }}
                               disabled={deletingProductId === item.id}
-                              className="px-2.5 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                             >
                               {deletingProductId === item.id ? "Deleting..." : "Delete"}
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {totalProducts === 0 && (
-                    <tr>
-                      <td className="px-5 py-10 text-center text-gray-400" colSpan={8}>
-                        No products found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}

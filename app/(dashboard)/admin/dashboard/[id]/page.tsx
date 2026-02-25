@@ -1,76 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import supabase from "@/lib/supabase";
-import { getAdminAuditLogs, type AdminAuditLogRow } from "@/lib/apiClient";
-
-/* ------------------------------------------------------------------ */
-/* Mock data (will be replaced with real API calls later)              */
-/* ------------------------------------------------------------------ */
-
-const stats = [
-  {
-    label: "Total Products",
-    value: "342",
-    change: "+18 this month",
-    up: true,
-    accent: "bg-blue-50 text-blue-600 border-blue-100",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-      </svg>
-    ),
-  },
-  {
-    label: "Active Users",
-    value: "1,209",
-    change: "+5.3%",
-    up: true,
-    accent: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Branches",
-    value: "12",
-    change: "+2 new",
-    up: true,
-    accent: "bg-purple-50 text-purple-600 border-purple-100",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    ),
-  },
-  {
-    label: "Pending Requests",
-    value: "23",
-    change: "-8 from yesterday",
-    up: false,
-    accent: "bg-amber-50 text-amber-600 border-amber-100",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-      </svg>
-    ),
-  },
-];
-
-const branchOverview = [
-  { name: "Downtown HQ", code: "DTH", members: 32, revenue: "$128,400", growth: "+12%", status: "Active" },
-  { name: "Westside Branch", code: "WSB", members: 18, revenue: "$74,200", growth: "+8%", status: "Active" },
-  { name: "North Point", code: "NTP", members: 24, revenue: "$96,800", growth: "+15%", status: "Active" },
-  { name: "East Village", code: "EVG", members: 12, revenue: "$45,100", growth: "+3%", status: "Active" },
-  { name: "South Bay", code: "SBY", members: 8, revenue: "$22,600", growth: "N/A", status: "New" },
-];
-
-/* ------------------------------------------------------------------ */
-/* Types                                                               */
-/* ------------------------------------------------------------------ */
+import {
+  getAdminAuditLogs,
+  getAdminBranchesWithManagers,
+  getAdminInventoryRequests,
+  getAdminUsers,
+  type AdminAuditLogRow,
+  type AdminBranchWithManagersRecord,
+} from "@/lib/apiClient";
 
 type ApiErrorPayload = {
   message?: string;
@@ -90,9 +30,11 @@ type InventoryProfitSnapshot = {
   };
 };
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
+type DashboardCounts = {
+  activeUsers: number;
+  branches: number;
+  pendingRequests: number;
+};
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -102,7 +44,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 const moneyRange = (min: number, max: number) => {
   if (min === max) return money.format(min);
-  return `${money.format(min)} – ${money.format(max)}`;
+  return `${money.format(min)} - ${money.format(max)}`;
 };
 
 const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
@@ -110,6 +52,14 @@ const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
   const code = payload?.code ? ` (code: ${payload.code})` : "";
   const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
   return `${message}${code}${reason}`;
+};
+
+const getErrorMessage = (value: unknown, fallback: string) => {
+  if (value instanceof Error) {
+    return value.message;
+  }
+
+  return fallback;
 };
 
 const formatRelativeTime = (value: string | null) => {
@@ -128,6 +78,23 @@ const formatRelativeTime = (value: string | null) => {
   return `${days}d ago`;
 };
 
+const formatDate = (value: string | null) => {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+};
+
 const toActivityDotColor = (action: string, index: number) => {
   const normalized = String(action || "").toUpperCase();
   if (normalized.includes("DELETE") || normalized.includes("REMOVE")) return "bg-red-400";
@@ -139,14 +106,44 @@ const toActivityDotColor = (action: string, index: number) => {
   return fallback[index % fallback.length];
 };
 
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
+const getBranchStatusBadge = (status: string | null) => {
+  if (status === "ACTIVE") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  if (status === "INACTIVE") {
+    return "bg-gray-200 text-gray-600";
+  }
+
+  return "bg-gray-100 text-gray-600";
+};
+
+const getPrimaryManagerLabel = (branch: AdminBranchWithManagersRecord) => {
+  const manager = branch.primaryManager || branch.managers.find((entry) => entry.isPrimaryMembership) || branch.managers[0];
+  if (!manager) {
+    return "-";
+  }
+
+  return manager.displayName || manager.email || manager.id;
+};
 
 export default function AdminDashboard() {
   const [profitSnapshot, setProfitSnapshot] = useState<InventoryProfitSnapshot | null>(null);
   const [profitError, setProfitError] = useState("");
   const [profitLoading, setProfitLoading] = useState(true);
+
+  const [counts, setCounts] = useState<DashboardCounts>({
+    activeUsers: 0,
+    branches: 0,
+    pendingRequests: 0,
+  });
+  const [countsLoading, setCountsLoading] = useState(true);
+  const [countsError, setCountsError] = useState("");
+
+  const [branchRows, setBranchRows] = useState<AdminBranchWithManagersRecord[]>([]);
+  const [branchLoading, setBranchLoading] = useState(true);
+  const [branchError, setBranchError] = useState("");
+
   const [recentActivity, setRecentActivity] = useState<AdminAuditLogRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState("");
@@ -210,6 +207,81 @@ export default function AdminDashboard() {
     }
   }, [getAccessToken]);
 
+  const loadDashboardCountsAndBranches = useCallback(async () => {
+    setCountsLoading(true);
+    setCountsError("");
+    setBranchLoading(true);
+    setBranchError("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const [usersResult, branchesResult, pendingResult] = await Promise.allSettled([
+        getAdminUsers({
+          accessToken,
+          page: 1,
+          limit: 1,
+          accountStatus: "ACTIVE",
+        }),
+        getAdminBranchesWithManagers({
+          accessToken,
+          page: 1,
+          limit: 6,
+          includeInactive: true,
+        }),
+        getAdminInventoryRequests({
+          accessToken,
+          page: 1,
+          limit: 1,
+          status: ["PENDING_MANAGER", "PENDING_MAIN"],
+        }),
+      ]);
+
+      const nextCounts = {
+        activeUsers: 0,
+        branches: 0,
+        pendingRequests: 0,
+      };
+      const countErrors: string[] = [];
+
+      if (usersResult.status === "fulfilled") {
+        nextCounts.activeUsers = usersResult.value.total;
+      } else {
+        countErrors.push(getErrorMessage(usersResult.reason, "Failed to load active users count."));
+      }
+
+      if (branchesResult.status === "fulfilled") {
+        nextCounts.branches = branchesResult.value.total;
+        setBranchRows(branchesResult.value.items);
+      } else {
+        setBranchRows([]);
+        const message = getErrorMessage(branchesResult.reason, "Failed to load branch network.");
+        setBranchError(message);
+        countErrors.push(message);
+      }
+
+      if (pendingResult.status === "fulfilled") {
+        nextCounts.pendingRequests = pendingResult.value.total;
+      } else {
+        countErrors.push(getErrorMessage(pendingResult.reason, "Failed to load pending requests count."));
+      }
+
+      setCounts(nextCounts);
+      setCountsError(countErrors.length ? countErrors.join(" ") : "");
+    } catch (caughtError) {
+      setCounts({
+        activeUsers: 0,
+        branches: 0,
+        pendingRequests: 0,
+      });
+      setCountsError(getErrorMessage(caughtError, "Failed to load dashboard summary."));
+      setBranchRows([]);
+      setBranchError(getErrorMessage(caughtError, "Failed to load branch network."));
+    } finally {
+      setCountsLoading(false);
+      setBranchLoading(false);
+    }
+  }, [getAccessToken]);
+
   const loadRecentActivity = useCallback(async () => {
     setActivityLoading(true);
     setActivityError("");
@@ -241,10 +313,60 @@ export default function AdminDashboard() {
   }, [loadProjectedProfit]);
 
   useEffect(() => {
+    void loadDashboardCountsAndBranches();
+  }, [loadDashboardCountsAndBranches]);
+
+  useEffect(() => {
     void loadRecentActivity();
   }, [loadRecentActivity]);
 
   const t = profitSnapshot?.totals;
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Total Products",
+        value: t ? t.productCount.toLocaleString() : "-",
+        accent: "bg-blue-50 text-blue-600 border-blue-100",
+        icon: (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        ),
+      },
+      {
+        label: "Active Users",
+        value: countsLoading ? "-" : counts.activeUsers.toLocaleString(),
+        accent: "bg-emerald-50 text-emerald-600 border-emerald-100",
+        icon: (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+          </svg>
+        ),
+      },
+      {
+        label: "Branches",
+        value: countsLoading ? "-" : counts.branches.toLocaleString(),
+        accent: "bg-purple-50 text-purple-600 border-purple-100",
+        icon: (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        ),
+      },
+      {
+        label: "Pending Requests",
+        value: countsLoading ? "-" : counts.pendingRequests.toLocaleString(),
+        accent: "bg-amber-50 text-amber-600 border-amber-100",
+        icon: (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        ),
+      },
+    ],
+    [counts, countsLoading, t],
+  );
 
   return (
     <div className="space-y-6">
@@ -253,9 +375,12 @@ export default function AdminDashboard() {
         description="System-wide overview of Jade Palace operations."
       />
 
-      {/* ============================================================= */}
-      {/* Quick stats                                                    */}
-      {/* ============================================================= */}
+      {countsError && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          {countsError}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {stats.map((s) => (
           <div
@@ -264,17 +389,6 @@ export default function AdminDashboard() {
           >
             <div className="flex items-center justify-between">
               <div className={`p-2 rounded-lg border ${s.accent}`}>{s.icon}</div>
-              {s.change && (
-                <span
-                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                    s.up
-                      ? "bg-emerald-50 text-emerald-600"
-                      : "bg-red-50 text-red-500"
-                  }`}
-                >
-                  {s.change}
-                </span>
-              )}
             </div>
             <div>
               <p className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">{s.value}</p>
@@ -284,9 +398,6 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* ============================================================= */}
-      {/* Projected inventory profit                                     */}
-      {/* ============================================================= */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -343,19 +454,17 @@ export default function AdminDashboard() {
         {!profitLoading && !profitError && t && (
           <div className="p-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              {/* Tracked Products */}
               <div>
                 <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Tracked Products</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{t.productCount.toLocaleString()}</p>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="w-2 h-2 rounded-full bg-blue-400" />
                   <span className="text-[11px] text-gray-500">{t.pricedProductCount} priced</span>
-                  <span className="text-gray-300">·</span>
+                  <span className="text-gray-300">.</span>
                   <span className="text-[11px] text-gray-400">{t.unpricedProductCount} unpriced</span>
                 </div>
               </div>
 
-              {/* Priced / Unpriced ratio */}
               <div>
                 <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Price Coverage</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
@@ -373,7 +482,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Projected Revenue */}
               <div>
                 <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Projected Revenue</p>
                 <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1 break-words">
@@ -387,7 +495,6 @@ export default function AdminDashboard() {
                 </span>
               </div>
 
-              {/* Projected Net Profit */}
               <div>
                 <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Projected Net Profit</p>
                 <p className="text-lg sm:text-xl font-bold text-emerald-700 mt-1 break-words">
@@ -405,11 +512,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* ============================================================= */}
-      {/* Branch overview + Audit log side-by-side                       */}
-      {/* ============================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* ------ Branch Network ------ */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
             <div className="p-1.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">
@@ -418,94 +521,81 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <h2 className="text-base font-semibold text-gray-900">Branch Network</h2>
-            <span className="ml-auto text-[11px] text-gray-400 hidden sm:inline">{branchOverview.length} branches</span>
+            <span className="ml-auto text-[11px] text-gray-400 hidden sm:inline">{counts.branches} branches</span>
           </div>
 
-          {/* Desktop table */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-gray-50/60 border-b border-gray-100">
-                  <th className="px-5 py-3 font-medium">Branch</th>
-                  <th className="px-5 py-3 font-medium">Members</th>
-                  <th className="px-5 py-3 font-medium">Revenue</th>
-                  <th className="px-5 py-3 font-medium">Growth</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {branchOverview.map((b) => (
-                  <tr key={b.name} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {b.code}
-                        </span>
-                        <span className="font-medium text-gray-900">{b.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{b.members}</td>
-                    <td className="px-5 py-3 text-gray-900 font-medium">{b.revenue}</td>
-                    <td className="px-5 py-3">
-                      <span className={`text-xs font-medium ${b.growth === "N/A" ? "text-gray-400" : "text-emerald-600"}`}>
-                        {b.growth}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-                          b.status === "Active"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {b.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="sm:hidden divide-y divide-gray-100">
-            {branchOverview.map((b) => (
-              <div key={b.name} className="px-4 py-3.5 flex items-center gap-3">
-                <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  {b.code}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-gray-900 truncate">{b.name}</p>
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                        b.status === "Active"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {b.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-xs text-gray-500">{b.members} members</span>
-                    <span className="text-xs text-gray-400">·</span>
-                    <span className="text-xs font-medium text-gray-700">{b.revenue}</span>
-                    {b.growth !== "N/A" && (
-                      <>
-                        <span className="text-xs text-gray-400">·</span>
-                        <span className="text-xs text-emerald-600 font-medium">{b.growth}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+          {branchLoading ? (
+            <div className="px-5 py-8 text-sm text-gray-500">Loading branch network...</div>
+          ) : branchError ? (
+            <div className="px-5 py-8 text-sm text-red-600">{branchError}</div>
+          ) : branchRows.length === 0 ? (
+            <div className="px-5 py-8 text-sm text-gray-500">No branches found.</div>
+          ) : (
+            <>
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-gray-50/60 border-b border-gray-100">
+                      <th className="px-5 py-3 font-medium">Branch</th>
+                      <th className="px-5 py-3 font-medium">City</th>
+                      <th className="px-5 py-3 font-medium">Primary Manager</th>
+                      <th className="px-5 py-3 font-medium">Managers</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {branchRows.map((branch) => (
+                      <tr key={branch.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                              {branch.code || "--"}
+                            </span>
+                            <span className="font-medium text-gray-900">{branch.name || "Unnamed Branch"}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-gray-600">{branch.city || "-"}</td>
+                        <td className="px-5 py-3 text-gray-700">{getPrimaryManagerLabel(branch)}</td>
+                        <td className="px-5 py-3 text-gray-600">{branch.managerCount}</td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${getBranchStatusBadge(branch.status)}`}>
+                            {branch.status || "-"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
+
+              <div className="sm:hidden divide-y divide-gray-100">
+                {branchRows.map((branch) => (
+                  <div key={branch.id} className="px-4 py-3.5 flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {branch.code || "--"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 truncate">{branch.name || "Unnamed Branch"}</p>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${getBranchStatusBadge(branch.status)}`}>
+                          {branch.status || "-"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                        <span>{branch.city || "Unknown city"}</span>
+                        <span className="text-gray-300">.</span>
+                        <span>{branch.managerCount} manager(s)</span>
+                        <span className="text-gray-300">.</span>
+                        <span>{formatDate(branch.updatedAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* ------ Recent Activity / Audit Log ------ */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 shrink-0">
             <div className="p-1.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
@@ -573,10 +663,9 @@ export default function AdminDashboard() {
                     </div>
                   );
                 })}
-                </div>
+              </div>
             )}
           </div>
-          {/* Footer link */}
           <div className="px-5 py-3 border-t border-gray-100 shrink-0">
             <p className="text-xs text-gray-400 text-center">
               View full audit log in{" "}
