@@ -6,17 +6,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import useAuth from "@/hooks/useAuth";
 import { usePathname } from "next/navigation";
 import supabase from "@/lib/supabase";
+import { getUserMe } from "@/lib/apiClient";
 import {
   getDashboardBasePath,
   mapBackendRoleToDashboardRole,
 } from "@/lib/roleChecker";
-
-type MeResponse = {
-  id: string | null;
-  role: string | null;
-  status: string | null;
-  isSetup: boolean;
-};
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const user = useAuth();
@@ -88,31 +82,17 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
           return;
         }
 
-        const response = await fetch("/api/v1/user/me", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          cache: "no-store",
+        const me = await getUserMe({
+          accessToken: session.access_token,
         });
 
-        if (!response.ok) {
-          if (!isDisposed) {
-            setDashboardHref(null);
-          }
-          return;
-        }
-
-        const me = (await response
-          .json()
-          .catch(() => null)) as MeResponse | null;
-        const dashboardRole = mapBackendRoleToDashboardRole(me?.role);
-        const userId = me?.id || "";
+        const dashboardRole = mapBackendRoleToDashboardRole(me.role);
+        const userId = me.id || "";
         const isEligible =
           Boolean(dashboardRole) &&
           Boolean(userId) &&
-          me?.status === "ACTIVE" &&
-          Boolean(me?.isSetup);
+          me.status === "ACTIVE" &&
+          me.isSetup;
 
         if (!isDisposed) {
           setDashboardHref(

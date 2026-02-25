@@ -1,3 +1,5 @@
+import supabase from "./supabase";
+
 export const API_BASE_PATH = "/api/v1";
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "");
 
@@ -289,6 +291,7 @@ export type AdminUserBranchMembership = {
   memberRole: string | null;
   isPrimary: boolean;
   assignedAt: string | null;
+  endedAt: string | null;
   branch: {
     id: string;
     code: string | null;
@@ -303,6 +306,7 @@ export type AdminUserListItem = {
   email: string | null;
   role: string | null;
   status: string | null;
+  isMainAdmin: boolean;
   createdAt: string | null;
   updatedAt: string | null;
   deactivatedAt: string | null;
@@ -317,6 +321,121 @@ export type AdminUserListItem = {
 
 export type AdminUsersResponse = AdminPageResponseMeta & {
   items: AdminUserListItem[];
+  raw: unknown;
+};
+
+export type UserMeResponse = {
+  id: string | null;
+  role: string | null;
+  status: string | null;
+  isSetup: boolean;
+  isMainAdmin: boolean;
+  raw: unknown;
+};
+
+export type AdminAccessControlType = "RESTRICTION" | "BAN";
+export type AdminRestrictionMode = "ACCOUNT" | "ADMIN_ACTIONS";
+export type AdminActionBlock =
+  | "PRODUCT_CREATE"
+  | "PRODUCT_EDIT"
+  | "PRODUCT_DELETE"
+  | "INVENTORY_REQUEST_DECIDE"
+  | "USER_ACCESS_MANAGE"
+  | "APPROVAL_REVIEW"
+  | "STAFF_RULE_MANAGE";
+export type AdminApprovalActionType = "USER_STATUS_CHANGE" | "USER_RESTRICTION_UPSERT" | "USER_BAN";
+export type AdminApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type AdminApprovalDecision = "APPROVE" | "REJECT";
+
+export type AdminUserReference = {
+  id: string;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  isMainAdmin: boolean;
+  raw: JsonRecord;
+};
+
+export type AdminUserAccessRestriction = {
+  id: string;
+  userId: string;
+  type: AdminAccessControlType | string;
+  reason: string | null;
+  note: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  isActive: boolean;
+  liftedAt: string | null;
+  statusBeforeAction: string | null;
+  statusRestoredAt: string | null;
+  roleDowngradedFrom: string | null;
+  roleRestoredAt: string | null;
+  metadata: unknown;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdByUser: AdminUserReference | null;
+  updatedByUser: AdminUserReference | null;
+  raw: JsonRecord;
+};
+
+export type AdminApprovalRequest = {
+  id: string;
+  actionType: AdminApprovalActionType | string;
+  status: AdminApprovalRequestStatus | string;
+  targetUserId: string;
+  requestedByUserId: string | null;
+  reviewedByUserId: string | null;
+  requestReason: string | null;
+  decisionNote: string | null;
+  requestPayload: unknown;
+  createdAt: string | null;
+  updatedAt: string | null;
+  decidedAt: string | null;
+  targetUser: AdminUserReference | null;
+  requestedByUser: AdminUserReference | null;
+  reviewedByUser: AdminUserReference | null;
+  raw: JsonRecord;
+};
+
+export type AdminUserDetail = {
+  id: string;
+  supabaseUserId: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  isMainAdmin: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  deactivatedAt: string | null;
+  terminatedAt: string | null;
+  adminProfile: JsonRecord | null;
+  managerProfile: JsonRecord | null;
+  salespersonProfile: JsonRecord | null;
+  customerProfile: JsonRecord | null;
+  branchMemberships: AdminUserBranchMembership[];
+  accessRestrictions: AdminUserAccessRestriction[];
+  activeAccessControlsCount: number;
+  activeAccessControls: AdminUserAccessRestriction[];
+  approvalRequestsSubmitted: AdminApprovalRequest[];
+  approvalRequestsTargeted: AdminApprovalRequest[];
+  raw: JsonRecord;
+};
+
+export type AdminApprovalRequestsResponse = AdminPageResponseMeta & {
+  items: AdminApprovalRequest[];
+  raw: unknown;
+};
+
+export type AdminActionResponse = {
+  statusCode: number;
+  message: string | null;
+  code: string | null;
+  approvalRequest: AdminApprovalRequest | null;
+  request: AdminApprovalRequest | null;
+  executionResult: unknown;
+  data: JsonRecord | null;
   raw: unknown;
 };
 
@@ -474,6 +593,45 @@ const normalizeCustomerTier = (value: unknown): CustomerTier | null => {
   return null;
 };
 
+const ACCOUNT_ACCESS_DENIED_CODES = new Set(["ACCOUNT_BANNED", "ACCOUNT_RESTRICTED"]);
+const ADMIN_ACTION_RESTRICTED_CODE = "ADMIN_ACTION_RESTRICTED";
+let accountDeniedRedirectInProgress = false;
+
+const normalizeErrorCode = (value: unknown) => asString(value).toUpperCase();
+
+const isAccountAccessDeniedCode = (value: unknown) =>
+  ACCOUNT_ACCESS_DENIED_CODES.has(normalizeErrorCode(value));
+
+export const redirectToBlockedPage = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (window.location.pathname !== "/blocked") {
+    window.location.replace("/blocked");
+  }
+};
+
+export const forceLogoutToBlockedPage = async () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (accountDeniedRedirectInProgress) {
+    return;
+  }
+
+  accountDeniedRedirectInProgress = true;
+
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Ignore sign-out failure and still redirect.
+  }
+
+  redirectToBlockedPage();
+};
+
 const buildErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
   const message = typeof payload?.message === "string" ? payload.message : fallback;
   const code = typeof payload?.code === "string" ? payload.code : "";
@@ -506,6 +664,33 @@ const parseJsonResponse = async (response: Response) => {
   } catch {
     return null;
   }
+};
+
+export const isAccountAccessDeniedError = (value: unknown): value is ApiClientError => {
+  if (!(value instanceof ApiClientError)) {
+    return false;
+  }
+
+  return value.status === 403 && isAccountAccessDeniedCode(value.code);
+};
+
+export const handleAccountAccessDeniedError = (value: unknown) => {
+  if (!isAccountAccessDeniedError(value)) {
+    return false;
+  }
+
+  void forceLogoutToBlockedPage();
+  return true;
+};
+
+export const isAdminActionRestrictedError = (
+  value: unknown,
+): value is ApiClientError => {
+  if (!(value instanceof ApiClientError)) {
+    return false;
+  }
+
+  return value.status === 403 && normalizeErrorCode(value.code) === ADMIN_ACTION_RESTRICTED_CODE;
 };
 
 const buildHeaders = ({
@@ -580,12 +765,18 @@ const fetchJson = async ({
   if (!response.ok) {
     const errorPayload = asRecord(payload) as ApiErrorPayload | null;
     const responseMessage = buildErrorMessage(errorPayload, fallbackErrorMessage);
+    const code = asNullableString(errorPayload?.code);
+    const reason = asNullableString(errorPayload?.reason);
+
+    if (response.status === 403 && isAccountAccessDeniedCode(code)) {
+      void forceLogoutToBlockedPage();
+    }
 
     throw new ApiClientError({
       message: `${responseMessage} [HTTP ${response.status}]`,
       status: response.status,
-      code: asNullableString(errorPayload?.code),
-      reason: asNullableString(errorPayload?.reason),
+      code,
+      reason,
       payload,
     });
   }
@@ -1123,6 +1314,7 @@ const normalizeAdminUserRow = (value: unknown): AdminUserListItem | null => {
             memberRole: asNullableString(membership?.memberRole),
             isPrimary: membership?.isPrimary === true,
             assignedAt: asNullableString(membership?.assignedAt),
+            endedAt: asNullableString(membership?.endedAt),
             branch: branch
               ? {
                   id: asString(branch.id) || branchId,
@@ -1142,6 +1334,7 @@ const normalizeAdminUserRow = (value: unknown): AdminUserListItem | null => {
     email: asNullableString(row.email),
     role: asNullableString(row.role),
     status: asNullableString(row.status),
+    isMainAdmin: row.isMainAdmin === true,
     createdAt: asNullableString(row.createdAt),
     updatedAt: asNullableString(row.updatedAt),
     deactivatedAt: asNullableString(row.deactivatedAt),
@@ -1152,6 +1345,200 @@ const normalizeAdminUserRow = (value: unknown): AdminUserListItem | null => {
     customerTier: normalizeCustomerTier(customerProfile?.tier),
     branchMemberships,
     raw: row,
+  };
+};
+
+const normalizeAdminUserEntityReference = (value: unknown): AdminUserReference | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+    status: asNullableString(row.status),
+    isMainAdmin: row.isMainAdmin === true,
+    raw: row,
+  };
+};
+
+const normalizeAdminAccessRestriction = (value: unknown): AdminUserAccessRestriction | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  const userId = asString(row.userId);
+  if (!id || !userId) {
+    return null;
+  }
+
+  return {
+    id,
+    userId,
+    type: asString(row.type).toUpperCase() || "",
+    reason: asNullableString(row.reason),
+    note: asNullableString(row.note),
+    startsAt: asNullableString(row.startsAt),
+    endsAt: asNullableString(row.endsAt),
+    isActive: row.isActive === true,
+    liftedAt: asNullableString(row.liftedAt),
+    statusBeforeAction: asNullableString(row.statusBeforeAction),
+    statusRestoredAt: asNullableString(row.statusRestoredAt),
+    roleDowngradedFrom: asNullableString(row.roleDowngradedFrom),
+    roleRestoredAt: asNullableString(row.roleRestoredAt),
+    metadata: row.metadata ?? null,
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    createdByUserId: asNullableString(row.createdByUserId),
+    updatedByUserId: asNullableString(row.updatedByUserId),
+    createdByUser: normalizeAdminUserEntityReference(row.createdByUser),
+    updatedByUser: normalizeAdminUserEntityReference(row.updatedByUser),
+    raw: row,
+  };
+};
+
+const normalizeAdminApprovalRequest = (value: unknown): AdminApprovalRequest | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  const targetUserId = asString(row.targetUserId);
+  if (!id || !targetUserId) {
+    return null;
+  }
+
+  return {
+    id,
+    actionType: asString(row.actionType).toUpperCase() || "",
+    status: asString(row.status).toUpperCase() || "",
+    targetUserId,
+    requestedByUserId: asNullableString(row.requestedByUserId),
+    reviewedByUserId: asNullableString(row.reviewedByUserId),
+    requestReason: asNullableString(row.requestReason),
+    decisionNote: asNullableString(row.decisionNote),
+    requestPayload: row.requestPayload ?? null,
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    decidedAt: asNullableString(row.decidedAt),
+    targetUser: normalizeAdminUserEntityReference(row.targetUser),
+    requestedByUser: normalizeAdminUserEntityReference(row.requestedByUser),
+    reviewedByUser: normalizeAdminUserEntityReference(row.reviewedByUser),
+    raw: row,
+  };
+};
+
+const normalizeAdminUserDetail = (value: unknown): AdminUserDetail | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const branchMemberships = Array.isArray(row.branchMemberships)
+    ? row.branchMemberships
+        .map((membership) => asRecord(membership))
+        .map((membership) => {
+          const membershipId = asString(membership?.id);
+          const branchId = asString(membership?.branchId);
+          if (!membershipId || !branchId) {
+            return null;
+          }
+
+          const branch = asRecord(membership?.branch);
+          return {
+            id: membershipId,
+            branchId,
+            memberRole: asNullableString(membership?.memberRole),
+            isPrimary: membership?.isPrimary === true,
+            assignedAt: asNullableString(membership?.assignedAt),
+            endedAt: asNullableString(membership?.endedAt),
+            branch: branch
+              ? {
+                  id: asString(branch.id) || branchId,
+                  code: asNullableString(branch.code),
+                  name: asNullableString(branch.name),
+                  status: asNullableString(branch.status),
+                }
+              : null,
+          } satisfies AdminUserBranchMembership;
+        })
+        .filter((membership): membership is AdminUserBranchMembership => Boolean(membership))
+    : [];
+
+  const accessRestrictions = Array.isArray(row.accessRestrictions)
+    ? row.accessRestrictions
+        .map((entry) => normalizeAdminAccessRestriction(entry))
+        .filter((entry): entry is AdminUserAccessRestriction => Boolean(entry))
+    : [];
+  const activeAccessControls = Array.isArray(row.activeAccessControls)
+    ? row.activeAccessControls
+        .map((entry) => normalizeAdminAccessRestriction(entry))
+        .filter((entry): entry is AdminUserAccessRestriction => Boolean(entry))
+    : [];
+  const approvalRequestsSubmitted = Array.isArray(row.approvalRequestsSubmitted)
+    ? row.approvalRequestsSubmitted
+        .map((entry) => normalizeAdminApprovalRequest(entry))
+        .filter((entry): entry is AdminApprovalRequest => Boolean(entry))
+    : [];
+  const approvalRequestsTargeted = Array.isArray(row.approvalRequestsTargeted)
+    ? row.approvalRequestsTargeted
+        .map((entry) => normalizeAdminApprovalRequest(entry))
+        .filter((entry): entry is AdminApprovalRequest => Boolean(entry))
+    : [];
+
+  return {
+    id,
+    supabaseUserId: asNullableString(row.supabaseUserId),
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+    status: asNullableString(row.status),
+    isMainAdmin: row.isMainAdmin === true,
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    deactivatedAt: asNullableString(row.deactivatedAt),
+    terminatedAt: asNullableString(row.terminatedAt),
+    adminProfile: asRecord(row.adminProfile),
+    managerProfile: asRecord(row.managerProfile),
+    salespersonProfile: asRecord(row.salespersonProfile),
+    customerProfile: asRecord(row.customerProfile),
+    branchMemberships,
+    accessRestrictions,
+    activeAccessControlsCount: asPositiveInt(row.activeAccessControlsCount) ?? activeAccessControls.length,
+    activeAccessControls,
+    approvalRequestsSubmitted,
+    approvalRequestsTargeted,
+    raw: row,
+  };
+};
+
+const normalizeAdminActionResponse = (statusCode: number, payload: unknown): AdminActionResponse => {
+  const root = asRecord(payload) ?? {};
+  const code = asNullableString(root.code);
+
+  return {
+    statusCode: code === "APPROVAL_REQUEST_SUBMITTED" ? 202 : statusCode,
+    message: asNullableString(root.message),
+    code,
+    approvalRequest: normalizeAdminApprovalRequest(root.approvalRequest),
+    request: normalizeAdminApprovalRequest(root.request),
+    executionResult: root.executionResult ?? null,
+    data: asRecord(payload),
+    raw: payload,
   };
 };
 
@@ -1576,6 +1963,279 @@ export const getAdminUsers = async ({
     ...pagination,
     raw: payload,
   };
+};
+
+export const getUserMe = async ({
+  accessToken,
+}: {
+  accessToken: string;
+}): Promise<UserMeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/me`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load account profile.",
+  });
+
+  const root = asRecord(payload) ?? {};
+
+  return {
+    id: asNullableString(root.id),
+    role: asNullableString(root.role),
+    status: asNullableString(root.status),
+    isSetup: root.isSetup === true,
+    isMainAdmin: root.isMainAdmin === true,
+    raw: payload,
+  };
+};
+
+export const getAdminUserDetail = async ({
+  accessToken,
+  userId,
+}: {
+  accessToken: string;
+  userId: string;
+}): Promise<AdminUserDetail> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load user details.",
+  });
+
+  const detail = normalizeAdminUserDetail(payload);
+  if (!detail) {
+    throw new ApiClientError({
+      message: "Invalid user detail response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return detail;
+};
+
+export const updateAdminUserStatus = async ({
+  accessToken,
+  userId,
+  status,
+  reason,
+}: {
+  accessToken: string;
+  userId: string;
+  status: AdminAccountStatus | string;
+  reason?: string;
+}): Promise<AdminActionResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/status`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      status: asString(status).toUpperCase(),
+      ...(reason ? { reason: reason.trim() } : {}),
+    }),
+    fallbackErrorMessage: "Failed to update user status.",
+  });
+
+  return normalizeAdminActionResponse(200, payload);
+};
+
+export const upsertAdminUserRestriction = async ({
+  accessToken,
+  userId,
+  restrictionId,
+  reason,
+  note,
+  restrictionMode,
+  adminActionBlocks,
+  startsAt,
+  endsAt,
+  isActive,
+  metadata,
+}: {
+  accessToken: string;
+  userId: string;
+  restrictionId?: string;
+  reason?: string;
+  note?: string | null;
+  restrictionMode?: AdminRestrictionMode | string;
+  adminActionBlocks?: Array<AdminActionBlock | string>;
+  startsAt?: string;
+  endsAt?: string | null;
+  isActive?: boolean;
+  metadata?: Record<string, unknown> | null;
+}): Promise<AdminActionResponse> => {
+  const body: Record<string, unknown> = {
+    type: "RESTRICTION",
+  };
+
+  if (restrictionId) body.restrictionId = restrictionId.trim();
+  if (reason) body.reason = reason.trim();
+  if (note !== undefined) body.note = note;
+  if (restrictionMode) body.restrictionMode = asString(restrictionMode).toUpperCase();
+  if (Array.isArray(adminActionBlocks)) {
+    body.adminActionBlocks = adminActionBlocks
+      .map((item) => asString(item).toUpperCase())
+      .filter(Boolean);
+  }
+  if (startsAt !== undefined) body.startsAt = startsAt;
+  if (endsAt !== undefined) body.endsAt = endsAt;
+  if (typeof isActive === "boolean") body.isActive = isActive;
+  if (metadata !== undefined) body.metadata = metadata;
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/restrictions`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    fallbackErrorMessage: "Failed to save user restriction.",
+  });
+
+  return normalizeAdminActionResponse(200, payload);
+};
+
+export const banAdminUser = async ({
+  accessToken,
+  userId,
+  reason,
+  note,
+  startsAt,
+  endsAt,
+  durationHours,
+  durationDays,
+  metadata,
+}: {
+  accessToken: string;
+  userId: string;
+  reason: string;
+  note?: string | null;
+  startsAt?: string;
+  endsAt?: string | null;
+  durationHours?: number | null;
+  durationDays?: number | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<AdminActionResponse> => {
+  const body: Record<string, unknown> = {
+    type: "BAN",
+    reason: reason.trim(),
+  };
+
+  if (note !== undefined) body.note = note;
+  if (startsAt !== undefined) body.startsAt = startsAt;
+  if (endsAt !== undefined) body.endsAt = endsAt;
+  if (durationHours !== undefined && durationHours !== null) body.durationHours = durationHours;
+  if (durationDays !== undefined && durationDays !== null) body.durationDays = durationDays;
+  if (metadata !== undefined) body.metadata = metadata;
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/ban`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    fallbackErrorMessage: "Failed to ban user.",
+  });
+
+  return normalizeAdminActionResponse(200, payload);
+};
+
+export const getAdminApprovalRequests = async ({
+  accessToken,
+  page,
+  limit,
+  status,
+  actionType,
+  targetUserId,
+  requestedByUserId,
+}: {
+  accessToken: string;
+  page?: number;
+  limit?: number;
+  status?: AdminApprovalRequestStatus | string;
+  actionType?: AdminApprovalActionType | string;
+  targetUserId?: string;
+  requestedByUserId?: string;
+}): Promise<AdminApprovalRequestsResponse> => {
+  const query = new URLSearchParams();
+
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (actionType) {
+    query.set("actionType", asString(actionType).toUpperCase());
+  }
+  if (targetUserId) {
+    query.set("targetUserId", targetUserId.trim());
+  }
+  if (requestedByUserId) {
+    query.set("requestedByUserId", requestedByUserId.trim());
+  }
+
+  const queryString = query.toString();
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/approval-requests${queryString ? `?${queryString}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load approval requests.",
+  });
+
+  const rows = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminApprovalRequest(row))
+    .filter((row): row is AdminApprovalRequest => Boolean(row));
+
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const decideAdminApprovalRequest = async ({
+  accessToken,
+  requestId,
+  decision,
+  note,
+}: {
+  accessToken: string;
+  requestId: string;
+  decision: AdminApprovalDecision | string;
+  note?: string;
+}): Promise<AdminActionResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/approval-requests/${encodeURIComponent(requestId)}/decision`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      decision: asString(decision).toUpperCase(),
+      ...(note ? { note: note.trim() } : {}),
+    }),
+    fallbackErrorMessage: "Failed to decide approval request.",
+  });
+
+  return normalizeAdminActionResponse(200, payload);
 };
 
 export const getAdminBranchesWithManagers = async ({

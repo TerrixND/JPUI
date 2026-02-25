@@ -23,6 +23,7 @@ import {
   isRoleVisibilityPreset,
   parseTargetUserIdsInput,
 } from "@/lib/mediaVisibility";
+import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
 
 type ApiErrorPayload = {
   message?: string;
@@ -623,7 +624,11 @@ function ExistingMediaCard({
 export default function ProductEditPage() {
   const params = useParams();
   const router = useRouter();
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, isAdminActionBlocked } = useRole();
+  const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
+  const productDeleteBlocked = isAdminActionBlocked("PRODUCT_DELETE");
+  const productEditTooltip = getAdminActionRestrictionTooltip("PRODUCT_EDIT");
+  const productDeleteTooltip = getAdminActionRestrictionTooltip("PRODUCT_DELETE");
 
   const productId = String(params.productId || "");
   const productsPath = `${dashboardBasePath}/products`;
@@ -1074,6 +1079,11 @@ export default function ProductEditPage() {
   const hasAnyMediaUpload = hasAnyPublicMediaUpload || roleMediaFiles.length > 0;
 
   const handleDeleteExistingMedia = async (media: ProductMedia) => {
+    if (productEditBlocked) {
+      setError(productEditTooltip);
+      return;
+    }
+
     const mediaId = media.mediaId || media.id;
     if (!mediaId) {
       return;
@@ -1174,6 +1184,11 @@ export default function ProductEditPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (productEditBlocked) {
+      setError(productEditTooltip);
+      return;
+    }
 
     if (!product) {
       setError("Product data is not loaded yet.");
@@ -1359,6 +1374,12 @@ export default function ProductEditPage() {
           </Link>
         }
       />
+
+      {(productEditBlocked || productDeleteBlocked) && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          {productEditBlocked ? productEditTooltip : productDeleteTooltip}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -1700,7 +1721,7 @@ export default function ProductEditPage() {
                   <ExistingMediaCard
                     key={media.id}
                     media={media}
-                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}
@@ -1721,7 +1742,7 @@ export default function ProductEditPage() {
                   <ExistingMediaCard
                     key={media.id}
                     media={media}
-                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}
@@ -1824,7 +1845,7 @@ export default function ProductEditPage() {
                   <ExistingMediaCard
                     key={media.id}
                     media={media}
-                    deleting={deletingMediaId === (media.mediaId || media.id)}
+                    deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}
@@ -1856,10 +1877,11 @@ export default function ProductEditPage() {
           </Link>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || productEditBlocked}
+            title={productEditBlocked ? productEditTooltip : undefined}
             className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? "Saving..." : productEditBlocked ? "Save Changes (Restricted)" : "Save Changes"}
           </button>
         </div>
       </form>

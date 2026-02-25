@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
   getAdminStaffRules,
@@ -10,6 +11,7 @@ import {
   type StaffOnboardingRule,
   type CreateStaffRulePayload,
 } from "@/lib/apiClient";
+import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
@@ -150,6 +152,10 @@ const IconRefresh = () => (
 /* ------------------------------------------------------------------ */
 
 export default function AdminStaffRules() {
+  const { isAdminActionBlocked } = useRole();
+  const staffRuleManageBlocked = isAdminActionBlocked("STAFF_RULE_MANAGE");
+  const staffRuleManageTooltip = getAdminActionRestrictionTooltip("STAFF_RULE_MANAGE");
+
   /* -------- Rules state -------- */
   const [rules, setRules] = useState<StaffOnboardingRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -267,6 +273,11 @@ export default function AdminStaffRules() {
   const onCreateRule = async () => {
     setCreateError("");
 
+    if (staffRuleManageBlocked) {
+      setCreateError(staffRuleManageTooltip);
+      return;
+    }
+
     if (!formEmail.trim()) {
       setCreateError("Email is required.");
       return;
@@ -314,6 +325,12 @@ export default function AdminStaffRules() {
   /* -------- Revoke rule -------- */
   const onRevokeRule = async (ruleId: string) => {
     setRevokeError("");
+
+    if (staffRuleManageBlocked) {
+      setRevokeError(staffRuleManageTooltip);
+      return;
+    }
+
     setRevokingId(ruleId);
     try {
       const accessToken = await getAccessToken();
@@ -349,9 +366,14 @@ export default function AdminStaffRules() {
           <button
             type="button"
             onClick={() => {
+              if (staffRuleManageBlocked) {
+                return;
+              }
               resetForm();
               setFormOpen(true);
             }}
+            disabled={staffRuleManageBlocked}
+            title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
           >
             <IconPlus />
@@ -359,6 +381,12 @@ export default function AdminStaffRules() {
           </button>
         }
       />
+
+      {staffRuleManageBlocked && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+          {staffRuleManageTooltip}
+        </div>
+      )}
 
       {/* -------- Status tabs -------- */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -547,7 +575,8 @@ export default function AdminStaffRules() {
                         <button
                           type="button"
                           onClick={() => void onRevokeRule(rule.id)}
-                          disabled={isRevoking}
+                          disabled={isRevoking || staffRuleManageBlocked}
+                          title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
                           className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {isRevoking ? "Revoking..." : "Revoke"}
@@ -854,7 +883,8 @@ export default function AdminStaffRules() {
               <button
                 type="button"
                 onClick={() => void onCreateRule()}
-                disabled={creating}
+                disabled={creating || staffRuleManageBlocked}
+                title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {creating ? (

@@ -15,6 +15,7 @@ import {
   ROLE_MEDIA_VISIBILITY_PRESETS,
   parseTargetUserIdsInput,
 } from "@/lib/mediaVisibility";
+import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
 
 type ProductForm = {
   sku: string;
@@ -177,7 +178,9 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function AddProductPage() {
   const router = useRouter();
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, isAdminActionBlocked } = useRole();
+  const productCreateBlocked = isAdminActionBlocked("PRODUCT_CREATE");
+  const productCreateTooltip = getAdminActionRestrictionTooltip("PRODUCT_CREATE");
 
   const [form, setForm] = useState<ProductForm>(initialForm);
   const [publicVisibilityPreset, setPublicVisibilityPreset] = useState<PublicMediaVisibilityPreset>("PUBLIC");
@@ -419,6 +422,11 @@ export default function AddProductPage() {
     e.preventDefault();
     setError("");
 
+    if (productCreateBlocked) {
+      setError(productCreateTooltip);
+      return;
+    }
+
     if (!form.sku.trim()) {
       setError("SKU is required.");
       return;
@@ -587,6 +595,12 @@ export default function AddProductPage() {
           </Link>
         }
       />
+
+      {productCreateBlocked && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          {productCreateTooltip}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -1204,10 +1218,11 @@ export default function AddProductPage() {
           </Link>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || productCreateBlocked}
+            title={productCreateBlocked ? productCreateTooltip : undefined}
             className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? "Creating..." : "Create Product"}
+            {loading ? "Creating..." : productCreateBlocked ? "Create Product (Restricted)" : "Create Product"}
           </button>
         </div>
       </form>

@@ -9,8 +9,9 @@ const roleBadge: Record<string, { bg: string; text: string }> = {
 };
 
 export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
-  const { role } = useRole();
+  const { role, isMainAdmin } = useRole();
   const badge = roleBadge[role];
+  const roleLabel = isMainAdmin && role === "admin" ? "Main Admin" : role;
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-gray-200">
@@ -45,7 +46,7 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
           <span
             className={`hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${badge.bg} ${badge.text}`}
           >
-            {role}
+            {roleLabel}
           </span>
 
           {/* Notification bell */}
@@ -58,7 +59,7 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
 
           {/* Profile avatar (mobile) */}
           <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-semibold lg:hidden">
-            {role[0].toUpperCase()}
+            {roleLabel[0].toUpperCase()}
           </div>
         </div>
       </div>

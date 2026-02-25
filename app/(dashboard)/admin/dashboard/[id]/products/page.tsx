@@ -6,6 +6,7 @@ import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import { getAdminMediaUrl } from "@/lib/apiClient";
+import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
 
 type ApiErrorPayload = {
   message?: string;
@@ -209,7 +210,13 @@ function EmptyBoxIcon({ className }: { className?: string }) {
 }
 
 export default function AdminProducts() {
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, isAdminActionBlocked } = useRole();
+  const productCreateBlocked = isAdminActionBlocked("PRODUCT_CREATE");
+  const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
+  const productDeleteBlocked = isAdminActionBlocked("PRODUCT_DELETE");
+  const productCreateTooltip = getAdminActionRestrictionTooltip("PRODUCT_CREATE");
+  const productEditTooltip = getAdminActionRestrictionTooltip("PRODUCT_EDIT");
+  const productDeleteTooltip = getAdminActionRestrictionTooltip("PRODUCT_DELETE");
 
   const [includeSold, setIncludeSold] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -415,6 +422,11 @@ export default function AdminProducts() {
 
   const handleDeleteProduct = useCallback(
     async (product: InventoryProduct) => {
+      if (productDeleteBlocked) {
+        setError(productDeleteTooltip);
+        return;
+      }
+
       const label = product.name || product.sku || product.id;
       const confirmed = window.confirm(`Delete product "${label}"? This will archive the product.`);
       if (!confirmed) {
@@ -453,7 +465,7 @@ export default function AdminProducts() {
         setDeletingProductId(null);
       }
     },
-    [getAccessToken, loadData],
+    [getAccessToken, loadData, productDeleteBlocked, productDeleteTooltip],
   );
 
   return (
@@ -462,17 +474,35 @@ export default function AdminProducts() {
         title="Products"
         description="Real-time pricing, allocations, projected profit, and media preview."
         action={
-          <Link
-            href={`${dashboardBasePath}/products/add`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New Product
-          </Link>
+          productCreateBlocked ? (
+            <span
+              title={productCreateTooltip}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-300 text-gray-600 text-sm font-medium rounded-lg cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Product
+            </span>
+          ) : (
+            <Link
+              href={`${dashboardBasePath}/products/add`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Product
+            </Link>
+          )
         }
       />
+
+      {(productCreateBlocked || productEditBlocked || productDeleteBlocked) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Some product write actions are currently restricted.
+        </div>
+      )}
 
       {/* ───── toggle tabs ───── */}
       <div className="flex items-center gap-2">
@@ -626,12 +656,18 @@ export default function AdminProducts() {
               <div className="px-5 py-16 flex flex-col items-center gap-3">
                 <EmptyBoxIcon className="w-10 h-10 text-gray-300" />
                 <p className="text-sm text-gray-500">No products found.</p>
-                <Link
-                  href={`${dashboardBasePath}/products/add`}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-                >
-                  Add your first product
-                </Link>
+                {productCreateBlocked ? (
+                  <span title={productCreateTooltip} className="text-sm text-gray-400 font-medium cursor-not-allowed">
+                    Add your first product
+                  </span>
+                ) : (
+                  <Link
+                    href={`${dashboardBasePath}/products/add`}
+                    className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    Add your first product
+                  </Link>
+                )}
               </div>
             )}
 
@@ -711,18 +747,28 @@ export default function AdminProducts() {
                           <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
-                              <Link
-                                href={`${dashboardBasePath}/products/${item.id}`}
-                                className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                              >
-                                Edit
-                              </Link>
+                              {productEditBlocked ? (
+                                <span
+                                  title={productEditTooltip}
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-400 cursor-not-allowed"
+                                >
+                                  Edit
+                                </span>
+                              ) : (
+                                <Link
+                                  href={`${dashboardBasePath}/products/${item.id}`}
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                                >
+                                  Edit
+                                </Link>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
                                   void handleDeleteProduct(item);
                                 }}
-                                disabled={deletingProductId === item.id}
+                                disabled={productDeleteBlocked || deletingProductId === item.id}
+                                title={productDeleteBlocked ? productDeleteTooltip : undefined}
                                 className="px-2.5 py-1 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                               >
                                 {deletingProductId === item.id ? "Deleting..." : "Delete"}
@@ -815,18 +861,28 @@ export default function AdminProducts() {
 
                           {/* actions */}
                           <div className="mt-3 flex items-center gap-2">
-                            <Link
-                              href={`${dashboardBasePath}/products/${item.id}`}
-                              className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                            >
-                              Edit
-                            </Link>
+                            {productEditBlocked ? (
+                              <span
+                                title={productEditTooltip}
+                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-400 cursor-not-allowed"
+                              >
+                                Edit
+                              </span>
+                            ) : (
+                              <Link
+                                href={`${dashboardBasePath}/products/${item.id}`}
+                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                              >
+                                Edit
+                              </Link>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
                                 void handleDeleteProduct(item);
                               }}
-                              disabled={deletingProductId === item.id}
+                              disabled={productDeleteBlocked || deletingProductId === item.id}
+                              title={productDeleteBlocked ? productDeleteTooltip : undefined}
                               className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                             >
                               {deletingProductId === item.id ? "Deleting..." : "Delete"}

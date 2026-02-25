@@ -228,8 +228,12 @@ export default function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const { role, dashboardBasePath } = useRole();
-  const roleMeta = roleLabels[role];
+  const { role, isMainAdmin, dashboardBasePath } = useRole();
+  const baseRoleMeta = roleLabels[role];
+  const roleMeta =
+    role === "admin" && isMainAdmin
+      ? { ...baseRoleMeta, label: "Main Admin" }
+      : baseRoleMeta;
   const normalizedPathname = normalizePath(pathname);
 
   return (
