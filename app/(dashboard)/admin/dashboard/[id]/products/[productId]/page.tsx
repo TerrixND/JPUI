@@ -56,8 +56,55 @@ type ManagerOption = {
   label: string;
 };
 
-type InventoryAnalyticsResponse = {
-  inventory?: InventoryProduct[];
+type AdminProductBeneficiaryUser = {
+  id?: string | null;
+  role?: string | null;
+  email?: string | null;
+  managerProfile?: {
+    displayName?: string | null;
+  } | null;
+  adminProfile?: {
+    displayName?: string | null;
+  } | null;
+};
+
+type AdminProductBeneficiaryBranch = {
+  id?: string | null;
+  code?: string | null;
+  name?: string | null;
+  city?: string | null;
+  status?: string | null;
+};
+
+type AdminProductCommissionAllocation = {
+  id: string;
+  targetType: "BRANCH" | "USER";
+  rate: number | string;
+  note: string | null;
+  beneficiaryUserId?: string | null;
+  beneficiaryBranchId?: string | null;
+  beneficiaryUser?: AdminProductBeneficiaryUser | null;
+  beneficiaryBranch?: AdminProductBeneficiaryBranch | null;
+};
+
+type AdminProductMediaRef = {
+  id?: string | null;
+  type?: string | null;
+  url?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
+type AdminProductDetail = {
+  id: string;
+  sku: string;
+  name: string | null;
+  status: string;
+  buyPrice?: number | string | null;
+  saleMinPrice?: number | string | null;
+  saleMaxPrice?: number | string | null;
+  media?: AdminProductMediaRef[] | null;
+  commissionAllocations?: AdminProductCommissionAllocation[] | null;
 };
 
 type InventoryProduct = {
@@ -65,8 +112,7 @@ type InventoryProduct = {
   sku: string;
   name: string | null;
   status: string;
-  media?: Array<InventoryProductMediaRef | string>;
-  mediaIds?: string[];
+  media: InventoryProductMediaRef[];
   pricing: {
     buyPrice: number | null;
     saleMinPrice: number | null;
@@ -180,6 +226,19 @@ const parseOptionalMoney = (value: string, fieldLabel: string) => {
   return parsed;
 };
 
+const toNumberOrNull = (value: unknown) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
+};
+
 const toDisplayMoney = (value: number | null | undefined) => {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "";
@@ -215,6 +274,88 @@ const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | n
     type,
     mimeType: typeof payload?.mimeType === "string" ? payload.mimeType : null,
     sizeBytes: typeof payload?.sizeBytes === "number" ? payload.sizeBytes : null,
+  };
+};
+
+const toInventoryProduct = (payload: AdminProductDetail): InventoryProduct => {
+  const buyPrice = toNumberOrNull(payload.buyPrice);
+  const saleMinPrice = toNumberOrNull(payload.saleMinPrice);
+  const saleMaxPrice = toNumberOrNull(payload.saleMaxPrice);
+
+  const media = (Array.isArray(payload.media) ? payload.media : [])
+    .map((mediaRef) => ({
+      id: typeof mediaRef?.id === "string" ? mediaRef.id : undefined,
+      type: typeof mediaRef?.type === "string" ? mediaRef.type : undefined,
+      url: typeof mediaRef?.url === "string" ? mediaRef.url : undefined,
+      mimeType: typeof mediaRef?.mimeType === "string" ? mediaRef.mimeType : null,
+      sizeBytes: typeof mediaRef?.sizeBytes === "number" ? mediaRef.sizeBytes : null,
+    }))
+    .filter((mediaRef) =>
+      Boolean(
+        (typeof mediaRef.id === "string" && mediaRef.id.trim()) ||
+          (typeof mediaRef.url === "string" && mediaRef.url.trim()),
+      ),
+    );
+
+  const allocations = (Array.isArray(payload.commissionAllocations) ? payload.commissionAllocations : [])
+    .filter((allocation): allocation is AdminProductCommissionAllocation => {
+      return Boolean(
+        allocation &&
+          typeof allocation === "object" &&
+          typeof allocation.id === "string" &&
+          allocation.id.trim() &&
+          (allocation.targetType === "BRANCH" || allocation.targetType === "USER"),
+      );
+    })
+    .map((allocation) => {
+      const normalizedRate = Number(allocation.rate);
+      const beneficiaryDisplayName =
+        allocation.beneficiaryUser?.managerProfile?.displayName ||
+        allocation.beneficiaryUser?.adminProfile?.displayName ||
+        allocation.beneficiaryBranch?.name ||
+        allocation.beneficiaryUser?.email ||
+        null;
+
+      return {
+        id: allocation.id,
+        targetType: allocation.targetType,
+        rate: Number.isFinite(normalizedRate) ? normalizedRate : 0,
+        note: allocation.note || null,
+        beneficiary: {
+          userId: typeof allocation.beneficiaryUserId === "string" ? allocation.beneficiaryUserId : null,
+          branchId:
+            typeof allocation.beneficiaryBranchId === "string" ? allocation.beneficiaryBranchId : null,
+          displayName: beneficiaryDisplayName,
+          userEmail:
+            typeof allocation.beneficiaryUser?.email === "string"
+              ? allocation.beneficiaryUser.email
+              : null,
+          branchName:
+            typeof allocation.beneficiaryBranch?.name === "string"
+              ? allocation.beneficiaryBranch.name
+              : null,
+        },
+      } satisfies InventoryCommissionAllocation;
+    });
+
+  const allocationRateTotal = allocations.reduce((sum, allocation) => sum + allocation.rate, 0);
+
+  return {
+    id: payload.id,
+    sku: payload.sku,
+    name: payload.name || null,
+    status: payload.status,
+    media,
+    pricing: {
+      buyPrice,
+      saleMinPrice,
+      saleMaxPrice,
+      isComplete: buyPrice !== null && saleMinPrice !== null && saleMaxPrice !== null,
+    },
+    commission: {
+      allocationRateTotal,
+      allocations,
+    },
   };
 };
 
@@ -418,54 +559,8 @@ export default function ProductEditPage() {
 
   const resolveExistingMediaFromAdmin = useCallback(
     async (accessToken: string, targetProduct: InventoryProduct) => {
-      const orderedMediaIds: string[] = [];
-      const seenMediaIds = new Set<string>();
-      const inlineMediaRows: ProductMedia[] = [];
-      const seenInlineKeys = new Set<string>();
-
       const mediaRefs = Array.isArray(targetProduct.media) ? targetProduct.media : [];
-      for (const [index, mediaRef] of mediaRefs.entries()) {
-        if (typeof mediaRef === "string") {
-          const mediaId = mediaRef.trim();
-          if (mediaId && !seenMediaIds.has(mediaId)) {
-            seenMediaIds.add(mediaId);
-            orderedMediaIds.push(mediaId);
-          }
-          continue;
-        }
-
-        const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
-
-        if (mediaId && !seenMediaIds.has(mediaId)) {
-          seenMediaIds.add(mediaId);
-          orderedMediaIds.push(mediaId);
-        }
-
-        const inlineMedia = toInlineProductMedia(mediaRef, index);
-        if (inlineMedia) {
-          const inlineKey = inlineMedia.mediaId ? `id:${inlineMedia.mediaId}` : `url:${inlineMedia.url}`;
-          if (!seenInlineKeys.has(inlineKey)) {
-            seenInlineKeys.add(inlineKey);
-            inlineMediaRows.push(inlineMedia);
-          }
-        }
-      }
-
-      if (Array.isArray(targetProduct.mediaIds)) {
-        for (const mediaId of targetProduct.mediaIds) {
-          if (typeof mediaId !== "string" || !mediaId.trim()) {
-            continue;
-          }
-
-          const normalizedId = mediaId.trim();
-          if (!seenMediaIds.has(normalizedId)) {
-            seenMediaIds.add(normalizedId);
-            orderedMediaIds.push(normalizedId);
-          }
-        }
-      }
-
-      if (orderedMediaIds.length === 0 && inlineMediaRows.length === 0) {
+      if (mediaRefs.length === 0) {
         return {
           media: [] as ProductMedia[],
           hasReferences: false,
@@ -474,23 +569,36 @@ export default function ProductEditPage() {
 
       const mediaRows: ProductMedia[] = [];
       const resolvedKeys = new Set<string>();
-      for (const mediaId of orderedMediaIds) {
+      const unresolvedMediaIds = new Set<string>();
+
+      for (const [index, mediaRef] of mediaRefs.entries()) {
+        const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
+        const inlineMedia = toInlineProductMedia(mediaRef, index);
+
+        if (inlineMedia) {
+          const inlineKey = inlineMedia.mediaId ? `id:${inlineMedia.mediaId}` : `url:${inlineMedia.url}`;
+          if (!resolvedKeys.has(inlineKey)) {
+            resolvedKeys.add(inlineKey);
+            mediaRows.push(inlineMedia);
+          }
+          continue;
+        }
+
+        if (mediaId) {
+          unresolvedMediaIds.add(mediaId);
+        }
+      }
+
+      for (const mediaId of unresolvedMediaIds) {
         const media = await fetchAdminMediaById(accessToken, mediaId);
 
         if (media) {
           const resolvedKey = media.mediaId ? `id:${media.mediaId}` : `url:${media.url}`;
-          resolvedKeys.add(resolvedKey);
-          mediaRows.push(media);
+          if (!resolvedKeys.has(resolvedKey)) {
+            resolvedKeys.add(resolvedKey);
+            mediaRows.push(media);
+          }
         }
-      }
-
-      for (const inlineMedia of inlineMediaRows) {
-        const inlineKey = inlineMedia.mediaId ? `id:${inlineMedia.mediaId}` : `url:${inlineMedia.url}`;
-        if (resolvedKeys.has(inlineKey)) {
-          continue;
-        }
-        resolvedKeys.add(inlineKey);
-        mediaRows.push(inlineMedia);
       }
 
       return {
@@ -599,8 +707,8 @@ export default function ProductEditPage() {
       try {
         const accessToken = await getAccessToken();
 
-        const [inventoryResponse, branchResponse] = await Promise.all([
-          fetch("/api/v1/admin/analytics/inventory-profit?includeSold=true", {
+        const [productResponse, branchResponse] = await Promise.all([
+          fetch(`/api/v1/admin/products/${encodeURIComponent(productId)}`, {
             method: "GET",
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -616,20 +724,27 @@ export default function ProductEditPage() {
           }),
         ]);
 
-        const inventoryPayload = (await inventoryResponse.json().catch(() => null)) as
+        const productPayload = (await productResponse.json().catch(() => null)) as
           | ApiErrorPayload
-          | InventoryAnalyticsResponse
+          | AdminProductDetail
           | null;
         const branchPayload = (await branchResponse.json().catch(() => null)) as
           | ApiErrorPayload
           | BranchAnalyticsResponse
           | null;
 
-        if (!inventoryResponse.ok) {
+        if (productResponse.status === 404) {
+          setNotFound(true);
+          setProduct(null);
+          setExistingMedia([]);
+          return;
+        }
+
+        if (!productResponse.ok) {
           throw new Error(
             toErrorMessage(
-              inventoryPayload as ApiErrorPayload | null,
-              "Failed to load product analytics.",
+              productPayload as ApiErrorPayload | null,
+              "Failed to load product details.",
             ),
           );
         }
@@ -640,17 +755,11 @@ export default function ProductEditPage() {
           );
         }
 
-        const inventory = Array.isArray((inventoryPayload as InventoryAnalyticsResponse)?.inventory)
-          ? ((inventoryPayload as InventoryAnalyticsResponse).inventory as InventoryProduct[])
-          : [];
-
-        const targetProduct = inventory.find((item) => item.id === productId) || null;
-
-        if (!targetProduct) {
-          setNotFound(true);
-          setProduct(null);
-          return;
+        const productDetail = productPayload as AdminProductDetail;
+        if (!productDetail?.id || !productDetail?.sku) {
+          throw new Error("Invalid product payload received from admin endpoint.");
         }
+        const targetProduct = toInventoryProduct(productDetail);
 
         const branchRows = Array.isArray((branchPayload as BranchAnalyticsResponse)?.branches)
           ? ((branchPayload as BranchAnalyticsResponse).branches as BranchOption[])
@@ -690,10 +799,10 @@ export default function ProductEditPage() {
 
         if (!mediaResult.hasReferences) {
           setMediaHint(
-            "Existing media cannot be loaded because the admin inventory analytics payload does not include media references for this product. You can still upload new media below.",
+            "No existing media is linked to this product yet. You can upload new media below.",
           );
         } else if (!mediaResult.media.length) {
-          setMediaHint("No existing media records could be resolved for this product.");
+          setMediaHint("Existing media references were found, but no media URLs could be resolved.");
         }
       } catch (caughtError) {
         const message =

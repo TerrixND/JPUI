@@ -32,8 +32,6 @@ type InventoryProduct = {
   sku: string;
   name: string | null;
   status: string;
-  media?: Array<InventoryProductMediaRef | string>;
-  mediaIds?: string[];
   pricing: {
     buyPrice: number | null;
     saleMinPrice: number | null;
@@ -53,19 +51,29 @@ type InventoryProduct = {
   };
 };
 
-type InventoryProductMediaRef = {
-  id?: string;
-  type?: string;
-  url?: string;
+type AdminProductMediaRef = {
+  id?: string | null;
+  type?: string | null;
+  url?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+};
+
+type AdminProductListItem = {
+  id: string;
+  media?: AdminProductMediaRef[] | null;
+};
+
+type AdminProductsListResponse = {
+  includeSold?: boolean;
+  count?: number;
+  items?: AdminProductListItem[] | null;
 };
 
 type ProductImageRef = {
   mediaId: string | null;
   url: string;
 };
-
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -113,26 +121,38 @@ const statusBadge = (status: string) => {
 
 const normalizeMediaType = (value: unknown) => String(value || "").trim().toUpperCase();
 
-const toInlineImageRef = (mediaRef: InventoryProductMediaRef): ProductImageRef | null => {
-  const mediaUrl = typeof mediaRef.url === "string" ? mediaRef.url.trim() : "";
-  if (!mediaUrl) {
-    return null;
+const hasMediaReference = (product: AdminProductListItem) =>
+  (Array.isArray(product.media) ? product.media : []).some((mediaRef) => {
+    const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
+    const mediaUrl = typeof mediaRef?.url === "string" ? mediaRef.url.trim() : "";
+    return Boolean(mediaId || mediaUrl);
+  });
+
+const toProductImageRef = (product: AdminProductListItem): ProductImageRef | null => {
+  const mediaRows = Array.isArray(product.media) ? product.media : [];
+
+  for (const mediaRef of mediaRows) {
+    const mediaUrl = typeof mediaRef?.url === "string" ? mediaRef.url.trim() : "";
+    if (!mediaUrl) {
+      continue;
+    }
+
+    const mediaType = normalizeMediaType(mediaRef?.type);
+    const mimeType = typeof mediaRef?.mimeType === "string" ? mediaRef.mimeType.trim().toLowerCase() : "";
+    const isImage = mediaType === "IMAGE" || mimeType.startsWith("image/");
+
+    if (!isImage) {
+      continue;
+    }
+
+    const mediaId = typeof mediaRef?.id === "string" && mediaRef.id.trim() ? mediaRef.id.trim() : null;
+    return {
+      mediaId,
+      url: mediaUrl,
+    };
   }
 
-  const mediaType = normalizeMediaType(mediaRef.type);
-  const mimeType = typeof mediaRef.mimeType === "string" ? mediaRef.mimeType.trim().toLowerCase() : "";
-  const isImage = mediaType === "IMAGE" || mimeType.startsWith("image/");
-
-  if (!isImage) {
-    return null;
-  }
-
-  const mediaId = typeof mediaRef.id === "string" && mediaRef.id.trim() ? mediaRef.id.trim() : null;
-
-  return {
-    mediaId,
-    url: mediaUrl,
-  };
+  return null;
 };
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -239,7 +259,7 @@ export default function AdminProducts() {
     [fetchAdminMediaById, getAccessToken],
   );
 
-  const loadAnalytics = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
     setMediaHint("");
@@ -248,18 +268,27 @@ export default function AdminProducts() {
       const accessToken = await getAccessToken();
       const query = includeSold ? "?includeSold=true" : "";
 
-      const analyticsResponse = await fetch(`/api/v1/admin/analytics/inventory-profit${query}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        cache: "no-store",
-      });
+      const [analyticsResponse, productsResponse] = await Promise.all([
+        fetch(`/api/v1/admin/analytics/inventory-profit${query}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        }),
+        fetch(`/api/v1/admin/products${query}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        }),
+      ]);
 
-      const analyticsPayload = (await analyticsResponse.json().catch(() => null)) as
-        | ApiErrorPayload
-        | InventoryAnalyticsResponse
-        | null;
+      const [analyticsPayload, productsPayload] = await Promise.all([
+        analyticsResponse.json().catch(() => null),
+        productsResponse.json().catch(() => null),
+      ]);
 
       if (!analyticsResponse.ok) {
         throw new Error(
@@ -267,92 +296,41 @@ export default function AdminProducts() {
         );
       }
 
-      const analyticsData = analyticsPayload as InventoryAnalyticsResponse;
-      const inventoryRows = Array.isArray(analyticsData?.inventory) ? analyticsData.inventory : [];
-      const hasMediaReferences = inventoryRows.some((product) => {
-        const hasMediaArray =
-          Array.isArray(product.media) &&
-          product.media.some((mediaRef) =>
-            typeof mediaRef === "string"
-              ? Boolean(mediaRef.trim())
-              : Boolean(mediaRef?.id?.trim() || mediaRef?.url?.trim()),
-          );
-        const hasMediaIds = Array.isArray(product.mediaIds) && product.mediaIds.some((id) => Boolean(id?.trim()));
+      if (!productsResponse.ok) {
+        throw new Error(
+          toErrorMessage(productsPayload as ApiErrorPayload | null, "Failed to load admin products."),
+        );
+      }
 
-        return hasMediaArray || hasMediaIds;
-      });
+      const analyticsData = analyticsPayload as InventoryAnalyticsResponse;
+      const productRows = Array.isArray((productsPayload as AdminProductsListResponse)?.items)
+        ? ((productsPayload as AdminProductsListResponse).items as AdminProductListItem[])
+        : [];
+
+      const hasMediaReferences = productRows.some(hasMediaReference);
 
       const mediaMap: Record<string, ProductImageRef> = {};
-      const mediaJobs = inventoryRows.map(async (product) => {
-        if (!product?.id) {
-          return;
-        }
-
-        const mediaRefs = Array.isArray(product.media) ? product.media : [];
-        const mediaIdSet = new Set<string>();
-        let inlineImageRef: ProductImageRef | null = null;
-
-        for (const mediaRef of mediaRefs) {
-          if (typeof mediaRef === "string" && mediaRef.trim()) {
-            mediaIdSet.add(mediaRef.trim());
-            continue;
-          }
-
-          if (typeof mediaRef !== "string" && typeof mediaRef.id === "string" && mediaRef.id.trim()) {
-            mediaIdSet.add(mediaRef.id.trim());
-          }
-
-          if (!inlineImageRef && typeof mediaRef !== "string") {
-            const resolvedInlineImage = toInlineImageRef(mediaRef);
-            if (resolvedInlineImage) {
-              inlineImageRef = resolvedInlineImage;
-            }
-          }
-        }
-
-        if (Array.isArray(product.mediaIds)) {
-          for (const mediaId of product.mediaIds) {
-            if (typeof mediaId === "string" && mediaId.trim()) {
-              mediaIdSet.add(mediaId.trim());
-            }
-          }
-        }
-
-        let resolvedImage: ProductImageRef | null = null;
-        for (const mediaId of mediaIdSet) {
-          const media = await fetchAdminMediaById(accessToken, mediaId);
-
-          if (media) {
-            resolvedImage = media;
-            break;
-          }
-        }
-
-        if (!resolvedImage && inlineImageRef) {
-          resolvedImage = inlineImageRef;
-        }
-
+      for (const product of productRows) {
+        const resolvedImage = toProductImageRef(product);
         if (resolvedImage) {
           mediaMap[product.id] = resolvedImage;
         }
-      });
-
-      await Promise.all(mediaJobs);
+      }
 
       setMediaByProductId(mediaMap);
       setAnalytics(analyticsData);
       if (!hasMediaReferences) {
         setMediaHint(
-          "Media previews are unavailable because the inventory analytics response does not include media references for these products.",
+          "Media previews are unavailable because the admin products response does not include media references for these products.",
         );
       } else if (Object.keys(mediaMap).length === 0) {
-        setMediaHint("Media references were found, but no image preview URLs could be resolved.");
+        setMediaHint("Media references were found, but no image previews could be resolved.");
       }
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
           ? caughtError.message
-          : "Failed to load product analytics.";
+          : "Failed to load products.";
 
       setError(message);
       setMediaHint("");
@@ -361,11 +339,11 @@ export default function AdminProducts() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAdminMediaById, getAccessToken, includeSold]);
+  }, [getAccessToken, includeSold]);
 
   useEffect(() => {
-    void loadAnalytics();
-  }, [loadAnalytics]);
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
     const rows = Object.entries(mediaByProductId);
@@ -431,7 +409,7 @@ export default function AdminProducts() {
 
       {loading && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
-          Loading product analytics...
+          Loading products...
         </div>
       )}
 
@@ -442,7 +420,7 @@ export default function AdminProducts() {
           </div>
           <button
             type="button"
-            onClick={() => void loadAnalytics()}
+            onClick={() => void loadData()}
             className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
           >
             Retry

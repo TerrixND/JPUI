@@ -7,7 +7,12 @@ const getApiBaseUrl = () =>
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
+const isBodyMethod = (method: string) => {
+  const upper = method.toUpperCase();
+  return upper !== "GET" && upper !== "HEAD";
+};
+
+const proxyProductsRequest = async (request: NextRequest) => {
   const apiBaseUrl = getApiBaseUrl();
 
   if (!apiBaseUrl) {
@@ -20,7 +25,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/admin/products`;
+  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/admin/products${request.nextUrl.search}`;
 
   try {
     const targetOrigin = new URL(targetUrl).origin;
@@ -54,15 +59,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.text();
+  const shouldForwardBody = isBodyMethod(request.method);
+  const contentType = request.headers.get("content-type");
+  const body = shouldForwardBody ? await request.text() : undefined;
+
+  const headers: HeadersInit = {
+    Authorization: authorization,
+  };
+
+  if (contentType && shouldForwardBody) {
+    headers["Content-Type"] = contentType;
+  }
 
   try {
     const upstreamResponse = await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: authorization,
-      },
+      method: request.method,
+      headers,
       body,
       cache: "no-store",
     });
@@ -88,4 +100,12 @@ export async function POST(request: NextRequest) {
       { status: 502 },
     );
   }
+};
+
+export async function GET(request: NextRequest) {
+  return proxyProductsRequest(request);
+}
+
+export async function POST(request: NextRequest) {
+  return proxyProductsRequest(request);
 }
