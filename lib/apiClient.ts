@@ -216,9 +216,56 @@ export type StaffRuleUser = {
   role: string | null;
 };
 
+export type StaffRuleVisibilityRole = "ADMIN" | "MANAGER" | "SALES";
+export type StaffRuleManagerType = "STANDALONE" | "BRANCH_MANAGER" | "BRANCH_ADMIN";
+
+export type StaffRuleAdminCapabilities = {
+  canReadProducts?: boolean;
+  canCreateProducts?: boolean;
+  canEditProducts?: boolean;
+  canHandleRequests?: boolean;
+  canDeleteLogs?: boolean;
+  canManageProductVisibility?: boolean;
+  canManageStaffRules?: boolean;
+  canRestrictUsers?: boolean;
+  canBanUsers?: boolean;
+};
+
+export type StaffRuleManagerCapabilities = {
+  canCreateStaffRules?: boolean;
+  canApproveRequests?: boolean;
+  canRequestProductsFromAdmin?: boolean;
+  canRequestManagerRestrictions?: boolean;
+  canRequestManagerBans?: boolean;
+  canRestrictSubordinates?: boolean;
+  canBanSubordinates?: boolean;
+  canLimitSubordinatePermissions?: boolean;
+};
+
+export type StaffRuleAdminPermissionConfig = {
+  visibilityRole?: StaffRuleVisibilityRole | string | null;
+  capabilities?: StaffRuleAdminCapabilities | null;
+};
+
+export type StaffRuleManagerPermissionConfig = {
+  managerType?: StaffRuleManagerType | string | null;
+  visibilityRole?: StaffRuleVisibilityRole | string | null;
+  capabilities?: StaffRuleManagerCapabilities | null;
+};
+
+export type StaffRulePermissionPayload =
+  | StaffRuleAdminPermissionConfig
+  | StaffRuleManagerPermissionConfig
+  | {
+      admin?: StaffRuleAdminPermissionConfig;
+      manager?: StaffRuleManagerPermissionConfig;
+    }
+  | JsonRecord;
+
 export type StaffOnboardingRule = {
   id: string;
   role: string;
+  permissions: JsonRecord | null;
   email: string | null;
   emailNormalized: string | null;
   phone: string | null;
@@ -252,8 +299,11 @@ export type CreateStaffRulePayload = {
   lineId?: string | null;
   note?: string | null;
   branchId?: string | null;
+  branchName?: string | null;
   setAsPrimaryManager?: boolean;
   expiresAt?: string | null;
+  permissions?: StaffRulePermissionPayload | null;
+  permission?: StaffRulePermissionPayload | null;
 };
 
 export type AdminLogBackupsResponse = {
@@ -2806,6 +2856,15 @@ const normalizeStaffRuleBranch = (value: unknown): StaffRuleBranch | null => {
   };
 };
 
+const normalizeStaffRulePermissions = (value: unknown): JsonRecord | null => {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  return record;
+};
+
 const normalizeStaffRule = (rawRow: unknown): StaffOnboardingRule | null => {
   const row = asRecord(rawRow);
   if (!row) return null;
@@ -2817,6 +2876,9 @@ const normalizeStaffRule = (rawRow: unknown): StaffOnboardingRule | null => {
   return {
     id,
     role,
+    permissions:
+      normalizeStaffRulePermissions(row.permissions) ??
+      normalizeStaffRulePermissions(row.permission),
     email: asNullableString(row.email),
     emailNormalized: asNullableString(row.emailNormalized),
     phone: asNullableString(row.phone),
@@ -2853,11 +2915,67 @@ const extractStaffRules = (payload: unknown): unknown[] => {
   return [];
 };
 
-export const getAdminStaffRules = async ({
+type StaffRuleActorScope = "admin" | "manager";
+
+const staffRuleScopePath = (scope: StaffRuleActorScope) =>
+  scope === "manager" ? "manager" : "admin";
+
+const buildCreateStaffRuleBody = (payload: CreateStaffRulePayload) => {
+  const body: Record<string, unknown> = {
+    role: payload.role,
+    email: payload.email,
+    phone: payload.phone,
+  };
+
+  if (payload.displayName !== undefined) body.displayName = payload.displayName;
+  if (payload.lineId !== undefined) body.lineId = payload.lineId;
+  if (payload.note !== undefined) body.note = payload.note;
+  if (payload.branchId !== undefined) body.branchId = payload.branchId;
+  if (payload.branchName !== undefined) body.branchName = payload.branchName;
+  if (payload.setAsPrimaryManager !== undefined) body.setAsPrimaryManager = payload.setAsPrimaryManager;
+  if (payload.expiresAt !== undefined) body.expiresAt = payload.expiresAt;
+
+  const hasBranchId = payload.branchId !== undefined && payload.branchId !== null && payload.branchId !== "";
+  const hasBranchName =
+    payload.branchName !== undefined && payload.branchName !== null && payload.branchName !== "";
+
+  if (hasBranchId && hasBranchName) {
+    throw new ApiClientError({
+      message: "Use either branchId or branchName, but not both.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const hasPermissions = payload.permissions !== undefined;
+  const hasPermission = payload.permission !== undefined;
+
+  if (hasPermissions && hasPermission) {
+    throw new ApiClientError({
+      message: "Use either permissions or permission, but not both.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  if (hasPermissions) {
+    body.permissions = payload.permissions;
+  }
+
+  if (hasPermission) {
+    body.permission = payload.permission;
+  }
+
+  return body;
+};
+
+const getStaffRules = async ({
+  scope,
   accessToken,
   status,
   limit,
 }: {
+  scope: StaffRuleActorScope;
   accessToken: string;
   status?: string;
   limit?: number;
@@ -2873,8 +2991,9 @@ export const getAdminStaffRules = async ({
   }
 
   const queryString = search.toString();
+  const scopePath = staffRuleScopePath(scope);
   const payload = await fetchJson({
-    path: `${API_BASE_PATH}/admin/staff-onboarding/rules${queryString ? `?${queryString}` : ""}`,
+    path: `${API_BASE_PATH}/${scopePath}/staff-onboarding/rules${queryString ? `?${queryString}` : ""}`,
     method: "GET",
     accessToken,
     fallbackErrorMessage: "Failed to load staff onboarding rules.",
@@ -2885,34 +3004,24 @@ export const getAdminStaffRules = async ({
     .filter((row): row is StaffOnboardingRule => Boolean(row));
 };
 
-export const createAdminStaffRule = async ({
+const createStaffRule = async ({
+  scope,
   accessToken,
   payload,
 }: {
+  scope: StaffRuleActorScope;
   accessToken: string;
   payload: CreateStaffRulePayload;
 }): Promise<StaffOnboardingRule> => {
-  const body: Record<string, unknown> = {
-    role: payload.role,
-    email: payload.email,
-    phone: payload.phone,
-  };
-
-  if (payload.displayName) body.displayName = payload.displayName;
-  if (payload.lineId) body.lineId = payload.lineId;
-  if (payload.note) body.note = payload.note;
-  if (payload.branchId) body.branchId = payload.branchId;
-  if (payload.setAsPrimaryManager !== undefined) body.setAsPrimaryManager = payload.setAsPrimaryManager;
-  if (payload.expiresAt) body.expiresAt = payload.expiresAt;
-
+  const scopePath = staffRuleScopePath(scope);
   const responsePayload = await fetchJson({
-    path: `${API_BASE_PATH}/admin/staff-onboarding/rules`,
+    path: `${API_BASE_PATH}/${scopePath}/staff-onboarding/rules`,
     method: "POST",
     accessToken,
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildCreateStaffRuleBody(payload)),
     fallbackErrorMessage: "Failed to create staff onboarding rule.",
   });
 
@@ -2928,15 +3037,18 @@ export const createAdminStaffRule = async ({
   return rule;
 };
 
-export const revokeAdminStaffRule = async ({
+const revokeStaffRule = async ({
+  scope,
   accessToken,
   ruleId,
 }: {
+  scope: StaffRuleActorScope;
   accessToken: string;
   ruleId: string;
 }): Promise<StaffOnboardingRule> => {
+  const scopePath = staffRuleScopePath(scope);
   const responsePayload = await fetchJson({
-    path: `${API_BASE_PATH}/admin/staff-onboarding/rules/${encodeURIComponent(ruleId)}/revoke`,
+    path: `${API_BASE_PATH}/${scopePath}/staff-onboarding/rules/${encodeURIComponent(ruleId)}/revoke`,
     method: "PATCH",
     accessToken,
     headers: {
@@ -2955,6 +3067,96 @@ export const revokeAdminStaffRule = async ({
   }
 
   return rule;
+};
+
+export const getAdminStaffRules = async ({
+  accessToken,
+  status,
+  limit,
+}: {
+  accessToken: string;
+  status?: string;
+  limit?: number;
+}): Promise<StaffOnboardingRule[]> => {
+  return getStaffRules({
+    scope: "admin",
+    accessToken,
+    status,
+    limit,
+  });
+};
+
+export const createAdminStaffRule = async ({
+  accessToken,
+  payload,
+}: {
+  accessToken: string;
+  payload: CreateStaffRulePayload;
+}): Promise<StaffOnboardingRule> => {
+  return createStaffRule({
+    scope: "admin",
+    accessToken,
+    payload,
+  });
+};
+
+export const revokeAdminStaffRule = async ({
+  accessToken,
+  ruleId,
+}: {
+  accessToken: string;
+  ruleId: string;
+}): Promise<StaffOnboardingRule> => {
+  return revokeStaffRule({
+    scope: "admin",
+    accessToken,
+    ruleId,
+  });
+};
+
+export const getManagerStaffRules = async ({
+  accessToken,
+  status,
+  limit,
+}: {
+  accessToken: string;
+  status?: string;
+  limit?: number;
+}): Promise<StaffOnboardingRule[]> => {
+  return getStaffRules({
+    scope: "manager",
+    accessToken,
+    status,
+    limit,
+  });
+};
+
+export const createManagerStaffRule = async ({
+  accessToken,
+  payload,
+}: {
+  accessToken: string;
+  payload: CreateStaffRulePayload;
+}): Promise<StaffOnboardingRule> => {
+  return createStaffRule({
+    scope: "manager",
+    accessToken,
+    payload,
+  });
+};
+
+export const revokeManagerStaffRule = async ({
+  accessToken,
+  ruleId,
+}: {
+  accessToken: string;
+  ruleId: string;
+}): Promise<StaffOnboardingRule> => {
+  return revokeStaffRule({
+    scope: "manager",
+    accessToken,
+    ruleId,
+  });
 };
 
 export const downloadAdminLogBackup = async ({
