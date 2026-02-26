@@ -23,6 +23,8 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const whiteRoutes = [
     "/products",
     "/aboutus",
+    "/contactus",
+    "/authenticity",
     "/profile",
     "/login",
     "/signup",
@@ -39,6 +41,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
       { label: "Home", href: "/" },
       { label: "Products", href: "/products" },
       { label: "About Us", href: "/aboutus" },
+      { label: "Contact Us", href: "/contactus" },
     ];
 
     if (dashboardHref) {
@@ -152,9 +155,14 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
           )}
 
           {user ? (
-            <Link href="/profile" className="hidden md:block">
-              <User className={`w-5 h-5 ${iconColor}`} />
-            </Link>
+            <div className="hidden md:flex gap-6 items-center">
+              <Link href="/bag" className="hidden md:block">
+                <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
+              </Link>
+              <Link href="/profile" className="hidden md:block">
+                <User className={`w-5 h-5 ${iconColor}`} />
+              </Link>
+            </div>
           ) : (
             <div className="hidden md:flex gap-6 items-center">
               <Link

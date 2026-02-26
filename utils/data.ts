@@ -17,7 +17,7 @@ export const PRODUCTS: Product[] = [
     finish: "polished",
   },
   {
-    id: "2",
+    id: "e8f4d332-2a55-4e8f-b7a9-66c1aa912244",
     name: "Imperial Jade Ring",
     image: "/images/img2.png",
     popularity: 300,
@@ -266,176 +266,438 @@ export const PRODUCTS: Product[] = [
   },
 ];
 
-export const SAMPLE_PRODUCT = {
-  id: "b7c1f4c2-9d8a-4c12-91e3-44b91b29aa01",
-  sku: "JDE-IMP-2025-0001",
+export const SAMPLE_PRODUCT = [
+  {
+    id: "b7c1f4c2-9d8a-4c12-91e3-44b91b29aa01",
+    sku: "JDE-IMP-2025-0001",
 
-  name: "Imperial Jade Dragon Pendant",
-  color: "Emerald Green",
-  weight: 42.5,
-  length: 58,
-  depth: 12,
-  height: 75,
+    name: "Imperial Jade Dragon Pendant",
+    color: "Emerald Green",
+    weight: 42.5,
+    length: 58,
+    depth: 12,
+    height: 75,
 
-  importDate: "2025-01-12T00:00:00.000Z",
-  importId: "IMP-2025-TH-7781",
-  fromCompanyId: "company-7788",
+    importDate: "2025-01-12T00:00:00.000Z",
+    importId: "IMP-2025-TH-7781",
+    fromCompanyId: "company-7788",
 
-  visibility: "PRIVATE", // PUBLIC | PRIVATE | RESTRICTED
-  visibilityNote: "Reserved for VIP preview event",
+    visibility: "PRIVATE", // PUBLIC | PRIVATE | RESTRICTED
+    visibilityNote: "Reserved for VIP preview event",
 
-  tier: "PREMIUM", // STANDARD | PREMIUM | EXCLUSIVE
-  status: "AVAILABLE", // AVAILABLE | RESERVED | SOLD | TRANSFER_PENDING
+    tier: "PREMIUM", // STANDARD | PREMIUM | EXCLUSIVE
+    status: "AVAILABLE", // AVAILABLE | RESERVED | SOLD | TRANSFER_PENDING
 
-  minCustomerTier: "VIP", // REGULAR | VIP | ELITE
+    minCustomerTier: "VIP", // REGULAR | VIP | ELITE
 
-  sourceType: "OWNED", // OWNED | CONSIGNMENT
+    sourceType: "OWNED", // OWNED | CONSIGNMENT
 
-  consignmentAgreementId: null,
-  consignmentAgreement: null,
+    consignmentAgreementId: null,
+    consignmentAgreement: null,
 
-  isArchived: false,
-  archivedAt: null,
+    isArchived: false,
+    archivedAt: null,
 
-  submittedByUserId: "user-9012",
-  updatedByUserId: "user-9012",
+    submittedByUserId: "user-9012",
+    updatedByUserId: "user-9012",
 
-  createdAt: "2025-01-12T09:21:00.000Z",
-  updatedAt: "2025-02-01T14:12:00.000Z",
+    createdAt: "2025-01-12T09:21:00.000Z",
+    updatedAt: "2025-02-01T14:12:00.000Z",
 
-  // -------------------------
-  // Media
-  // -------------------------
-  media: [
-    {
-      id: "media-1",
-      type: "IMAGE", // IMAGE | VIDEO
-      url: "/images/img1.png",
-      isPrimary: true,
-      createdAt: "2025-01-12T09:30:00.000Z",
-    },
-    {
-      id: "media-2",
-      type: "IMAGE",
-      url: "/images/img2.png",
-      isPrimary: false,
-      createdAt: "2025-01-12T09:31:00.000Z",
-    },
-    {
-      id: "media-3",
-      type: "IMAGE",
-      url: "/images/img3.png",
-      isPrimary: false,
-      createdAt: "2025-01-12T09:31:00.000Z",
-    },
-    {
-      id: "media-4",
-      type: "VIDEO",
-      url: "/videos/hero-2.mp4",
-      isPrimary: false,
-      createdAt: "2025-01-12T09:32:00.000Z",
-    },
-    {
-      id: "media-5",
-      type: "VIDEO",
-      url: "/videos/hero-3.mp4",
-      isPrimary: false,
-      createdAt: "2025-01-12T09:32:00.000Z",
-    },
-  ],
-  // -------------------------
-  // Current Ownership
-  // -------------------------
-  currentOwnershipId: "ownership-1",
-  currentOwnership: {
-    id: "ownership-1",
-    ownerId: "customer-5521",
-    acquiredAt: "2025-01-15T10:00:00.000Z",
-    ownershipType: "DIRECT_PURCHASE",
-    createdAt: "2025-01-15T10:00:00.000Z",
-  },
-
-  // -------------------------
-  // Ownership History
-  // -------------------------
-  ownershipHistory: [
-    {
+    // -------------------------
+    // Media
+    // -------------------------
+    media: [
+      {
+        id: "media-1",
+        type: "IMAGE", // IMAGE | VIDEO
+        url: "/images/img1.png",
+        isPrimary: true,
+        createdAt: "2025-01-12T09:30:00.000Z",
+      },
+      {
+        id: "media-2",
+        type: "IMAGE",
+        url: "/images/img2.png",
+        isPrimary: false,
+        createdAt: "2025-01-12T09:31:00.000Z",
+      },
+      {
+        id: "media-3",
+        type: "IMAGE",
+        url: "/images/img3.png",
+        isPrimary: false,
+        createdAt: "2025-01-12T09:31:00.000Z",
+      },
+      {
+        id: "media-4",
+        type: "VIDEO",
+        url: "/videos/hero-2.mp4",
+        isPrimary: false,
+        createdAt: "2025-01-12T09:32:00.000Z",
+      },
+      {
+        id: "media-5",
+        type: "VIDEO",
+        url: "/videos/hero-3.mp4",
+        isPrimary: false,
+        createdAt: "2025-01-12T09:32:00.000Z",
+      },
+    ],
+    // -------------------------
+    // Current Ownership
+    // -------------------------
+    currentOwnershipId: "ownership-1",
+    currentOwnership: {
       id: "ownership-1",
       ownerId: "customer-5521",
+      ownerName: "Jade Palace Pt Co LTD",
       acquiredAt: "2025-01-15T10:00:00.000Z",
-      releasedAt: null,
+      ownershipType: "DIRECT_PURCHASE",
+      createdAt: "2025-01-15T10:00:00.000Z",
     },
-  ],
 
-  // -------------------------
-  // Access Control List
-  // -------------------------
-  accessList: [
-    {
-      id: "access-1",
-      userId: "user-elite-1",
-      grantedAt: "2025-01-13T08:00:00.000Z",
+    // -------------------------
+    // Ownership History
+    // -------------------------
+    ownershipHistory: [
+      {
+        id: "ownership-1",
+        ownerId: "customer-5521",
+        acquiredAt: "2025-01-15T10:00:00.000Z",
+        releasedAt: null,
+      },
+    ],
+
+    // -------------------------
+    // Access Control List
+    // -------------------------
+    accessList: [
+      {
+        id: "access-1",
+        userId: "user-elite-1",
+        grantedAt: "2025-01-13T08:00:00.000Z",
+      },
+    ],
+
+    // -------------------------
+    // Commission Policies
+    // -------------------------
+    commissionPolicies: [
+      {
+        id: "commission-1",
+        ratePercent: 8.5,
+        appliesTo: "SALE",
+        createdAt: "2025-01-12T09:25:00.000Z",
+      },
+    ],
+
+    // -------------------------
+    // Inventory Requests
+    // -------------------------
+    inventoryRequests: [],
+
+    // -------------------------
+    // Sales
+    // -------------------------
+    sales: [],
+
+    // -------------------------
+    // Appointment Items
+    // -------------------------
+    appointmentItems: [],
+
+    // -------------------------
+    // Possessions
+    // -------------------------
+    possessions: [],
+
+    // -------------------------
+    // Auth Cards
+    // -------------------------
+    authCards: [
+      {
+        id: "auth-1",
+        serialNumber: "AUTH-DRAGON-0001",
+        issuedAt: "2025-01-12T09:40:00.000Z",
+      },
+    ],
+
+    // -------------------------
+    // Ownership Claims
+    // -------------------------
+    ownershipClaims: [],
+
+    // -------------------------
+    // Ownership Transfers
+    // -------------------------
+    ownershipTransfers: [],
+
+    // -------------------------
+    // Ownership OTPs
+    // -------------------------
+    ownershipOtps: [],
+
+    certificate: {
+      id: "cert-7b92a11f-22c4-4f21-bb9e-019ac73f8801",
+
+      // Public permanent PDF URL (recommended)
+      fileUrl:
+        "https://cdn.jadepalacept.com/certificates/2025/CERT-JP-2025-PHOENIX-0002.pdf",
+
+      // Optional signed URL if using private storage
+      // fileUrl: "https://s3.amazonaws.com/jadepalace-private/certificates/CERT-JP-2025-PHOENIX-0002.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=XXXX",
+
+      fileType: "PDF",
+      fileSize: 284391, // in bytes
+
+      serialNumber: "CERT-JP-2025-PHOENIX-0002",
+      registeredAt: "2025-02-10T09:20:00.000Z",
+
+      issuedBy: "Jade Palace Pt Co LTD",
+      authenticatedBy: "Dr. S PAW",
+
+      gemGrade: "Grade A — Natural Nephrite",
+      origin: "Myanmar, Burma",
+
+      currentHolder: "Jade Palace Pt Co LTD",
+      holderStatus: "In Company Inventory",
+      status: "verified",
+
+      holderNote: "This item has not been sold to any customer yet.",
+
+      verificationUrl:
+        "https://jadepalacept.com/verify/CERT-JP-2025-PHOENIX-0002",
+
+      qrCodeUrl:
+        "https://cdn.jadepalacept.com/qrcodes/CERT-JP-2025-PHOENIX-0002.png",
+
+      checksum:
+        "sha256-b6e7c4d8e92a9a72f91e3b2d4f2b4d68a19dbe39f9b1234e567890abcdef1234",
+
+      createdAt: "2025-02-10T09:20:00.000Z",
+      updatedAt: "2025-02-10T09:20:00.000Z",
     },
-  ],
+  },
+  {
+    id: "e8f4d332-2a55-4e8f-b7a9-66c1aa912244",
+    sku: "JDE-IMP-2025-0012",
 
-  // -------------------------
-  // Commission Policies
-  // -------------------------
-  commissionPolicies: [
-    {
-      id: "commission-1",
-      ratePercent: 8.5,
-      appliesTo: "SALE",
-      createdAt: "2025-01-12T09:25:00.000Z",
+    name: "Emerald Jade Guanyin Carving",
+    color: "Emerald Green",
+    weight: 42.5,
+    length: 58,
+    depth: 12,
+    height: 75,
+
+    importDate: "2025-01-12T00:00:00.000Z",
+    importId: "IMP-2025-TH-7781",
+    fromCompanyId: "company-7788",
+
+    visibility: "PRIVATE", // PUBLIC | PRIVATE | RESTRICTED
+    visibilityNote: "Reserved for VIP preview event",
+
+    tier: "PREMIUM", // STANDARD | PREMIUM | EXCLUSIVE
+    status: "AVAILABLE", // AVAILABLE | RESERVED | SOLD | TRANSFER_PENDING
+
+    minCustomerTier: "VIP", // REGULAR | VIP | ELITE
+
+    sourceType: "OWNED", // OWNED | CONSIGNMENT
+
+    consignmentAgreementId: null,
+    consignmentAgreement: null,
+
+    isArchived: false,
+    archivedAt: null,
+
+    submittedByUserId: "user-9012",
+    updatedByUserId: "user-9012",
+
+    createdAt: "2025-01-12T09:21:00.000Z",
+    updatedAt: "2025-02-01T14:12:00.000Z",
+
+    // -------------------------
+    // Media
+    // -------------------------
+    media: [
+      {
+        id: "media-a1",
+        type: "IMAGE",
+        url: "/images/img1.png",
+        isPrimary: true,
+        createdAt: "2025-02-10T09:15:00.000Z",
+      },
+      {
+        id: "media-a2",
+        type: "IMAGE",
+        url: "/images/bracelet.png",
+        isPrimary: false,
+        createdAt: "2025-02-10T09:16:00.000Z",
+      },
+      {
+        id: "media-a3",
+        type: "IMAGE",
+        url: "/images/earring.png",
+        isPrimary: true,
+        createdAt: "2025-02-10T09:15:00.000Z",
+      },
+      {
+        id: "media-a4",
+        type: "IMAGE",
+        url: "/images/necklace.png",
+        isPrimary: false,
+        createdAt: "2025-02-10T09:16:00.000Z",
+      },
+      {
+        id: "media-a5",
+        type: "VIDEO",
+        url: "/videos/hero-2.mp4",
+        isPrimary: false,
+        createdAt: "2025-02-10T09:17:00.000Z",
+      },
+      {
+        id: "media-a6",
+        type: "VIDEO",
+        url: "/videos/hero-3.mp4",
+        isPrimary: false,
+        createdAt: "2025-02-10T09:17:00.000Z",
+      },
+    ],
+    // -------------------------
+    // Current Ownership
+    // -------------------------
+    currentOwnershipId: "ownership-1",
+    currentOwnership: {
+      id: "ownership-1",
+      ownerId: "customer-5521",
+      ownerName: "Jade Palace Pt Co LTD",
+      acquiredAt: "2025-01-15T10:00:00.000Z",
+      ownershipType: "DIRECT_PURCHASE",
+      createdAt: "2025-01-15T10:00:00.000Z",
     },
-  ],
 
-  // -------------------------
-  // Inventory Requests
-  // -------------------------
-  inventoryRequests: [],
+    // -------------------------
+    // Ownership History
+    // -------------------------
+    ownershipHistory: [
+      {
+        id: "ownership-1",
+        ownerId: "customer-5521",
+        acquiredAt: "2025-01-15T10:00:00.000Z",
+        releasedAt: null,
+      },
+    ],
 
-  // -------------------------
-  // Sales
-  // -------------------------
-  sales: [],
+    // -------------------------
+    // Access Control List
+    // -------------------------
+    accessList: [
+      {
+        id: "access-1",
+        userId: "user-elite-1",
+        grantedAt: "2025-01-13T08:00:00.000Z",
+      },
+    ],
 
-  // -------------------------
-  // Appointment Items
-  // -------------------------
-  appointmentItems: [],
+    // -------------------------
+    // Commission Policies
+    // -------------------------
+    commissionPolicies: [
+      {
+        id: "commission-1",
+        ratePercent: 8.5,
+        appliesTo: "SALE",
+        createdAt: "2025-01-12T09:25:00.000Z",
+      },
+    ],
 
-  // -------------------------
-  // Possessions
-  // -------------------------
-  possessions: [],
+    // -------------------------
+    // Inventory Requests
+    // -------------------------
+    inventoryRequests: [],
 
-  // -------------------------
-  // Auth Cards
-  // -------------------------
-  authCards: [
-    {
-      id: "auth-1",
-      serialNumber: "AUTH-DRAGON-0001",
-      issuedAt: "2025-01-12T09:40:00.000Z",
+    // -------------------------
+    // Sales
+    // -------------------------
+    sales: [],
+
+    // -------------------------
+    // Appointment Items
+    // -------------------------
+    appointmentItems: [],
+
+    // -------------------------
+    // Possessions
+    // -------------------------
+    possessions: [],
+
+    // -------------------------
+    // Auth Cards
+    // -------------------------
+    authCards: [
+      {
+        id: "auth-1",
+        serialNumber: "AUTH-DRAGON-0001",
+        issuedAt: "2025-01-12T09:40:00.000Z",
+      },
+    ],
+
+    // -------------------------
+    // Ownership Claims
+    // -------------------------
+    ownershipClaims: [],
+
+    // -------------------------
+    // Ownership Transfers
+    // -------------------------
+    ownershipTransfers: [],
+
+    // -------------------------
+    // Ownership OTPs
+    // -------------------------
+    ownershipOtps: [],
+    certificate: {
+      id: "cert-7b92a11f-22c4-4f21-bb9e-019ac73f8801",
+
+      // Public permanent PDF URL (recommended)
+      fileUrl:
+        "https://cdn.jadepalacept.com/certificates/2025/CERT-JP-2025-PHOENIX-0002.pdf",
+
+      // Optional signed URL if using private storage
+      // fileUrl: "https://s3.amazonaws.com/jadepalace-private/certificates/CERT-JP-2025-PHOENIX-0002.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=XXXX",
+
+      fileType: "PDF",
+      fileSize: 284391, // in bytes
+
+      serialNumber: "CERT-JP-2025-PHOENIX-0002",
+      registeredAt: "2025-02-10T09:20:00.000Z",
+
+      issuedBy: "Jade Palace Pt Co LTD",
+      authenticatedBy: "Dr. S PAW",
+
+      gemGrade: "Grade A — Natural Nephrite",
+      origin: "Myanmar, Burma",
+
+      currentHolder: "Jade Palace Pt Co LTD",
+      holderStatus: "In Company Inventory",
+      status: "verified",
+
+      holderNote: "This item has not been sold to any customer yet.",
+
+      verificationUrl:
+        "https://jadepalacept.com/verify/CERT-JP-2025-PHOENIX-0002",
+
+      qrCodeUrl:
+        "https://cdn.jadepalacept.com/qrcodes/CERT-JP-2025-PHOENIX-0002.png",
+
+      checksum:
+        "sha256-b6e7c4d8e92a9a72f91e3b2d4f2b4d68a19dbe39f9b1234e567890abcdef1234",
+
+      createdAt: "2025-02-10T09:20:00.000Z",
+      updatedAt: "2025-02-10T09:20:00.000Z",
     },
-  ],
-
-  // -------------------------
-  // Ownership Claims
-  // -------------------------
-  ownershipClaims: [],
-
-  // -------------------------
-  // Ownership Transfers
-  // -------------------------
-  ownershipTransfers: [],
-
-  // -------------------------
-  // Ownership OTPs
-  // -------------------------
-  ownershipOtps: [],
-};
+  },
+];
 
 export const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", {
