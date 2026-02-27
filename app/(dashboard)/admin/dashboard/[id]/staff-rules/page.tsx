@@ -205,16 +205,16 @@ const formatBranchLabel = (branch: BranchOption) => {
 /* ------------------------------------------------------------------ */
 
 const statusBadgeClass: Record<string, string> = {
-  PENDING: "bg-blue-100 text-blue-700",
-  EXPIRED: "bg-gray-200 text-gray-500",
-  CLAIMED: "bg-emerald-100 text-emerald-700",
-  REVOKED: "bg-red-100 text-red-600",
+  PENDING: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
+  EXPIRED: "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400",
+  CLAIMED: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300",
+  REVOKED: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
 };
 
 const roleBadgeClass: Record<string, string> = {
-  ADMIN: "bg-red-100 text-red-700",
-  MANAGER: "bg-amber-100 text-amber-700",
-  SALES: "bg-emerald-100 text-emerald-700",
+  ADMIN: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+  MANAGER: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300",
+  SALES: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300",
 };
 
 /* ------------------------------------------------------------------ */
@@ -617,7 +617,7 @@ export default function AdminStaffRules() {
   }, {});
 
   const inputClass =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400";
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
 
   return (
     <div className="space-y-5">
@@ -645,7 +645,7 @@ export default function AdminStaffRules() {
       />
 
       {staffRuleManageBlocked && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs text-amber-700 dark:text-amber-300">
           {staffRuleManageTooltip}
         </div>
       )}
@@ -663,12 +663,12 @@ export default function AdminStaffRules() {
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 isActive
                   ? "bg-emerald-600 text-white"
-                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               }`}
             >
               {tab.charAt(0) + tab.slice(1).toLowerCase()}
               {!loading && (
-                <span className={`ml-1.5 ${isActive ? "text-emerald-200" : "text-gray-400"}`}>
+                <span className={`ml-1.5 ${isActive ? "text-emerald-200" : "text-gray-400 dark:text-gray-500"}`}>
                   {count}
                 </span>
               )}
@@ -679,7 +679,7 @@ export default function AdminStaffRules() {
           type="button"
           onClick={() => void loadRules()}
           disabled={loading}
-          className="ml-1 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
+          className="ml-1 p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
           title="Refresh"
         >
           <IconRefresh />
@@ -688,7 +688,7 @@ export default function AdminStaffRules() {
 
       {/* -------- Revoke error banner -------- */}
       {revokeError && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg text-xs text-red-700 dark:text-red-300">
           <IconWarning />
           {revokeError}
           <button type="button" onClick={() => setRevokeError("")} className="ml-auto text-red-400 hover:text-red-600">
@@ -701,14 +701,14 @@ export default function AdminStaffRules() {
       {loading && (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5 animate-pulse">
               <div className="flex items-center gap-2 mb-3">
-                <div className="h-5 w-16 bg-gray-200 rounded" />
-                <div className="h-5 w-20 bg-gray-100 rounded" />
-                <div className="h-5 w-16 bg-gray-100 rounded-full" />
+                <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+                <div className="h-5 w-20 bg-gray-100 dark:bg-gray-800 rounded" />
+                <div className="h-5 w-16 bg-gray-100 dark:bg-gray-800 rounded-full" />
               </div>
-              <div className="h-4 w-3/4 bg-gray-100 rounded mb-2" />
-              <div className="h-3 w-1/2 bg-gray-100 rounded" />
+              <div className="h-4 w-3/4 bg-gray-100 dark:bg-gray-800 rounded mb-2" />
+              <div className="h-3 w-1/2 bg-gray-100 dark:bg-gray-800 rounded" />
             </div>
           ))}
         </div>
@@ -716,15 +716,15 @@ export default function AdminStaffRules() {
 
       {/* -------- Error -------- */}
       {!loading && error && (
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-12 text-center">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-5 py-12 text-center">
           <div className="text-red-300 mx-auto mb-3">
             <IconWarning />
           </div>
-          <p className="text-sm text-red-600 font-medium">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
           <button
             type="button"
             onClick={() => void loadRules()}
-            className="mt-3 px-4 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+            className="mt-3 px-4 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 transition-colors"
           >
             Retry
           </button>
@@ -733,12 +733,12 @@ export default function AdminStaffRules() {
 
       {/* -------- Empty state -------- */}
       {!loading && !error && rules.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-16 text-center">
-          <div className="mx-auto mb-3 w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 text-gray-400">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-5 py-16 text-center">
+          <div className="mx-auto mb-3 w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500">
             <IconUser />
           </div>
-          <p className="text-sm text-gray-500 font-medium">No rules found</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">No rules found</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             {activeTab === "ALL"
               ? "Create a new rule to get started."
               : `No ${activeTab.toLowerCase()} rules at the moment.`}
@@ -757,7 +757,7 @@ export default function AdminStaffRules() {
             return (
               <div
                 key={rule.id}
-                className="bg-white rounded-xl border border-gray-200 overflow-hidden transition-shadow hover:shadow-sm"
+                className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden transition-shadow hover:shadow-sm"
               >
                 {/* Main row */}
                 <div className="p-4 sm:p-5">
@@ -767,18 +767,18 @@ export default function AdminStaffRules() {
                       {/* Badges row */}
                       <div className="flex flex-wrap items-center gap-1.5 mb-2">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${roleBadgeClass[rule.role] || "bg-gray-100 text-gray-700"}`}
+                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${roleBadgeClass[rule.role] || "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`}
                         >
                           {rule.role}
                         </span>
                         {rule.branch && (
-                          <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[11px] font-medium">
+                          <span className="inline-block px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
                             {rule.branch.code ? `${rule.branch.code} – ` : ""}
                             {rule.branch.name || "Unknown"}
                           </span>
                         )}
                         <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${statusBadgeClass[rule.status] || "bg-gray-200 text-gray-500"}`}
+                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${statusBadgeClass[rule.status] || "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"}`}
                         >
                           {rule.status}
                         </span>
@@ -790,27 +790,27 @@ export default function AdminStaffRules() {
                       </div>
 
                       {/* Contact info */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-800">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-800 dark:text-gray-200">
                         <span className="font-medium">{rule.email || "-"}</span>
-                        <span className="text-gray-400">{rule.phone || "-"}</span>
+                        <span className="text-gray-400 dark:text-gray-500">{rule.phone || "-"}</span>
                         {rule.displayName && (
-                          <span className="text-gray-500">{rule.displayName}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{rule.displayName}</span>
                         )}
                       </div>
 
                       {/* Meta row */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-gray-400">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                         <span>Created {formatDateTime(rule.createdAt)}</span>
                         {rule.createdAt && (
                           <span className="text-gray-300">{formatRelativeTime(rule.createdAt)}</span>
                         )}
                         {rule.expiresAt && (
-                          <span className="text-amber-500">Expires {formatDateTime(rule.expiresAt)}</span>
+                          <span className="text-amber-500 dark:text-amber-400">Expires {formatDateTime(rule.expiresAt)}</span>
                         )}
                       </div>
 
                       {rule.note && (
-                        <p className="text-xs text-gray-500 mt-2 italic">&ldquo;{rule.note}&rdquo;</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">&ldquo;{rule.note}&rdquo;</p>
                       )}
                     </div>
 
@@ -820,7 +820,7 @@ export default function AdminStaffRules() {
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : rule.id)}
-                        className="sm:hidden p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                        className="sm:hidden p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                       >
                         <svg
                           className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
@@ -839,7 +839,7 @@ export default function AdminStaffRules() {
                           onClick={() => void onRevokeRule(rule.id)}
                           disabled={isRevoking || staffRuleManageBlocked}
                           title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
-                          className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {isRevoking ? "Revoking..." : "Revoke"}
                         </button>
@@ -848,77 +848,77 @@ export default function AdminStaffRules() {
                   </div>
 
                   {/* Desktop detail (always visible on sm+) */}
-                  <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100">
+                  <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/40">
                     <div>
-                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Line ID</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{rule.lineId || "-"}</p>
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Line ID</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{rule.lineId || "-"}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Created By</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{rule.createdByUser?.email || rule.createdByUserId || "-"}</p>
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Created By</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{rule.createdByUser?.email || rule.createdByUserId || "-"}</p>
                     </div>
                     {rule.claimedAt && (
                       <div>
-                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Claimed</p>
-                        <p className="text-xs text-gray-600 mt-0.5">
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Claimed</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                           {formatDateTime(rule.claimedAt)}
                           {rule.claimedByUser?.email && (
-                            <span className="text-gray-400 ml-1">by {rule.claimedByUser.email}</span>
+                            <span className="text-gray-400 dark:text-gray-500 ml-1">by {rule.claimedByUser.email}</span>
                           )}
                         </p>
                       </div>
                     )}
                     {rule.revokedAt && (
                       <div>
-                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Revoked</p>
-                        <p className="text-xs text-gray-600 mt-0.5">
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Revoked</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                           {formatDateTime(rule.revokedAt)}
                           {rule.revokedByUser?.email && (
-                            <span className="text-gray-400 ml-1">by {rule.revokedByUser.email}</span>
+                            <span className="text-gray-400 dark:text-gray-500 ml-1">by {rule.revokedByUser.email}</span>
                           )}
                         </p>
                       </div>
                     )}
                     <div>
-                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Rule ID</p>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5 truncate">{rule.id}</p>
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rule ID</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5 truncate">{rule.id}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Mobile expanded detail */}
                 {isExpanded && (
-                  <div className="sm:hidden px-4 pb-4 space-y-2.5 border-t border-gray-100 pt-3">
+                  <div className="sm:hidden px-4 pb-4 space-y-2.5 border-t border-gray-100 dark:border-gray-700/40 pt-3">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Line ID</p>
-                        <p className="text-xs text-gray-600 mt-0.5">{rule.lineId || "-"}</p>
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Line ID</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{rule.lineId || "-"}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Created By</p>
-                        <p className="text-xs text-gray-600 mt-0.5 break-all">{rule.createdByUser?.email || rule.createdByUserId || "-"}</p>
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Created By</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 break-all">{rule.createdByUser?.email || rule.createdByUserId || "-"}</p>
                       </div>
                       {rule.claimedAt && (
                         <div className="col-span-2">
-                          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Claimed</p>
-                          <p className="text-xs text-gray-600 mt-0.5">
+                          <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Claimed</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                             {formatDateTime(rule.claimedAt)}
-                            {rule.claimedByUser?.email && <span className="text-gray-400 ml-1">by {rule.claimedByUser.email}</span>}
+                            {rule.claimedByUser?.email && <span className="text-gray-400 dark:text-gray-500 ml-1">by {rule.claimedByUser.email}</span>}
                           </p>
                         </div>
                       )}
                       {rule.revokedAt && (
                         <div className="col-span-2">
-                          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Revoked</p>
-                          <p className="text-xs text-gray-600 mt-0.5">
+                          <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Revoked</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                             {formatDateTime(rule.revokedAt)}
-                            {rule.revokedByUser?.email && <span className="text-gray-400 ml-1">by {rule.revokedByUser.email}</span>}
+                            {rule.revokedByUser?.email && <span className="text-gray-400 dark:text-gray-500 ml-1">by {rule.revokedByUser.email}</span>}
                           </p>
                         </div>
                       )}
                       <div className="col-span-2">
-                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Rule ID</p>
-                        <p className="text-xs text-gray-500 font-mono mt-0.5 break-all">{rule.id}</p>
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rule ID</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5 break-all">{rule.id}</p>
                       </div>
                     </div>
                   </div>
@@ -945,16 +945,16 @@ export default function AdminStaffRules() {
           />
 
           {/* Panel */}
-          <div className="relative w-full max-w-lg mx-4 sm:mx-auto mt-16 sm:mt-0 bg-white rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="relative w-full max-w-lg mx-4 sm:mx-auto mt-16 sm:mt-0 bg-white dark:bg-gray-900 rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-              <h3 className="text-base font-semibold text-gray-900">New Onboarding Rule</h3>
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between shrink-0">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">New Onboarding Rule</h3>
               <button
                 type="button"
                 onClick={() => {
                   if (!creating) setFormOpen(false);
                 }}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <IconX />
               </button>
@@ -964,7 +964,7 @@ export default function AdminStaffRules() {
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
               {/* Role */}
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Role <span className="text-red-400">*</span>
                 </label>
                 <div className="flex gap-2">
@@ -988,8 +988,8 @@ export default function AdminStaffRules() {
                       }}
                       className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-colors ${
                         formRole === role
-                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                          : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                       }`}
                     >
                       {role}
@@ -1000,12 +1000,12 @@ export default function AdminStaffRules() {
 
               {/* Permission Configuration */}
               {formRole === "ADMIN" && (
-                <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/60 space-y-3">
-                  <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/50 space-y-3">
+                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Permission Configuration
                   </p>
                   <div>
-                    <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                       Visibility Role
                     </label>
                     <select
@@ -1022,14 +1022,14 @@ export default function AdminStaffRules() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                       Capabilities
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {ADMIN_CAPABILITY_OPTIONS.map((option) => (
                         <label
                           key={option.key}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 bg-white cursor-pointer"
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 cursor-pointer"
                         >
                           <input
                             type="checkbox"
@@ -1040,9 +1040,9 @@ export default function AdminStaffRules() {
                                 [option.key]: e.target.checked,
                               }))
                             }
-                            className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500"
                           />
-                          <span className="text-xs text-gray-700">{option.label}</span>
+                          <span className="text-xs text-gray-700 dark:text-gray-300">{option.label}</span>
                         </label>
                       ))}
                     </div>
@@ -1051,14 +1051,14 @@ export default function AdminStaffRules() {
               )}
 
               {formRole === "MANAGER" && (
-                <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/60 space-y-3">
-                  <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/50 space-y-3">
+                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Permission Configuration
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                      <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         Manager Type
                       </label>
                       <select
@@ -1073,14 +1073,14 @@ export default function AdminStaffRules() {
                         ))}
                       </select>
                       {formManagerType === "BRANCH_ADMIN" && (
-                        <p className="text-[10px] text-emerald-700 mt-1.5">
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-1.5">
                           Use existing branch selection or provide a new branch name below.
                         </p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                      <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         Visibility Role
                       </label>
                       <select
@@ -1098,7 +1098,7 @@ export default function AdminStaffRules() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                       Capabilities
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1109,8 +1109,8 @@ export default function AdminStaffRules() {
                             key={option.key}
                             className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${
                               disabled
-                                ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
-                                : "border-gray-200 bg-white cursor-pointer"
+                                ? "border-gray-200 dark:border-gray-700/60 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 cursor-pointer"
                             }`}
                           >
                             <input
@@ -1125,7 +1125,7 @@ export default function AdminStaffRules() {
                                   }),
                                 )
                               }
-                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                              className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500"
                             />
                             <span className="text-xs">{option.label}</span>
                           </label>
@@ -1133,13 +1133,13 @@ export default function AdminStaffRules() {
                       })}
                     </div>
                     {managerTypeRequiresBranchAdminNote && (
-                      <p className="text-[10px] text-amber-600 mt-1.5">
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
                         Restrict, ban, and limit-subordinate capabilities are available only for
                         BRANCH_ADMIN manager type.
                       </p>
                     )}
                     {formManagerType === "STANDALONE" && (
-                      <p className="text-[10px] text-amber-600 mt-1.5">
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
                         Standalone capability profile is fixed by policy and cannot be edited.
                       </p>
                     )}
@@ -1150,7 +1150,7 @@ export default function AdminStaffRules() {
               {/* Email + Phone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                     Email <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -1162,7 +1162,7 @@ export default function AdminStaffRules() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                     Phone <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -1177,7 +1177,7 @@ export default function AdminStaffRules() {
 
               {/* Display Name */}
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Display Name {needsDisplayName && <span className="text-red-400">*</span>}
                 </label>
                 <input
@@ -1188,13 +1188,13 @@ export default function AdminStaffRules() {
                   className={inputClass}
                 />
                 {needsDisplayName && (
-                  <p className="text-[10px] text-amber-600 mt-1">Required for SALES role.</p>
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Required for SALES role.</p>
                 )}
               </div>
 
               {/* Line ID */}
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Line ID
                 </label>
                 <input
@@ -1209,13 +1209,13 @@ export default function AdminStaffRules() {
               {/* Branch */}
               {canSelectExistingBranch && (
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                     Branch {isBranchSelectionRequired && <span className="text-red-400">*</span>}
                   </label>
                   {branchesLoading ? (
-                    <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+                    <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
                   ) : activeBranches.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-2">No active branches available.</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-2">No active branches available.</p>
                   ) : (
                     <select
                       value={formBranchId}
@@ -1236,7 +1236,7 @@ export default function AdminStaffRules() {
               {/* Branch Name (BRANCH_ADMIN only, admin route) */}
               {canInputBranchName && (
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                     New Branch Name
                   </label>
                   <input
@@ -1246,7 +1246,7 @@ export default function AdminStaffRules() {
                     placeholder="Create new branch (leave empty to use selected branch)"
                     className={inputClass}
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                     For BRANCH_ADMIN on admin route, provide either branch selection or new branch
                     name, not both.
                   </p>
@@ -1266,14 +1266,14 @@ export default function AdminStaffRules() {
                       checked={formSetAsPrimaryManager}
                       disabled={!canSetPrimaryManager}
                       onChange={(e) => setFormSetAsPrimaryManager(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500"
                     />
-                    <span className={canSetPrimaryManager ? "text-sm text-gray-700" : "text-sm text-gray-400"}>
+                    <span className={canSetPrimaryManager ? "text-sm text-gray-700 dark:text-gray-300" : "text-sm text-gray-400 dark:text-gray-500"}>
                       Set as primary manager for the branch
                     </span>
                   </label>
                   {managerTypeRequiresBranchAdminNote && (
-                    <p className="text-[10px] text-amber-600 mt-1.5">
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
                       Available only when manager type is BRANCH_ADMIN.
                     </p>
                   )}
@@ -1282,7 +1282,7 @@ export default function AdminStaffRules() {
 
               {/* Expires At */}
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Expires At
                 </label>
                 <input
@@ -1291,12 +1291,12 @@ export default function AdminStaffRules() {
                   onChange={(e) => setFormExpiresAt(e.target.value)}
                   className={inputClass}
                 />
-                <p className="text-[10px] text-gray-400 mt-1">Leave empty for no expiration.</p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Leave empty for no expiration.</p>
               </div>
 
               {/* Note */}
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Note
                 </label>
                 <textarea
@@ -1310,22 +1310,22 @@ export default function AdminStaffRules() {
 
               {/* Error */}
               {createError && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <span className="text-red-500 shrink-0 mt-0.5"><IconWarning /></span>
-                  <p className="text-xs text-red-700 break-words">{createError}</p>
+                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg">
+                  <span className="text-red-500 dark:text-red-400 shrink-0 mt-0.5"><IconWarning /></span>
+                  <p className="text-xs text-red-700 dark:text-red-300 break-words">{createError}</p>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end gap-2 shrink-0 bg-gray-50/50">
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2 shrink-0 bg-gray-50/50 dark:bg-gray-800/40">
               <button
                 type="button"
                 onClick={() => {
                   if (!creating) setFormOpen(false);
                 }}
                 disabled={creating}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>

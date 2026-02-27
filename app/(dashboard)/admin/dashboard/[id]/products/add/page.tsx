@@ -170,7 +170,7 @@ const parseOptionalNumber = (value: string, fieldLabel: string) => {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+    <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700/60 pb-2 mb-4">
       {children}
     </h2>
   );
@@ -579,7 +579,7 @@ export default function AddProductPage() {
   };
 
   const inputCls =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
 
   return (
     <div className="space-y-6">
@@ -589,7 +589,7 @@ export default function AddProductPage() {
         action={
           <Link
             href={productsPath}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Back to Products
           </Link>
@@ -597,30 +597,30 @@ export default function AddProductPage() {
       />
 
       {productCreateBlocked && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm text-amber-700 dark:text-amber-300">
           {productCreateTooltip}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
 
         {lookupError && (
-          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm text-amber-700 dark:text-amber-300">
             {lookupError}
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Basic Information</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">
-                SKU <span className="text-red-500">*</span>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                SKU <span className="text-red-500 dark:text-red-400">*</span>
               </label>
               <input
                 type="text"
@@ -631,7 +631,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Name</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -641,7 +641,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Color</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Color</label>
               <input
                 type="text"
                 value={form.color}
@@ -653,11 +653,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Buy Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
               <input
                 type="number"
                 min="0"
@@ -669,7 +669,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Min Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Min Price</label>
               <input
                 type="number"
                 min="0"
@@ -681,7 +681,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Max Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Max Price</label>
               <input
                 type="number"
                 min="0"
@@ -695,24 +695,24 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Commission Allocations</SectionHeading>
 
           <div className="flex items-center justify-between gap-3 mb-4">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Split projected commission by branch or manager/admin user.
             </p>
             <button
               type="button"
               onClick={addAllocation}
-              className="px-3 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors"
             >
               + Add Allocation
             </button>
           </div>
 
           {allocations.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">
+            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 px-4 py-5 text-sm text-gray-500 dark:text-gray-400">
               No allocations yet. Add rows if this product needs partner commission splits.
             </div>
           ) : (
@@ -724,13 +724,13 @@ export default function AddProductPage() {
                   : false;
 
                 return (
-                  <div key={row.id} className="rounded-lg border border-gray-200 p-4 space-y-3">
+                  <div key={row.id} className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-gray-700">Allocation #{index + 1}</h3>
+                      <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">Allocation #{index + 1}</h3>
                       <button
                         type="button"
                         onClick={() => removeAllocation(row.id)}
-                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                        className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700"
                       >
                         Remove
                       </button>
@@ -738,7 +738,7 @@ export default function AddProductPage() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
                       <div className="lg:col-span-2">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Target</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Target</label>
                         <select
                           value={row.targetType}
                           onChange={(e) => {
@@ -760,7 +760,7 @@ export default function AddProductPage() {
 
                       {row.targetType === "BRANCH" ? (
                         <div className="lg:col-span-4">
-                          <label className="block text-[12px] text-gray-700 mb-1.5">Branch</label>
+                          <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Branch</label>
                           <select
                             value={row.branchId}
                             onChange={(e) => updateAllocation(row.id, { branchId: e.target.value })}
@@ -778,7 +778,7 @@ export default function AddProductPage() {
                       ) : (
                         <>
                           <div className="lg:col-span-4">
-                            <label className="block text-[12px] text-gray-700 mb-1.5">
+                            <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">
                               Manager Branch
                             </label>
                             <select
@@ -808,7 +808,7 @@ export default function AddProductPage() {
                           </div>
 
                           <div className="lg:col-span-3">
-                            <label className="block text-[12px] text-gray-700 mb-1.5">Manager</label>
+                            <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Manager</label>
                             <select
                               value={row.userId}
                               onChange={(e) => updateAllocation(row.id, { userId: e.target.value })}
@@ -827,7 +827,7 @@ export default function AddProductPage() {
                       )}
 
                       <div className="lg:col-span-2">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Rate (%)</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Rate (%)</label>
                         <input
                           type="number"
                           min="0"
@@ -841,7 +841,7 @@ export default function AddProductPage() {
                       </div>
 
                       <div className="lg:col-span-12">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Note</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Note</label>
                         <input
                           type="text"
                           value={row.note}
@@ -858,10 +858,10 @@ export default function AddProductPage() {
           )}
 
           <div className="mt-4 text-xs">
-            <span className="text-gray-500">Total allocated rate: </span>
+            <span className="text-gray-500 dark:text-gray-400">Total allocated rate: </span>
             <span
               className={
-                totalAllocationRate > 100 ? "text-red-600 font-semibold" : "text-gray-700 font-semibold"
+                totalAllocationRate > 100 ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-700 dark:text-gray-300 font-semibold"
               }
             >
               {totalAllocationRate.toFixed(2)}%
@@ -869,11 +869,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Dimensions &amp; Weight</SectionHeading>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Weight (g)</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Weight (g)</label>
               <input
                 type="number"
                 step="0.01"
@@ -884,7 +884,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Length (mm)</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Length (mm)</label>
               <input
                 type="number"
                 step="0.01"
@@ -895,7 +895,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Depth (mm)</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Depth (mm)</label>
               <input
                 type="number"
                 step="0.01"
@@ -906,7 +906,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Height (mm)</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Height (mm)</label>
               <input
                 type="number"
                 step="0.01"
@@ -919,11 +919,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Import Details</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Import Date</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Import Date</label>
               <input
                 type="date"
                 value={form.importDate}
@@ -932,7 +932,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Import ID</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Import ID</label>
               <input
                 type="text"
                 value={form.importId}
@@ -942,7 +942,7 @@ export default function AddProductPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">From Company ID</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">From Company ID</label>
               <input
                 type="text"
                 value={form.fromCompanyId}
@@ -954,11 +954,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Classification &amp; Visibility</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Visibility</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility</label>
               <select
                 value={form.visibility}
                 onChange={(e) => updateField("visibility", e.target.value)}
@@ -972,7 +972,7 @@ export default function AddProductPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Tier</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Tier</label>
               <select
                 value={form.tier}
                 onChange={(e) => updateField("tier", e.target.value)}
@@ -986,7 +986,7 @@ export default function AddProductPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Status</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
               <select
                 value={form.status}
                 onChange={(e) => updateField("status", e.target.value)}
@@ -1000,7 +1000,7 @@ export default function AddProductPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Min. Customer Tier</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Min. Customer Tier</label>
               <select
                 value={form.minCustomerTier}
                 onChange={(e) => updateField("minCustomerTier", e.target.value)}
@@ -1014,7 +1014,7 @@ export default function AddProductPage() {
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-[13px] text-gray-700 mb-1.5">Visibility Note</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility Note</label>
               <input
                 type="text"
                 value={form.visibilityNote}
@@ -1026,11 +1026,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Sourcing</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Source Type</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Source Type</label>
               <select
                 value={form.sourceType}
                 onChange={(e) => updateField("sourceType", e.target.value)}
@@ -1045,7 +1045,7 @@ export default function AddProductPage() {
             </div>
             {form.sourceType === "CONSIGNED" && (
               <div>
-                <label className="block text-[13px] text-gray-700 mb-1.5">
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
                   Consignment Agreement ID
                 </label>
                 <input
@@ -1060,16 +1060,16 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Public Media Upload</SectionHeading>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
             Use one public preset for customer-facing media. Thumbnail and video are required when
             uploading public media.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+              <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Public Visibility
               </label>
               <select
@@ -1087,7 +1087,7 @@ export default function AddProductPage() {
 
             {publicVisibilityPreset === "USER_TIER" && (
               <div>
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Min Customer Tier
                 </label>
                 <select
@@ -1107,7 +1107,7 @@ export default function AddProductPage() {
 
             {publicVisibilityPreset === "TARGETED_USER" && (
               <div className="md:col-span-2">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Target User IDs
                 </label>
                 <textarea
@@ -1122,8 +1122,8 @@ export default function AddProductPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Thumbnail Image</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Thumbnail Image</p>
               <MediaUploader
                 files={publicThumbnailFiles}
                 onChange={setPublicThumbnailFiles}
@@ -1135,8 +1135,8 @@ export default function AddProductPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Feature Video (Required)</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Feature Video (Required)</p>
               <MediaUploader
                 files={publicVideoFiles}
                 onChange={setPublicVideoFiles}
@@ -1148,8 +1148,8 @@ export default function AddProductPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">More Images</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">More Images</p>
               <MediaUploader
                 files={publicGalleryFiles}
                 onChange={setPublicGalleryFiles}
@@ -1161,8 +1161,8 @@ export default function AddProductPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Certificate File</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File</p>
               <MediaUploader
                 files={publicCertificateFiles}
                 onChange={setPublicCertificateFiles}
@@ -1176,14 +1176,14 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Role Based Media Upload</SectionHeading>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
             Upload internal media and restrict access to one role preset.
           </p>
 
           <div className="mb-4">
-            <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+            <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Role Visibility
             </label>
             <select
@@ -1212,7 +1212,7 @@ export default function AddProductPage() {
         <div className="flex items-center justify-end gap-3 pt-2">
           <Link
             href={productsPath}
-            className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </Link>

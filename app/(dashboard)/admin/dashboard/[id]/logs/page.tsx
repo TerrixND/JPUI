@@ -294,26 +294,26 @@ export default function AdminLogs() {
         description="Review admin audit events and manage audit log backups."
       />
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
           <input
             type="text"
             value={draftFilters.query}
             onChange={(e) => setDraftFilters((prev) => ({ ...prev, query: e.target.value }))}
             placeholder="Search message/action/target"
-            className="lg:col-span-2 px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="lg:col-span-2 px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
             value={draftFilters.actorId}
             onChange={(e) => setDraftFilters((prev) => ({ ...prev, actorId: e.target.value }))}
             placeholder="Actor ID"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <select
             value={draftFilters.action}
             onChange={(e) => setDraftFilters((prev) => ({ ...prev, action: e.target.value }))}
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             {actionOptions.map((action) => (
               <option key={action} value={action}>
@@ -325,13 +325,13 @@ export default function AdminLogs() {
             type="date"
             value={draftFilters.from}
             onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))}
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="date"
             value={draftFilters.to}
             onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))}
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
         </div>
 
@@ -347,21 +347,21 @@ export default function AdminLogs() {
             <button
               type="button"
               onClick={onResetFilters}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Reset
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Rows per page</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Rows per page</label>
             <select
               value={limit}
               onChange={(e) => {
                 setPage(1);
                 setLimit(Number(e.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
               }}
-              className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+              className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <option key={size} value={size}>
@@ -373,11 +373,11 @@ export default function AdminLogs() {
         </div>
       </div>
 
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-medium text-red-800">
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl p-4 space-y-3">
+        <p className="text-sm font-medium text-red-800 dark:text-red-200">
           Clear Audit Logs
         </p>
-        <p className="text-xs text-red-700">
+        <p className="text-xs text-red-700 dark:text-red-300">
           Clearing logs is irreversible. A backup file is generated before deletion.
         </p>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -386,7 +386,7 @@ export default function AdminLogs() {
             value={clearReason}
             onChange={(e) => setClearReason(e.target.value)}
             placeholder="Reason for clearing logs"
-            className="flex-1 px-3.5 py-2.5 text-sm bg-white border border-red-200 rounded-lg outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors"
+            className="flex-1 px-3.5 py-2.5 text-sm bg-white dark:bg-gray-900 border border-red-200 dark:border-red-700/50 rounded-lg outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors"
           />
           <button
             type="button"
@@ -397,26 +397,26 @@ export default function AdminLogs() {
             {clearing ? "Clearing..." : "Clear Audit Logs"}
           </button>
         </div>
-        {clearError && <p className="text-xs text-red-700">{clearError}</p>}
-        {clearMessage && <p className="text-xs text-emerald-700">{clearMessage}</p>}
+        {clearError && <p className="text-xs text-red-700 dark:text-red-300">{clearError}</p>}
+        {clearMessage && <p className="text-xs text-emerald-700 dark:text-emerald-300">{clearMessage}</p>}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Audit Logs</h2>
-          <p className="text-xs text-gray-500">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Audit Logs</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {currentPageStart}-{currentPageEnd} of {total}
           </p>
         </div>
         {auditLoading ? (
-          <div className="px-5 py-8 text-sm text-gray-500">Loading audit logs...</div>
+          <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading audit logs...</div>
         ) : auditError ? (
-          <div className="px-5 py-8 text-sm text-red-600">{auditError}</div>
+          <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{auditError}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">Time</th>
                   <th className="px-5 py-3 font-medium">Action</th>
                   <th className="px-5 py-3 font-medium">Actor</th>
@@ -428,25 +428,25 @@ export default function AdminLogs() {
                 {auditRows.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
-                    <td className="px-5 py-3 text-gray-600 whitespace-nowrap">
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                       {formatDateTime(row.createdAt)}
                     </td>
                     <td className="px-5 py-3">
-                      <span className="inline-block px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[11px] font-mono">
+                      <span className="inline-block px-2.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-mono">
                         {row.action}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                       <p className="font-mono text-xs">{row.actorId || "-"}</p>
-                      <p className="text-[11px] text-gray-500">{row.actorEmail || ""}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{row.actorEmail || ""}</p>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                       <p className="text-xs">{row.targetType || "-"}</p>
-                      <p className="font-mono text-[11px] text-gray-500">{row.targetId || ""}</p>
+                      <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{row.targetId || ""}</p>
                     </td>
-                    <td className="px-5 py-3 text-gray-600 max-w-md">
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300 max-w-md">
                       <p className="break-words">{row.message || "-"}</p>
                     </td>
                   </tr>
@@ -454,7 +454,7 @@ export default function AdminLogs() {
 
                 {auditRows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
                       No audit logs found.
                     </td>
                   </tr>
@@ -464,45 +464,45 @@ export default function AdminLogs() {
           </div>
         )}
 
-        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={!canGoPrev}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Prev
           </button>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             Page {page} / {totalPages}
           </span>
           <button
             type="button"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={!canGoNext}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">
-            Audit Backups <span className="text-sm font-normal text-gray-400">({backups.length} files)</span>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            Audit Backups <span className="text-sm font-normal text-gray-400 dark:text-gray-500">({backups.length} files)</span>
           </h2>
         </div>
 
         {backupsLoading ? (
-          <div className="px-5 py-8 text-sm text-gray-500">Loading backup files...</div>
+          <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading backup files...</div>
         ) : backupsError ? (
-          <div className="px-5 py-8 text-sm text-red-600">{backupsError}</div>
+          <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{backupsError}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">File Name</th>
                   <th className="px-5 py-3 font-medium">Records</th>
                   <th className="px-5 py-3 font-medium">Size</th>
@@ -512,19 +512,19 @@ export default function AdminLogs() {
               </thead>
               <tbody>
                 {backups.map((file) => (
-                  <tr key={file.fileName} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                  <tr key={file.fileName} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <td className="px-5 py-3">
-                      <span className="font-mono text-xs text-gray-700">{file.fileName}</span>
+                      <span className="font-mono text-xs text-gray-700 dark:text-gray-300">{file.fileName}</span>
                     </td>
-                    <td className="px-5 py-3 text-gray-600">{file.recordCount ?? "-"}</td>
-                    <td className="px-5 py-3 text-gray-600">{formatBytes(file.sizeBytes)}</td>
-                    <td className="px-5 py-3 text-gray-500">{formatDateTime(file.generatedAt)}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{file.recordCount ?? "-"}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{formatBytes(file.sizeBytes)}</td>
+                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDateTime(file.generatedAt)}</td>
                     <td className="px-5 py-3 text-right">
                       <button
                         type="button"
                         onClick={() => void onDownloadBackup(file.fileName)}
                         disabled={Boolean(downloadingFileName)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {downloadingFileName === file.fileName ? "Downloading..." : "Download"}
                       </button>
@@ -534,7 +534,7 @@ export default function AdminLogs() {
 
                 {backups.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
                       No backup files found.
                     </td>
                   </tr>

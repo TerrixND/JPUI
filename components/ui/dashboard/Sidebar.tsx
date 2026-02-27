@@ -247,23 +247,33 @@ export default function Sidebar({
 
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-full w-64 bg-white border-r border-gray-200
+          fixed top-0 left-0 z-40 h-full w-64
+          bg-white dark:bg-gray-900
+          border-r border-gray-200 dark:border-gray-700/60
           flex flex-col
           transform transition-transform duration-200 ease-in-out
           ${open ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0 lg:static lg:z-auto
         `}
       >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 shrink-0">
+        {/* Header */}
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700/60 shrink-0">
           <Link
             href={dashboardBasePath}
-            className="text-xl font-bold text-gray-800"
+            className="flex items-center gap-2 group"
           >
-            Jade<span className="text-emerald-600">Palace</span>
+            <svg className="w-6 h-6 text-emerald-600 shrink-0" viewBox="0 0 32 32" fill="none">
+              <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.12" />
+              <polygon points="16,8 24,12.5 24,21.5 16,26 8,21.5 8,12.5" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.2" />
+              <circle cx="16" cy="16" r="3" fill="currentColor" />
+            </svg>
+            <span className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+              Jade<span className="text-emerald-600">Palace</span>
+            </span>
           </Link>
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded-md text-gray-500 hover:bg-gray-100"
+            className="lg:hidden p-1 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <svg
               className="w-5 h-5"
@@ -281,14 +291,21 @@ export default function Sidebar({
           </button>
         </div>
 
+        {/* Role badge */}
         <div className="px-5 pt-4 pb-2">
-          <p className="text-[11px] uppercase tracking-wider font-semibold text-gray-400">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 dark:text-gray-500">
             Signed in as
           </p>
-          <p className="text-sm font-semibold text-gray-800 mt-1">{roleMeta.label}</p>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${roleMeta.color}`}
+            />
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{roleMeta.label}</p>
+          </div>
         </div>
 
-        <nav className="flex-1 px-4 py-3 space-y-1 overflow-y-auto">
+        {/* Nav links */}
+        <nav className="flex-1 px-4 py-3 space-y-0.5 overflow-y-auto">
           {navByRole[role].map((item) => {
             const href = buildHref(dashboardBasePath, item.pathSuffix);
             const normalizedHref = normalizePath(href);
@@ -305,33 +322,39 @@ export default function Sidebar({
                 onClick={onClose}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                  transition-colors duration-150
+                  transition-all duration-150
                   ${
                     isActive
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
                   }
                 `}
               >
-                <NavIcon icon={item.icon} />
+                <span className={isActive ? "text-emerald-600 dark:text-emerald-400" : ""}>
+                  <NavIcon icon={item.icon} />
+                </span>
                 {item.label}
+                {isActive && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-gray-200 p-4 shrink-0">
+        {/* Footer user info */}
+        <div className="border-t border-gray-200 dark:border-gray-700/60 p-4 shrink-0">
           <div className="flex items-center gap-3">
             <div
-              className={`w-9 h-9 rounded-full ${roleMeta.color} flex items-center justify-center text-white text-sm font-semibold`}
+              className={`w-9 h-9 rounded-full ${roleMeta.color} flex items-center justify-center text-white text-sm font-semibold ring-2 ring-white dark:ring-gray-800`}
             >
               {roleMeta.label[0]}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
                 {roleMeta.label} User
               </p>
-              <p className="text-xs text-gray-500 truncate">
+              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
                 {role}@jadepalace.com
               </p>
             </div>

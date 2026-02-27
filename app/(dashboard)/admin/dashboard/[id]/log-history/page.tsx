@@ -165,13 +165,13 @@ function EmptyBoxIcon({ className }: { className?: string }) {
 function categoryBadge(category: string | null) {
   switch (category?.toLowerCase()) {
     case "audit":
-      return "bg-blue-50 text-blue-700";
+      return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300";
     case "internal":
-      return "bg-purple-50 text-purple-700";
+      return "bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300";
     case "product":
-      return "bg-amber-50 text-amber-700";
+      return "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300";
     default:
-      return "bg-gray-100 text-gray-600";
+      return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
   }
 }
 
@@ -271,71 +271,71 @@ export default function AdminLogHistoryPage() {
 
       {/* ───── stat cards ───── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-3">
-          <div className="shrink-0 p-2 rounded-lg bg-emerald-50 text-emerald-600">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+          <div className="shrink-0 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
             <ArchiveIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Snapshots</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Snapshots</p>
             {loading ? (
-              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 animate-pulse" />
+              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             ) : (
-              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{count.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5">{count.toLocaleString()}</p>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-3">
-          <div className="shrink-0 p-2 rounded-lg bg-blue-50 text-blue-600">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+          <div className="shrink-0 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
             <TableRowsIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Loaded Rows</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Loaded Rows</p>
             {loading ? (
-              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 animate-pulse" />
+              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             ) : (
-              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{rows.length}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5">{rows.length}</p>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-3">
-          <div className="shrink-0 p-2 rounded-lg bg-red-50 text-red-600">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+          <div className="shrink-0 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
             <AlertTriangleIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Parse Errors</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Parse Errors</p>
             {loading ? (
-              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 animate-pulse" />
+              <div className="mt-1.5 h-6 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             ) : (
-              <p className={`text-2xl font-semibold mt-0.5 ${parseErrorsCount > 0 ? "text-red-600" : "text-gray-900"}`}>
+              <p className={`text-2xl font-semibold mt-0.5 ${parseErrorsCount > 0 ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"}`}>
                 {parseErrorsCount}
               </p>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-3">
-          <div className="shrink-0 p-2 rounded-lg bg-amber-50 text-amber-600">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+          <div className="shrink-0 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
             <GaugeIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Limit</p>
-            <p className="text-2xl font-semibold text-gray-900 mt-0.5">{appliedLimit}</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Limit</p>
+            <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5">{appliedLimit}</p>
           </div>
         </div>
       </div>
 
       {/* ───── collapsible filters ───── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
         <button
           type="button"
           onClick={() => setShowFilters((prev) => !prev)}
-          className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors"
+          className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
         >
-          <span className="text-sm font-semibold text-gray-900">Filters</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Filters</span>
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform ${showFilters ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${showFilters ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -345,16 +345,16 @@ export default function AdminLogHistoryPage() {
         </button>
 
         {showFilters && (
-          <div className="px-5 pb-4 pt-0 space-y-4 border-t border-gray-100">
+          <div className="px-5 pb-4 pt-0 space-y-4 border-t border-gray-100 dark:border-gray-700/40">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Type
                 </label>
                 <select
                   value={draftType}
                   onChange={(e) => setDraftType(e.target.value as LogHistoryType)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
                 >
                   {HISTORY_TYPE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -365,7 +365,7 @@ export default function AdminLogHistoryPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Limit
                 </label>
                 <input
@@ -374,7 +374,7 @@ export default function AdminLogHistoryPage() {
                   max={MAX_LIMIT}
                   value={draftLimit}
                   onChange={(e) => setDraftLimit(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
                 />
               </div>
             </div>
@@ -390,7 +390,7 @@ export default function AdminLogHistoryPage() {
               <button
                 type="button"
                 onClick={onResetFilters}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Reset
               </button>
@@ -401,16 +401,16 @@ export default function AdminLogHistoryPage() {
 
       {/* error alert */}
       {error && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50">
-          <AlertTriangleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-200 dark:border-red-700/50 bg-red-50 dark:bg-red-900/20">
+          <AlertTriangleIcon className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-red-800">Error</p>
-            <p className="text-sm text-red-700 mt-0.5">{error}</p>
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">Error</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">{error}</p>
           </div>
           <button
             type="button"
             onClick={() => void loadLogHistory()}
-            className="ml-auto shrink-0 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
+            className="ml-auto shrink-0 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-lg hover:bg-red-200 transition-colors"
           >
             Retry
           </button>
@@ -418,10 +418,10 @@ export default function AdminLogHistoryPage() {
       )}
 
       {/* ───── snapshot files table / cards ───── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Snapshot Files</h2>
-          <p className="text-xs text-gray-500">{loading ? "..." : `${rows.length} row(s)`}</p>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Snapshot Files</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{loading ? "..." : `${rows.length} row(s)`}</p>
         </div>
 
         {/* loading skeleton */}
@@ -429,15 +429,15 @@ export default function AdminLogHistoryPage() {
           <div className="divide-y divide-gray-100">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="px-5 py-4 flex items-center gap-4">
-                <div className="w-8 h-8 rounded-lg bg-gray-100 animate-pulse shrink-0" />
+                <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse shrink-0" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-48 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-3 w-32 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-3.5 w-48 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3 w-32 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
                 </div>
                 <div className="hidden sm:flex items-center gap-4">
-                  <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-3 w-16 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-5 w-12 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-3 w-20 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3 w-16 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-5 w-12 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
                 </div>
               </div>
             ))}
@@ -448,8 +448,8 @@ export default function AdminLogHistoryPage() {
         {!loading && !error && rows.length === 0 && (
           <div className="px-5 py-16 flex flex-col items-center gap-3">
             <EmptyBoxIcon className="w-10 h-10 text-gray-300" />
-            <p className="text-sm text-gray-500">No log history snapshots found.</p>
-            <p className="text-xs text-gray-400">Adjust filters or try a different type.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">No log history snapshots found.</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Adjust filters or try a different type.</p>
           </div>
         )}
 
@@ -458,7 +458,7 @@ export default function AdminLogHistoryPage() {
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">Snapshot</th>
                   <th className="px-5 py-3 font-medium">Category</th>
                   <th className="px-5 py-3 font-medium">Updated</th>
@@ -476,39 +476,39 @@ export default function AdminLogHistoryPage() {
 
                   return (
                     <Fragment key={item.fileName}>
-                      <tr className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                      <tr className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50/60 dark:hover:bg-gray-800/50 transition-colors">
                         <td className="px-5 py-3">
-                          <p className="font-mono text-xs text-gray-700 truncate max-w-[220px]">{item.fileName}</p>
-                          <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{item.relativePath || "-"}</p>
+                          <p className="font-mono text-xs text-gray-700 dark:text-gray-300 truncate max-w-[220px]">{item.fileName}</p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate max-w-[220px]">{item.relativePath || "-"}</p>
                         </td>
                         <td className="px-5 py-3">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${categoryBadge(item.category)}`}>
                             {item.category || "other"}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-gray-500 text-xs">{formatDateTime(item.updatedAt)}</td>
-                        <td className="px-5 py-3 text-gray-500 text-xs">{formatBytes(item.sizeBytes)}</td>
-                        <td className="px-5 py-3 text-gray-700">{recordCount ?? "-"}</td>
+                        <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatDateTime(item.updatedAt)}</td>
+                        <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatBytes(item.sizeBytes)}</td>
+                        <td className="px-5 py-3 text-gray-700 dark:text-gray-300">{recordCount ?? "-"}</td>
                         <td className="px-5 py-3">
                           {item.parseError ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
                               <AlertTriangleIcon className="w-3 h-3" />
                               Error
                             </span>
                           ) : (
-                            <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                               OK
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-3 text-gray-600 max-w-[280px]">
+                        <td className="px-5 py-3 text-gray-600 dark:text-gray-300 max-w-[280px]">
                           <p className="break-words text-xs">{getSnapshotSummary(item)}</p>
                         </td>
                         <td className="px-5 py-3 text-right">
                           <button
                             type="button"
                             onClick={() => setExpandedFileName((prev) => (prev === item.fileName ? "" : item.fileName))}
-                            className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 transition-colors"
+                            className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                           >
                             {isExpanded ? "Hide" : "View"}
                           </button>
@@ -516,9 +516,9 @@ export default function AdminLogHistoryPage() {
                       </tr>
 
                       {isExpanded && (
-                        <tr className="border-b border-gray-100 bg-gray-50/40">
+                        <tr className="border-b border-gray-100 dark:border-gray-700/40 bg-gray-50/40">
                           <td colSpan={8} className="px-5 py-4">
-                            <pre className="text-xs leading-5 whitespace-pre-wrap break-words bg-white border border-gray-200 rounded-lg p-4 text-gray-700 overflow-x-auto max-h-96 overflow-y-auto">
+                            <pre className="text-xs leading-5 whitespace-pre-wrap break-words bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg p-4 text-gray-700 dark:text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">
                               {JSON.stringify(item.data ?? { parseError: item.parseError || "No snapshot payload" }, null, 2)}
                             </pre>
                           </td>
@@ -543,17 +543,17 @@ export default function AdminLogHistoryPage() {
                 <div key={item.fileName} className="px-4 py-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono text-xs text-gray-800 truncate">{item.fileName}</p>
-                      <p className="text-[11px] text-gray-400 truncate mt-0.5">{item.relativePath || "-"}</p>
+                      <p className="font-mono text-xs text-gray-800 dark:text-gray-200 truncate">{item.fileName}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{item.relativePath || "-"}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {item.parseError ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
                           <AlertTriangleIcon className="w-3 h-3" />
                           Error
                         </span>
                       ) : (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                           OK
                         </span>
                       )}
@@ -564,30 +564,30 @@ export default function AdminLogHistoryPage() {
                     <span className={`inline-block px-2 py-0.5 rounded-full font-medium ${categoryBadge(item.category)}`}>
                       {item.category || "other"}
                     </span>
-                    <span className="text-gray-400">|</span>
-                    <span className="text-gray-500">{formatBytes(item.sizeBytes)}</span>
+                    <span className="text-gray-400 dark:text-gray-500">|</span>
+                    <span className="text-gray-500 dark:text-gray-400">{formatBytes(item.sizeBytes)}</span>
                     {recordCount !== null && (
                       <>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-500">{recordCount} records</span>
+                        <span className="text-gray-400 dark:text-gray-500">|</span>
+                        <span className="text-gray-500 dark:text-gray-400">{recordCount} records</span>
                       </>
                     )}
-                    <span className="text-gray-400">|</span>
-                    <span className="text-gray-500">{formatDateTime(item.updatedAt)}</span>
+                    <span className="text-gray-400 dark:text-gray-500">|</span>
+                    <span className="text-gray-500 dark:text-gray-400">{formatDateTime(item.updatedAt)}</span>
                   </div>
 
-                  <p className="text-xs text-gray-600 break-words">{getSnapshotSummary(item)}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 break-words">{getSnapshotSummary(item)}</p>
 
                   <button
                     type="button"
                     onClick={() => setExpandedFileName((prev) => (prev === item.fileName ? "" : item.fileName))}
-                    className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 transition-colors"
+                    className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   >
                     {isExpanded ? "Hide JSON" : "View JSON"}
                   </button>
 
                   {isExpanded && (
-                    <pre className="text-xs leading-5 whitespace-pre-wrap break-words bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-700 overflow-x-auto max-h-80 overflow-y-auto">
+                    <pre className="text-xs leading-5 whitespace-pre-wrap break-words bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg p-3 text-gray-700 dark:text-gray-300 overflow-x-auto max-h-80 overflow-y-auto">
                       {JSON.stringify(item.data ?? { parseError: item.parseError || "No snapshot payload" }, null, 2)}
                     </pre>
                   )}

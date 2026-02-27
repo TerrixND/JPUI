@@ -108,15 +108,15 @@ const moneyRange = (min: number | null | undefined, max: number | null | undefin
 const statusBadge = (status: string) => {
   switch (status) {
     case "AVAILABLE":
-      return "bg-green-50 text-green-700";
+      return "bg-green-50 text-green-700 dark:text-green-300";
     case "PENDING":
-      return "bg-amber-50 text-amber-700";
+      return "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300";
     case "BUSY":
-      return "bg-blue-50 text-blue-700";
+      return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300";
     case "SOLD":
-      return "bg-gray-100 text-gray-600";
+      return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
     default:
-      return "bg-gray-100 text-gray-600";
+      return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
   }
 };
 
@@ -477,7 +477,7 @@ export default function AdminProducts() {
           productCreateBlocked ? (
             <span
               title={productCreateTooltip}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-300 text-gray-600 text-sm font-medium rounded-lg cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-300 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -499,7 +499,7 @@ export default function AdminProducts() {
       />
 
       {(productCreateBlocked || productEditBlocked || productDeleteBlocked) && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           Some product write actions are currently restricted.
         </div>
       )}
@@ -512,7 +512,7 @@ export default function AdminProducts() {
           className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             !includeSold
               ? "bg-gray-900 text-white"
-              : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+              : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
           }`}
         >
           Active Inventory
@@ -523,7 +523,7 @@ export default function AdminProducts() {
           className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             includeSold
               ? "bg-gray-900 text-white"
-              : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+              : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
           }`}
         >
           Include Sold
@@ -536,28 +536,28 @@ export default function AdminProducts() {
           {/* stat skeleton */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-                <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
-                <div className="h-6 w-28 rounded bg-gray-100 animate-pulse" />
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-2">
+                <div className="h-3 w-20 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                <div className="h-6 w-28 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
               </div>
             ))}
           </div>
           {/* table skeleton */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200">
-              <div className="h-4 w-32 rounded bg-gray-100 animate-pulse" />
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
+              <div className="h-4 w-32 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             </div>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="px-5 py-4 flex items-center gap-4 border-b border-gray-50">
-                <div className="w-12 h-12 rounded-lg bg-gray-100 animate-pulse shrink-0" />
+              <div key={i} className="px-5 py-4 flex items-center gap-4 border-b border-gray-50 dark:border-gray-800">
+                <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse shrink-0" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-40 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-3.5 w-40 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
                 </div>
                 <div className="hidden sm:flex items-center gap-6">
-                  <div className="h-5 w-16 rounded-full bg-gray-100 animate-pulse" />
-                  <div className="h-3 w-16 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-5 w-16 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3 w-16 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
                 </div>
               </div>
             ))}
@@ -567,16 +567,16 @@ export default function AdminProducts() {
 
       {/* ───── error state ───── */}
       {!loading && error && (
-        <div className="flex items-start gap-3 px-4 py-4 bg-red-50 border border-red-200 rounded-xl">
-          <AlertTriangleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 px-4 py-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl">
+          <AlertTriangleIcon className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-red-800">Failed to load products</p>
-            <p className="text-sm text-red-700 mt-0.5">{error}</p>
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">Failed to load products</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">{error}</p>
           </div>
           <button
             type="button"
             onClick={() => void loadData()}
-            className="shrink-0 px-3.5 py-1.5 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
+            className="shrink-0 px-3.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-lg hover:bg-red-200 transition-colors"
           >
             Retry
           </button>
@@ -587,57 +587,57 @@ export default function AdminProducts() {
         <>
           {/* media hint */}
           {mediaHint && (
-            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl">
+              <svg className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-amber-700">{mediaHint}</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300">{mediaHint}</p>
             </div>
           )}
 
           {/* ───── stat cards ───── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
-              <div className="shrink-0 p-2 rounded-lg bg-emerald-50 text-emerald-600">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
                 <PackageIcon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Products</p>
-                <p className="text-xl font-bold text-gray-900 mt-0.5">{analytics.totals.productCount}</p>
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Products</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-0.5">{analytics.totals.productCount}</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
-              <div className="shrink-0 p-2 rounded-lg bg-blue-50 text-blue-600">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
                 <TagIcon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Priced / Unpriced</p>
-                <p className="text-xl font-bold text-gray-900 mt-0.5">
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Priced / Unpriced</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-0.5">
                   {analytics.totals.pricedProductCount} / {analytics.totals.unpricedProductCount}
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
-              <div className="shrink-0 p-2 rounded-lg bg-purple-50 text-purple-600">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
                 <TrendingUpIcon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Proj. Revenue</p>
-                <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proj. Revenue</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">
                   {moneyRange(analytics.totals.projectedRevenueMin, analytics.totals.projectedRevenueMax)}
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3">
-              <div className="shrink-0 p-2 rounded-lg bg-amber-50 text-amber-600">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
                 <DollarIcon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Proj. Net Profit</p>
-                <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proj. Net Profit</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">
                   {moneyRange(analytics.totals.projectedNetProfitMin, analytics.totals.projectedNetProfitMax)}
                 </p>
               </div>
@@ -645,25 +645,25 @@ export default function AdminProducts() {
           </div>
 
           {/* ───── product table (desktop) ───── */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-gray-900">Inventory</h2>
-              <p className="text-xs text-gray-500">{analytics.inventory.length} product(s)</p>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Inventory</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{analytics.inventory.length} product(s)</p>
             </div>
 
             {/* empty state */}
             {totalProducts === 0 && (
               <div className="px-5 py-16 flex flex-col items-center gap-3">
                 <EmptyBoxIcon className="w-10 h-10 text-gray-300" />
-                <p className="text-sm text-gray-500">No products found.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No products found.</p>
                 {productCreateBlocked ? (
-                  <span title={productCreateTooltip} className="text-sm text-gray-400 font-medium cursor-not-allowed">
+                  <span title={productCreateTooltip} className="text-sm text-gray-400 dark:text-gray-500 font-medium cursor-not-allowed">
                     Add your first product
                   </span>
                 ) : (
                   <Link
                     href={`${dashboardBasePath}/products/add`}
-                    className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                    className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium"
                   >
                     Add your first product
                   </Link>
@@ -676,7 +676,7 @@ export default function AdminProducts() {
               <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                    <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                       <th className="px-5 py-3 font-medium">Product</th>
                       <th className="px-5 py-3 font-medium">Status</th>
                       <th className="px-5 py-3 font-medium">Buy Price</th>
@@ -695,12 +695,12 @@ export default function AdminProducts() {
                       return (
                         <tr
                           key={item.id}
-                          className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors"
+                          className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-gray-800/50 transition-colors"
                         >
                           <td className="px-5 py-3">
                             <Link href={`${dashboardBasePath}/products/${item.id}`} className="group">
                               <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center shrink-0">
+                                <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden border border-gray-200 dark:border-gray-700/60 flex items-center justify-center shrink-0">
                                   {productImageUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
@@ -719,10 +719,10 @@ export default function AdminProducts() {
                                 </div>
 
                                 <div className="min-w-0">
-                                  <p className="font-medium text-gray-900 group-hover:text-emerald-700 transition-colors truncate">
+                                  <p className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-emerald-700 transition-colors truncate">
                                     {item.name || "Unnamed Product"}
                                   </p>
-                                  <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{item.sku}</p>
                                 </div>
                               </div>
                             </Link>
@@ -734,30 +734,30 @@ export default function AdminProducts() {
                               {item.status}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-gray-700">{toMoney(item.pricing.buyPrice)}</td>
-                          <td className="px-5 py-3 text-gray-700">
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">{toMoney(item.pricing.buyPrice)}</td>
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
                           </td>
-                          <td className="px-5 py-3 text-gray-700">
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
                           </td>
-                          <td className="px-5 py-3 text-gray-700">
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
                           </td>
-                          <td className="px-5 py-3 text-gray-500">{item.commission.allocations.length}</td>
+                          <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{item.commission.allocations.length}</td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
                               {productEditBlocked ? (
                                 <span
                                   title={productEditTooltip}
-                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-400 cursor-not-allowed"
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                                 >
                                   Edit
                                 </span>
                               ) : (
                                 <Link
                                   href={`${dashboardBasePath}/products/${item.id}`}
-                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                 >
                                   Edit
                                 </Link>
@@ -769,7 +769,7 @@ export default function AdminProducts() {
                                 }}
                                 disabled={productDeleteBlocked || deletingProductId === item.id}
                                 title={productDeleteBlocked ? productDeleteTooltip : undefined}
-                                className="px-2.5 py-1 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                className="px-2.5 py-1 text-xs rounded-lg border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                               >
                                 {deletingProductId === item.id ? "Deleting..." : "Delete"}
                               </button>
@@ -798,7 +798,7 @@ export default function AdminProducts() {
                           href={`${dashboardBasePath}/products/${item.id}`}
                           className="shrink-0"
                         >
-                          <div className="w-14 h-14 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center">
+                          <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden border border-gray-200 dark:border-gray-700/60 flex items-center justify-center">
                             {productImageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -821,10 +821,10 @@ export default function AdminProducts() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <Link href={`${dashboardBasePath}/products/${item.id}`} className="min-w-0">
-                              <p className="font-medium text-gray-900 truncate hover:text-emerald-700 transition-colors">
+                              <p className="font-medium text-gray-900 dark:text-gray-100 truncate hover:text-emerald-700 transition-colors">
                                 {item.name || "Unnamed Product"}
                               </p>
-                              <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{item.sku}</p>
                             </Link>
                             <span
                               className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${statusBadge(item.status)}`}
@@ -836,24 +836,24 @@ export default function AdminProducts() {
                           {/* details grid */}
                           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                             <div>
-                              <span className="text-gray-400">Buy:</span>{" "}
-                              <span className="text-gray-700 font-medium">{toMoney(item.pricing.buyPrice)}</span>
+                              <span className="text-gray-400 dark:text-gray-500">Buy:</span>{" "}
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">{toMoney(item.pricing.buyPrice)}</span>
                             </div>
                             <div>
-                              <span className="text-gray-400">Sale:</span>{" "}
-                              <span className="text-gray-700 font-medium">
+                              <span className="text-gray-400 dark:text-gray-500">Sale:</span>{" "}
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">
                                 {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
                               </span>
                             </div>
                             <div>
-                              <span className="text-gray-400">Alloc:</span>{" "}
-                              <span className="text-gray-700 font-medium">
+                              <span className="text-gray-400 dark:text-gray-500">Alloc:</span>{" "}
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">
                                 {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
                               </span>
                             </div>
                             <div>
-                              <span className="text-gray-400">Profit:</span>{" "}
-                              <span className="text-gray-700 font-medium">
+                              <span className="text-gray-400 dark:text-gray-500">Profit:</span>{" "}
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">
                                 {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
                               </span>
                             </div>
@@ -864,14 +864,14 @@ export default function AdminProducts() {
                             {productEditBlocked ? (
                               <span
                                 title={productEditTooltip}
-                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-400 cursor-not-allowed"
+                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                               >
                                 Edit
                               </span>
                             ) : (
                               <Link
                                 href={`${dashboardBasePath}/products/${item.id}`}
-                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                               >
                                 Edit
                               </Link>
@@ -883,7 +883,7 @@ export default function AdminProducts() {
                               }}
                               disabled={productDeleteBlocked || deletingProductId === item.id}
                               title={productDeleteBlocked ? productDeleteTooltip : undefined}
-                              className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                              className="px-3 py-1.5 text-xs rounded-lg border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                             >
                               {deletingProductId === item.id ? "Deleting..." : "Delete"}
                             </button>

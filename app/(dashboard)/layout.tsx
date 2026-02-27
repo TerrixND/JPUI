@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/ui/dashboard/Sidebar";
 import Navbar from "@/components/ui/dashboard/Navbar";
 import { RoleProvider, type Role } from "@/components/ui/dashboard/RoleContext";
+import { ThemeProvider } from "@/components/ui/dashboard/ThemeContext";
 import {
   ApiClientError,
   forceLogoutToBlockedPage,
@@ -353,46 +354,83 @@ export default function DashboardLayout({
 
   if (authState.loading || !authState.role || !authState.userId) {
     return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-        <div className="text-center">
-          <p className="text-sm font-medium text-gray-700">
-            {authState.error || "Checking dashboard access..."}
-          </p>
+      <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/20 flex items-center justify-center px-6">
+        <div className="jp-fade-in-up flex flex-col items-center gap-8">
+          {/* Branding */}
+          <div className="relative">
+            <div className="absolute -inset-6 rounded-full bg-emerald-400/10 animate-pulse" />
+            <div className="relative flex items-center gap-1">
+              <svg className="w-8 h-8 text-emerald-600" viewBox="0 0 32 32" fill="none">
+                <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.12" />
+                <polygon points="16,8 24,12.5 24,21.5 16,26 8,21.5 8,12.5" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.2" />
+                <circle cx="16" cy="16" r="3" fill="currentColor" />
+              </svg>
+              <span className="text-2xl font-bold tracking-tight text-gray-800">
+                Jade<span className="text-emerald-600">Palace</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Multi-ring spinner */}
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            {/* Outer static ring */}
+            <div className="absolute inset-0 rounded-full border-4 border-gray-200" />
+            {/* Primary spinning ring */}
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+            {/* Inner counter-spin ring */}
+            <div className="absolute inset-2.5 rounded-full border-2 border-emerald-400/50 border-b-transparent jp-spin-reverse" />
+            {/* Center dot */}
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+
+          {/* Animated dots + message */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 jp-dot-1" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 jp-dot-2" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 jp-dot-3" />
+            </div>
+            <p className="text-sm font-medium text-gray-500 tracking-wide">
+              {authState.error || "Checking dashboard access…"}
+            </p>
+          </div>
         </div>
       </main>
     );
   }
 
   return (
-    <RoleProvider
-      role={authState.role}
-      userId={authState.userId}
-      isMainAdmin={authState.isMainAdmin}
-      adminCapabilities={adminCapabilities}
-      refreshAdminCapabilities={refreshAdminCapabilities}
-    >
-      <div className="flex h-screen bg-gray-50 overflow-hidden">
-        {adminRestrictionNotice && (
-          <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-md">
-            <p className="text-sm text-amber-800">{adminRestrictionNotice}</p>
-            <button
-              type="button"
-              onClick={() => setAdminRestrictionNotice("")}
-              className="mt-2 text-xs font-medium text-amber-700 hover:text-amber-900"
-            >
-              Dismiss
-            </button>
+    <ThemeProvider>
+      <RoleProvider
+        role={authState.role}
+        userId={authState.userId}
+        isMainAdmin={authState.isMainAdmin}
+        adminCapabilities={adminCapabilities}
+        refreshAdminCapabilities={refreshAdminCapabilities}
+      >
+        <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden transition-colors duration-200">
+          {adminRestrictionNotice && (
+            <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 shadow-md">
+              <p className="text-sm text-amber-800 dark:text-amber-200">{adminRestrictionNotice}</p>
+              <button
+                type="button"
+                onClick={() => setAdminRestrictionNotice("")}
+                className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+          <div className="flex-1 flex flex-col min-w-0">
+            <Navbar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
+
+            <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
           </div>
-        )}
-
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-        <div className="flex-1 flex flex-col min-w-0">
-          <Navbar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
-
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
         </div>
-      </div>
-    </RoleProvider>
+      </RoleProvider>
+    </ThemeProvider>
   );
 }

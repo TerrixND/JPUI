@@ -79,17 +79,17 @@ const statusStyle = (status: string | null) => {
   switch (status) {
     case "PENDING_MANAGER":
     case "PENDING_MAIN":
-      return "bg-amber-100 text-amber-700";
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
     case "APPROVED":
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
     case "FULFILLED":
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300";
     case "REJECTED":
-      return "bg-red-100 text-red-600";
+      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
     case "CANCELLED":
-      return "bg-gray-200 text-gray-600";
+      return "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
     default:
-      return "bg-gray-100 text-gray-600";
+      return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
   }
 };
 
@@ -217,7 +217,7 @@ export default function AdminInventory() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 isActive
                   ? "bg-gray-900 text-white"
-                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               }`}
             >
               {tab.label}
@@ -226,7 +226,7 @@ export default function AdminInventory() {
         })}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <input
             type="text"
@@ -235,7 +235,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, statusCsv: event.target.value }))
             }
             placeholder="status CSV (optional)"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
@@ -244,7 +244,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, branchId: event.target.value }))
             }
             placeholder="branchId"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
@@ -253,7 +253,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, productId: event.target.value }))
             }
             placeholder="productId"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
@@ -262,7 +262,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, requestedByUserId: event.target.value }))
             }
             placeholder="requestedByUserId"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
@@ -271,7 +271,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, appointmentId: event.target.value }))
             }
             placeholder="appointmentId"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="text"
@@ -280,7 +280,7 @@ export default function AdminInventory() {
               setDraftFilters((prev) => ({ ...prev, appointmentItemId: event.target.value }))
             }
             placeholder="appointmentItemId"
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="date"
@@ -288,7 +288,7 @@ export default function AdminInventory() {
             onChange={(event) =>
               setDraftFilters((prev) => ({ ...prev, from: event.target.value }))
             }
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
           <input
             type="date"
@@ -296,7 +296,7 @@ export default function AdminInventory() {
             onChange={(event) =>
               setDraftFilters((prev) => ({ ...prev, to: event.target.value }))
             }
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           />
         </div>
 
@@ -312,21 +312,21 @@ export default function AdminInventory() {
             <button
               type="button"
               onClick={onResetFilters}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Reset
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Rows per page</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Rows per page</label>
             <select
               value={limit}
               onChange={(event) => {
                 setPage(1);
                 setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
               }}
-              className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+              className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <option key={size} value={size}>
@@ -338,24 +338,24 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Inventory Requests</h2>
-          <p className="text-xs text-gray-500">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Inventory Requests</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {currentPageStart}-{currentPageEnd} of {total}
             {appliedStatusCsv ? ` · status=${appliedStatusCsv}` : ""}
           </p>
         </div>
 
         {loading ? (
-          <div className="px-5 py-8 text-sm text-gray-500">Loading inventory requests...</div>
+          <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading inventory requests...</div>
         ) : error ? (
-          <div className="px-5 py-8 text-sm text-red-600">{error}</div>
+          <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{error}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">Request</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Branch</th>
@@ -370,34 +370,34 @@ export default function AdminInventory() {
                 {rows.map((request) => (
                   <tr
                     key={request.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <p className="font-mono text-xs text-gray-700">{request.id}</p>
+                      <p className="font-mono text-xs text-gray-700 dark:text-gray-300">{request.id}</p>
                     </td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(request.status)}`}>
                         {request.status || "-"}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                       <p>{request.branch?.name || "-"}</p>
-                      <p className="text-xs text-gray-500">{request.branch?.code || request.branchId || ""}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{request.branch?.code || request.branchId || ""}</p>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                       <p>{request.product?.name || "-"}</p>
-                      <p className="text-xs text-gray-500">{request.product?.sku || request.productId || ""}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{request.product?.sku || request.productId || ""}</p>
                     </td>
-                    <td className="px-5 py-3 text-gray-600">
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
                       {request.requestedByUser?.email || request.requestedByUserId || "-"}
                     </td>
-                    <td className="px-5 py-3 text-gray-600">
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
                       {formatDateTime(request.appointment?.appointmentDate)}
                     </td>
-                    <td className="px-5 py-3 text-gray-500">
+                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
                       {formatDateTime(request.createdAt)}
                     </td>
-                    <td className="px-5 py-3 text-gray-600">
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
                       {request.appointmentItem?.requestedSource || request.fromLocation || "-"}
                     </td>
                   </tr>
@@ -405,7 +405,7 @@ export default function AdminInventory() {
 
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-8 text-center text-gray-400">
+                    <td colSpan={8} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
                       No inventory requests found.
                     </td>
                   </tr>
@@ -415,23 +415,23 @@ export default function AdminInventory() {
           </div>
         )}
 
-        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={!canGoPrev}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Prev
           </button>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             Page {page} / {totalPages}
           </span>
           <button
             type="button"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={!canGoNext}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>

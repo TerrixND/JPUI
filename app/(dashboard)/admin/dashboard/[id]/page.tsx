@@ -97,9 +97,9 @@ const toActivityDotColor = (action: string, index: number) => {
 };
 
 const getBranchStatusBadge = (status: string | null) => {
-  if (status === "ACTIVE") return "bg-emerald-100 text-emerald-700";
-  if (status === "INACTIVE") return "bg-gray-100 text-gray-600";
-  return "bg-gray-100 text-gray-500";
+  if (status === "ACTIVE") return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300";
+  if (status === "INACTIVE") return "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
+  return "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400";
 };
 
 const getPrimaryManagerLabel = (branch: AdminBranchWithManagersRecord) => {
@@ -113,12 +113,12 @@ const getPrimaryManagerLabel = (branch: AdminBranchWithManagersRecord) => {
 
 function StatSkeleton() {
   return (
-    <div className="animate-pulse bg-white rounded-xl border border-gray-200 p-4 sm:p-5 flex flex-col gap-3">
+    <div className="animate-pulse bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="h-3 w-20 bg-gray-200 rounded" />
-        <div className="w-9 h-9 rounded-lg bg-gray-100" />
+        <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700" />
       </div>
-      <div className="h-8 w-16 bg-gray-200 rounded mt-1" />
+      <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded mt-1" />
     </div>
   );
 }
@@ -126,12 +126,12 @@ function StatSkeleton() {
 function BranchRowSkeleton() {
   return (
     <div className="animate-pulse flex items-center gap-3 px-5 py-3.5">
-      <div className="w-8 h-8 rounded-lg bg-gray-200 shrink-0" />
+      <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 shrink-0" />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 bg-gray-200 rounded w-1/3" />
-        <div className="h-2.5 bg-gray-100 rounded w-1/4" />
+        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+        <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded w-1/4" />
       </div>
-      <div className="h-5 w-14 bg-gray-100 rounded-full hidden sm:block" />
+      <div className="h-5 w-14 bg-gray-100 dark:bg-gray-700 rounded-full hidden sm:block" />
     </div>
   );
 }
@@ -352,7 +352,7 @@ export default function AdminDashboard() {
       />
 
       {countsError && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/40 rounded-lg text-sm text-amber-700 dark:text-amber-300">
           {countsError}
         </div>
       )}
@@ -366,17 +366,17 @@ export default function AdminDashboard() {
             <Link
               key={s.label}
               href={s.href}
-              className="relative bg-white rounded-xl border border-gray-200 p-4 sm:p-5 flex flex-col gap-2 overflow-hidden transition-all hover:shadow-md group"
+              className="relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5 flex flex-col gap-2 overflow-hidden transition-all hover:shadow-md dark:hover:shadow-black/20 group"
             >
               {/* Colored top accent bar */}
               <div className={`absolute top-0 left-0 right-0 h-0.5 ${s.bar}`} />
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700 transition-colors">{s.label}</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors">{s.label}</p>
                 <div className={`p-2 rounded-lg border ${s.accent}`}>{s.icon}</div>
               </div>
               <div className="flex items-end justify-between">
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">{s.value}</p>
-                <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">{s.value}</p>
+                <svg className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
               </div>
@@ -386,21 +386,21 @@ export default function AdminDashboard() {
       </div>
 
       {/* Projected Inventory Profit */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden transition-colors">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100">
+            <div className="p-1.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-700/40">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l6-6 4 4 8-8M14 7h7v7" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-900">Projected Inventory Profit</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Projected Inventory Profit</h2>
           </div>
           {!profitLoading && !profitError && (
             <button
               type="button"
               onClick={() => void loadProjectedProfit()}
-              className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+              className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title="Refresh"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -415,8 +415,8 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse space-y-2">
-                  <div className="h-2.5 w-24 bg-gray-200 rounded" />
-                  <div className="h-7 w-28 bg-gray-100 rounded" />
+                  <div className="h-2.5 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-7 w-28 bg-gray-100 dark:bg-gray-800 rounded" />
                 </div>
               ))}
             </div>
@@ -443,24 +443,24 @@ export default function AdminDashboard() {
           <div className="p-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Tracked Products</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1.5">{t.productCount.toLocaleString()}</p>
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Tracked Products</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 mt-1.5">{t.productCount.toLocaleString()}</p>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="w-2 h-2 rounded-full bg-blue-400" />
-                  <span className="text-[11px] text-gray-500">{t.pricedProductCount} priced</span>
-                  <span className="text-gray-300">·</span>
-                  <span className="text-[11px] text-gray-400">{t.unpricedProductCount} unpriced</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">{t.pricedProductCount} priced</span>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">{t.unpricedProductCount} unpriced</span>
                 </div>
               </div>
 
               <div>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Price Coverage</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1.5">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Price Coverage</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 mt-1.5">
                   {t.productCount > 0
                     ? `${Math.round((t.pricedProductCount / t.productCount) * 100)}%`
                     : "0%"}
                 </p>
-                <div className="mt-2 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div className="mt-2 h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-700"
                     style={{
@@ -471,11 +471,11 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Projected Revenue</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1.5 break-words">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Projected Revenue</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-50 mt-1.5 break-words">
                   {moneyRange(t.projectedRevenueMin, t.projectedRevenueMax)}
                 </p>
-                <span className="inline-flex items-center gap-1 text-[11px] text-purple-600 mt-1">
+                <span className="inline-flex items-center gap-1 text-[11px] text-purple-600 dark:text-purple-400 mt-1">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                   </svg>
@@ -484,11 +484,11 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Projected Net Profit</p>
-                <p className="text-lg sm:text-xl font-bold text-emerald-700 mt-1.5 break-words">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Projected Net Profit</p>
+                <p className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-1.5 break-words">
                   {moneyRange(t.projectedNetProfitMin, t.projectedNetProfitMax)}
                 </p>
-                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 mt-1">
+                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8M14 7h7v7" />
                   </svg>
@@ -503,16 +503,16 @@ export default function AdminDashboard() {
       {/* Branch Network + Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Branch Network */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 shrink-0">
-            <div className="p-1.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden flex flex-col transition-colors">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center gap-2.5 shrink-0">
+            <div className="p-1.5 rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-700/40">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-900">Branch Network</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Branch Network</h2>
             {!countsLoading && (
-              <span className="ml-auto text-[11px] text-gray-400 hidden sm:inline">
+              <span className="ml-auto text-[11px] text-gray-400 dark:text-gray-500 hidden sm:inline">
                 {counts.branches} {counts.branches === 1 ? "branch" : "branches"}
               </span>
             )}
@@ -539,7 +539,7 @@ export default function AdminDashboard() {
               <div className="hidden sm:block overflow-x-auto flex-1">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-[11px] text-gray-400 uppercase tracking-wider bg-gray-50/60 border-b border-gray-100">
+                    <tr className="text-left text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wider bg-gray-50/60 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700/40">
                       <th className="px-5 py-3 font-semibold">Branch</th>
                       <th className="px-5 py-3 font-semibold">City</th>
                       <th className="px-5 py-3 font-semibold">Primary Manager</th>
@@ -547,22 +547,22 @@ export default function AdminDashboard() {
                       <th className="px-5 py-3 font-semibold">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-700/40">
                     {branchRows.map((branch) => (
-                      <tr key={branch.id} className="hover:bg-gray-50/60 transition-colors">
+                      <tr key={branch.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors">
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <span className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                            <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-bold flex items-center justify-center shrink-0">
                               {branch.code || "--"}
                             </span>
-                            <span className="font-medium text-gray-900">{branch.name || "Unnamed Branch"}</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{branch.name || "Unnamed Branch"}</span>
                           </div>
                         </td>
-                        <td className="px-5 py-3.5 text-gray-500">{branch.city || "-"}</td>
-                        <td className="px-5 py-3.5 text-gray-700 max-w-[140px] truncate">
+                        <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400">{branch.city || "-"}</td>
+                        <td className="px-5 py-3.5 text-gray-700 dark:text-gray-300 max-w-[140px] truncate">
                           {getPrimaryManagerLabel(branch)}
                         </td>
-                        <td className="px-5 py-3.5 text-gray-500">{branch.managerCount}</td>
+                        <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400">{branch.managerCount}</td>
                         <td className="px-5 py-3.5">
                           <span
                             className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ${getBranchStatusBadge(branch.status)}`}
@@ -577,15 +577,15 @@ export default function AdminDashboard() {
               </div>
 
               {/* Mobile cards */}
-              <div className="sm:hidden divide-y divide-gray-100">
+              <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/40">
                 {branchRows.map((branch) => (
                   <div key={branch.id} className="px-4 py-3.5 flex items-center gap-3">
-                    <span className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                    <span className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-bold flex items-center justify-center shrink-0">
                       {branch.code || "--"}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                           {branch.name || "Unnamed Branch"}
                         </p>
                         <span
@@ -594,7 +594,7 @@ export default function AdminDashboard() {
                           {branch.status || "-"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400">
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                         <span>{branch.city || "Unknown city"}</span>
                         <span>·</span>
                         <span>{branch.managerCount} mgr</span>
@@ -609,10 +609,10 @@ export default function AdminDashboard() {
           )}
 
           {/* Branch footer */}
-          <div className="px-5 py-3 border-t border-gray-100 shrink-0 mt-auto">
+          <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700/40 shrink-0 mt-auto">
             <Link
               href={`${dashboardBasePath}/branches`}
-              className="flex items-center justify-center gap-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors group"
+              className="flex items-center justify-center gap-1.5 text-xs font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors group"
             >
               View all branches
               <svg className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -623,19 +623,19 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 shrink-0">
-            <div className="p-1.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden flex flex-col transition-colors">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center gap-2.5 shrink-0">
+            <div className="p-1.5 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-700/40">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Recent Activity</h2>
             {!activityLoading && !activityError && (
               <button
                 type="button"
                 onClick={() => void loadRecentActivity()}
-                className="ml-auto p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                className="ml-auto p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 title="Refresh"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -651,12 +651,12 @@ export default function AdminDashboard() {
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="animate-pulse flex gap-3">
                     <div className="flex flex-col items-center pt-1.5 shrink-0">
-                      <div className="w-2 h-2 rounded-full bg-gray-200" />
-                      {i < 4 && <div className="w-px flex-1 bg-gray-100 mt-1 min-h-[20px]" />}
+                      <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700" />
+                      {i < 4 && <div className="w-px flex-1 bg-gray-100 dark:bg-gray-700/60 mt-1 min-h-[20px]" />}
                     </div>
                     <div className="flex-1 space-y-1.5 pb-3">
-                      <div className="h-3 bg-gray-200 rounded w-4/5" />
-                      <div className="h-2.5 bg-gray-100 rounded w-3/5" />
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/5" />
+                      <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded w-3/5" />
                     </div>
                   </div>
                 ))}
@@ -676,7 +676,7 @@ export default function AdminDashboard() {
                 </button>
               </div>
             ) : recentActivity.length === 0 ? (
-              <div className="px-5 py-10 text-center text-sm text-gray-500">
+              <div className="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                 No recent audit activity found.
               </div>
             ) : (
@@ -691,16 +691,16 @@ export default function AdminDashboard() {
                       <div className="flex flex-col items-center pt-1.5 shrink-0">
                         <span className={`w-2 h-2 rounded-full ${toActivityDotColor(item.action, index)}`} />
                         {index < recentActivity.length - 1 && (
-                          <span className="w-px flex-1 bg-gray-100 mt-1 min-h-[16px]" />
+                          <span className="w-px flex-1 bg-gray-100 dark:bg-gray-700/60 mt-1 min-h-[16px]" />
                         )}
                       </div>
                       <div className="min-w-0 pb-2 flex-1">
-                        <p className="text-sm text-gray-700 leading-snug">
-                          <span className="text-gray-400 text-xs">{item.action}</span>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">{item.action}</span>
                           {" "}
-                          <span className="font-medium text-gray-900">{target}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{target}</span>
                         </p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{timeLabel} · {actor}</p>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{timeLabel} · {actor}</p>
                       </div>
                     </div>
                   );
@@ -710,10 +710,10 @@ export default function AdminDashboard() {
           </div>
 
           {/* Logs link footer */}
-          <div className="px-5 py-3 border-t border-gray-100 shrink-0">
+          <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700/40 shrink-0">
             <Link
               href={`${dashboardBasePath}/logs`}
-              className="flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors group"
+              className="flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors group"
             >
               View full audit log
               <svg className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

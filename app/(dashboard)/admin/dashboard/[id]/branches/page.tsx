@@ -50,14 +50,14 @@ const formatDate = (value: string | null) => {
 
 const statusBadge = (status: string | null) => {
   if (status === "ACTIVE") {
-    return "bg-emerald-100 text-emerald-700";
+    return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
   }
 
   if (status === "INACTIVE") {
-    return "bg-gray-200 text-gray-600";
+    return "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
   }
 
-  return "bg-gray-100 text-gray-600";
+  return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
 };
 
 const getPrimaryManagerLabel = (row: AdminBranchWithManagersRecord) => {
@@ -172,7 +172,7 @@ export default function AdminBranches() {
     {
       label: "Total Branches",
       value: total.toLocaleString(),
-      accent: "bg-purple-50 text-purple-600",
+      accent: "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -182,7 +182,7 @@ export default function AdminBranches() {
     {
       label: "Active on Page",
       value: activeBranchesOnPage.toLocaleString(),
-      accent: "bg-blue-50 text-blue-600",
+      accent: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -192,7 +192,7 @@ export default function AdminBranches() {
     {
       label: "Managers on Page",
       value: totalManagersOnPage.toLocaleString(),
-      accent: "bg-emerald-50 text-emerald-600",
+      accent: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m0 0H4m5 0v-2a4 4 0 018 0v2zM12 12a4 4 0 100-8 4 4 0 000 8z" />
@@ -202,7 +202,7 @@ export default function AdminBranches() {
     {
       label: "Primary Assigned",
       value: withPrimaryManagerOnPage.toLocaleString(),
-      accent: "bg-amber-50 text-amber-600",
+      accent: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l2.118 6.52a1 1 0 00.95.69h6.857c.969 0 1.371 1.24.588 1.81l-5.547 4.03a1 1 0 00-.364 1.118l2.118 6.52c.3.921-.755 1.688-1.539 1.118l-5.547-4.03a1 1 0 00-1.176 0l-5.547 4.03c-.783.57-1.838-.197-1.539-1.118l2.118-6.52a1 1 0 00-.364-1.118L.536 11.947c-.783-.57-.38-1.81.588-1.81h6.857a1 1 0 00.95-.69l2.118-6.52z" />
@@ -218,7 +218,7 @@ export default function AdminBranches() {
         description="Live branch list with assigned managers and status filtering."
       />
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <select
             value={draftFilters.status}
@@ -228,14 +228,14 @@ export default function AdminBranches() {
                 status: event.target.value as Filters["status"],
               }))
             }
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             <option value={ALL_FILTER}>All Statuses</option>
             <option value="ACTIVE">ACTIVE</option>
             <option value="INACTIVE">INACTIVE</option>
           </select>
 
-          <label className="inline-flex items-center gap-2 px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700">
+          <label className="inline-flex items-center gap-2 px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               checked={draftFilters.includeInactive}
@@ -245,7 +245,7 @@ export default function AdminBranches() {
                   includeInactive: event.target.checked,
                 }))
               }
-              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              className="rounded border-gray-300 dark:border-gray-600 text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500"
             />
             Include inactive branches
           </label>
@@ -256,7 +256,7 @@ export default function AdminBranches() {
               setPage(1);
               setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
             }}
-            className="px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -277,7 +277,7 @@ export default function AdminBranches() {
           <button
             type="button"
             onClick={onResetFilters}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Reset
           </button>
@@ -290,23 +290,23 @@ export default function AdminBranches() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Branches</h2>
-          <p className="text-xs text-gray-500">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Branches</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {currentPageStart}-{currentPageEnd} of {total}
           </p>
         </div>
 
         {loading ? (
-          <div className="px-5 py-8 text-sm text-gray-500">Loading branches...</div>
+          <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading branches...</div>
         ) : error ? (
-          <div className="px-5 py-8 text-sm text-red-600">{error}</div>
+          <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{error}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">Branch</th>
                   <th className="px-5 py-3 font-medium">City</th>
                   <th className="px-5 py-3 font-medium">Primary Manager</th>
@@ -319,27 +319,27 @@ export default function AdminBranches() {
                 {rows.map((branch) => (
                   <tr
                     key={branch.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <p className="font-medium text-gray-900">{branch.name || "Unnamed Branch"}</p>
-                      <p className="text-xs text-gray-500">{branch.code || branch.id}</p>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{branch.name || "Unnamed Branch"}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{branch.code || branch.id}</p>
                     </td>
-                    <td className="px-5 py-3 text-gray-600">{branch.city || "-"}</td>
-                    <td className="px-5 py-3 text-gray-600">{getPrimaryManagerLabel(branch)}</td>
-                    <td className="px-5 py-3 text-gray-600">{branch.managerCount}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.city || "-"}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{getPrimaryManagerLabel(branch)}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.managerCount}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(branch.status)}`}>
                         {branch.status || "-"}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-500">{formatDate(branch.updatedAt)}</td>
+                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDate(branch.updatedAt)}</td>
                   </tr>
                 ))}
 
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
+                    <td colSpan={6} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
                       No branches found.
                     </td>
                   </tr>
@@ -349,23 +349,23 @@ export default function AdminBranches() {
           </div>
         )}
 
-        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={!canGoPrev}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Prev
           </button>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             Page {page} / {totalPages}
           </span>
           <button
             type="button"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={!canGoNext}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>

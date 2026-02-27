@@ -6,7 +6,10 @@
       "Bash(node:*)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(powershell.exe -Command \":*)",
+      "Bash(pwsh -NoProfile:*)",
+      "Bash(cmd.exe /c \"pwsh -NoProfile -NonInteractive -Command \"\"Write-Host ''pwsh ok''\"\"\")"
     ]
   }
 }

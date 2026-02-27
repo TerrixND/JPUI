@@ -498,7 +498,7 @@ const makeNewAllocation = (): AllocationRow => ({
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+    <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700/60 pb-2 mb-4">
       {children}
     </h2>
   );
@@ -506,11 +506,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function MediaTypeChip({ type }: { type: ProductMedia["type"] }) {
   if (type === "IMAGE") {
-    return <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-medium">IMAGE</span>;
+    return <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px] font-medium">IMAGE</span>;
   }
 
   if (type === "VIDEO") {
-    return <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[11px] font-medium">VIDEO</span>;
+    return <span className="px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-[11px] font-medium">VIDEO</span>;
   }
 
   return <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-[11px] font-medium">PDF</span>;
@@ -523,7 +523,7 @@ function VisibilityPresetChip({
 }) {
   if (!preset) {
     return (
-      <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[11px] font-medium">
+      <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
         UNSET
       </span>
     );
@@ -534,7 +534,7 @@ function VisibilityPresetChip({
   return (
     <span
       className={`px-2 py-0.5 rounded text-[11px] font-medium ${
-        isRolePreset ? "bg-indigo-50 text-indigo-700" : "bg-emerald-50 text-emerald-700"
+        isRolePreset ? "bg-indigo-50 text-indigo-700" : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
       }`}
     >
       {preset.replace(/_/g, " ")}
@@ -554,9 +554,9 @@ function ExistingMediaCard({
   onRefresh: (rowId: string, mediaId: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 overflow-hidden bg-white dark:bg-gray-900">
       <a href={media.url} target="_blank" rel="noreferrer" className="block">
-        <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+        <div className="aspect-square bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
           {media.type === "IMAGE" ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -604,14 +604,14 @@ function ExistingMediaCard({
           <VisibilityPresetChip preset={media.visibilityPreset} />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] text-gray-400 font-mono">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
             {media.mediaId ? media.mediaId.slice(0, 8) : "INLINE"}
           </span>
           <button
             type="button"
             onClick={() => onDelete(media)}
             disabled={deleting}
-            className="px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="px-2 py-1 text-[11px] rounded border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {deleting ? "Deleting..." : "Delete"}
           </button>
@@ -1316,7 +1316,7 @@ export default function ProductEditPage() {
   };
 
   const inputCls =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
 
   if (loading) {
     return (
@@ -1326,13 +1326,13 @@ export default function ProductEditPage() {
           action={
             <Link
               href={productsPath}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Back to Products
             </Link>
           }
         />
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-8 text-sm text-gray-500 dark:text-gray-400">
           Loading product details...
         </div>
       </div>
@@ -1347,13 +1347,13 @@ export default function ProductEditPage() {
           action={
             <Link
               href={productsPath}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Back to Products
             </Link>
           }
         />
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-sm text-gray-500">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-8 text-sm text-gray-500 dark:text-gray-400">
           No product was found for id: <span className="font-mono">{productId}</span>
         </div>
       </div>
@@ -1368,7 +1368,7 @@ export default function ProductEditPage() {
         action={
           <Link
             href={productsPath}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Back to Products
           </Link>
@@ -1376,33 +1376,33 @@ export default function ProductEditPage() {
       />
 
       {(productEditBlocked || productDeleteBlocked) && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm text-amber-700 dark:text-amber-300">
           {productEditBlocked ? productEditTooltip : productDeleteTooltip}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
 
         {lookupError && (
-          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm text-amber-700 dark:text-amber-300">
             {lookupError}
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Product Summary</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[12px] text-gray-500 mb-1">SKU</label>
-              <input type="text" value={form.sku} readOnly className={`${inputCls} text-gray-500`} />
+              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">SKU</label>
+              <input type="text" value={form.sku} readOnly className={`${inputCls} text-gray-500 dark:text-gray-400`} />
             </div>
             <div>
-              <label className="block text-[12px] text-gray-500 mb-1">Name</label>
+              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -1411,22 +1411,22 @@ export default function ProductEditPage() {
               />
             </div>
             <div>
-              <label className="block text-[12px] text-gray-500 mb-1">Status</label>
+              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">Status</label>
               <input
                 type="text"
                 value={form.status}
                 readOnly
-                className={`${inputCls} text-gray-500`}
+                className={`${inputCls} text-gray-500 dark:text-gray-400`}
               />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Buy Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
               <input
                 type="number"
                 min="0"
@@ -1438,7 +1438,7 @@ export default function ProductEditPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Min Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Min Price</label>
               <input
                 type="number"
                 min="0"
@@ -1450,7 +1450,7 @@ export default function ProductEditPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] text-gray-700 mb-1.5">Sale Max Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Max Price</label>
               <input
                 type="number"
                 min="0"
@@ -1464,24 +1464,24 @@ export default function ProductEditPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Commission Allocations</SectionHeading>
 
           <div className="flex items-center justify-between gap-3 mb-4">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Editing this array replaces existing backend allocations for this product.
             </p>
             <button
               type="button"
               onClick={addAllocation}
-              className="px-3 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors"
             >
               + Add Allocation
             </button>
           </div>
 
           {allocations.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">
+            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 px-4 py-5 text-sm text-gray-500 dark:text-gray-400">
               No allocations configured.
             </div>
           ) : (
@@ -1495,13 +1495,13 @@ export default function ProductEditPage() {
                   Boolean(row.userId) && !managers.some((manager) => manager.id === row.userId);
 
                 return (
-                  <div key={row.id} className="rounded-lg border border-gray-200 p-4 space-y-3">
+                  <div key={row.id} className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-gray-700">Allocation #{index + 1}</h3>
+                      <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">Allocation #{index + 1}</h3>
                       <button
                         type="button"
                         onClick={() => removeAllocation(row.id)}
-                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                        className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700"
                       >
                         Remove
                       </button>
@@ -1509,7 +1509,7 @@ export default function ProductEditPage() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
                       <div className="lg:col-span-2">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Target</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Target</label>
                         <select
                           value={row.targetType}
                           onChange={(e) => {
@@ -1532,7 +1532,7 @@ export default function ProductEditPage() {
 
                       {row.targetType === "BRANCH" ? (
                         <div className="lg:col-span-4">
-                          <label className="block text-[12px] text-gray-700 mb-1.5">Branch</label>
+                          <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Branch</label>
                           <select
                             value={row.branchId}
                             onChange={(e) => updateAllocation(row.id, { branchId: e.target.value })}
@@ -1549,7 +1549,7 @@ export default function ProductEditPage() {
                       ) : (
                         <>
                           <div className="lg:col-span-4">
-                            <label className="block text-[12px] text-gray-700 mb-1.5">
+                            <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">
                               Manager Branch
                             </label>
                             <select
@@ -1578,7 +1578,7 @@ export default function ProductEditPage() {
                           </div>
 
                           <div className="lg:col-span-3">
-                            <label className="block text-[12px] text-gray-700 mb-1.5">Manager</label>
+                            <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Manager</label>
                             <select
                               value={row.userId}
                               onChange={(e) => updateAllocation(row.id, { userId: e.target.value })}
@@ -1600,7 +1600,7 @@ export default function ProductEditPage() {
                       )}
 
                       <div className="lg:col-span-2">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Rate (%)</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Rate (%)</label>
                         <input
                           type="number"
                           min="0"
@@ -1614,7 +1614,7 @@ export default function ProductEditPage() {
                       </div>
 
                       <div className="lg:col-span-12">
-                        <label className="block text-[12px] text-gray-700 mb-1.5">Note</label>
+                        <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">Note</label>
                         <input
                           type="text"
                           value={row.note}
@@ -1631,10 +1631,10 @@ export default function ProductEditPage() {
           )}
 
           <div className="mt-4 text-xs">
-            <span className="text-gray-500">Total allocated rate: </span>
+            <span className="text-gray-500 dark:text-gray-400">Total allocated rate: </span>
             <span
               className={
-                totalAllocationRate > 100 ? "text-red-600 font-semibold" : "text-gray-700 font-semibold"
+                totalAllocationRate > 100 ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-700 dark:text-gray-300 font-semibold"
               }
             >
               {totalAllocationRate.toFixed(2)}%
@@ -1642,22 +1642,22 @@ export default function ProductEditPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Public Media Upload</SectionHeading>
 
           {mediaHint && (
-            <div className="mb-4 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs">
+            <div className="mb-4 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-xs">
               {mediaHint}
             </div>
           )}
 
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
             Delete outdated media, then upload replacements using the public visibility preset.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+              <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Public Visibility
               </label>
               <select
@@ -1675,7 +1675,7 @@ export default function ProductEditPage() {
 
             {publicVisibilityPreset === "USER_TIER" && (
               <div>
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Min Customer Tier
                 </label>
                 <select
@@ -1695,7 +1695,7 @@ export default function ProductEditPage() {
 
             {publicVisibilityPreset === "TARGETED_USER" && (
               <div className="md:col-span-2">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Target User IDs
                 </label>
                 <textarea
@@ -1710,9 +1710,9 @@ export default function ProductEditPage() {
           </div>
 
           <div className="mb-5">
-            <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Public Media</p>
+            <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-2">Existing Public Media</p>
             {existingPublicMedia.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
                 No public media found.
               </div>
             ) : (
@@ -1736,7 +1736,7 @@ export default function ProductEditPage() {
 
           {existingOtherMedia.length > 0 && (
             <div className="mb-5">
-              <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Media (Unclassified)</p>
+              <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-2">Existing Media (Unclassified)</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {existingOtherMedia.map((media) => (
                   <ExistingMediaCard
@@ -1756,8 +1756,8 @@ export default function ProductEditPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Thumbnail Image</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Thumbnail Image</p>
               <MediaUploader
                 files={publicThumbnailFiles}
                 onChange={setPublicThumbnailFiles}
@@ -1769,8 +1769,8 @@ export default function ProductEditPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Feature Video (Required)</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Feature Video (Required)</p>
               <MediaUploader
                 files={publicVideoFiles}
                 onChange={setPublicVideoFiles}
@@ -1782,8 +1782,8 @@ export default function ProductEditPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">More Images</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">More Images</p>
               <MediaUploader
                 files={publicGalleryFiles}
                 onChange={setPublicGalleryFiles}
@@ -1795,8 +1795,8 @@ export default function ProductEditPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Certificate File</p>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File</p>
               <MediaUploader
                 files={publicCertificateFiles}
                 onChange={setPublicCertificateFiles}
@@ -1810,14 +1810,14 @@ export default function ProductEditPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Role Based Media Upload</SectionHeading>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
             Upload internal media with access limited to one role preset.
           </p>
 
           <div className="mb-4">
-            <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+            <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Role Visibility
             </label>
             <select
@@ -1834,9 +1834,9 @@ export default function ProductEditPage() {
           </div>
 
           <div className="mb-5">
-            <p className="text-[12px] font-medium text-gray-700 mb-2">Existing Role Based Media</p>
+            <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-2">Existing Role Based Media</p>
             {existingRoleMedia.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
                 No role-based media found.
               </div>
             ) : (
@@ -1871,7 +1871,7 @@ export default function ProductEditPage() {
         <div className="flex items-center justify-end gap-3 pt-2">
           <Link
             href={productsPath}
-            className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </Link>

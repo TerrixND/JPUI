@@ -215,7 +215,7 @@ export default function AdminErrors() {
   const canGoNext = page < totalPages;
 
   const inputClass =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400";
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
 
   return (
     <div className="space-y-5">
@@ -226,44 +226,44 @@ export default function AdminErrors() {
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Total Errors</p>
-          <p className="text-2xl font-semibold text-gray-900 mt-1">{loading ? "-" : total.toLocaleString()}</p>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Errors</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{loading ? "-" : total.toLocaleString()}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Current Page</p>
-          <p className="text-2xl font-semibold text-gray-900 mt-1">{loading ? "-" : rows.length}</p>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Page</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{loading ? "-" : rows.length}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Active Filters</p>
-          <p className="text-2xl font-semibold text-gray-900 mt-1">{activeFilterCount}</p>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Active Filters</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{activeFilterCount}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Per Page</p>
-          <p className="text-2xl font-semibold text-gray-900 mt-1">{limit}</p>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Per Page</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{limit}</p>
         </div>
       </div>
 
       {/* Filters panel */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
         <button
           type="button"
           onClick={() => setFiltersOpen((prev) => !prev)}
-          className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors"
+          className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
         >
           <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
-            <span className="text-sm font-medium text-gray-700">Filters</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
             {activeFilterCount > 0 && (
-              <span className="px-2 py-0.5 text-[11px] font-medium bg-emerald-100 text-emerald-700 rounded-full">
+              <span className="px-2 py-0.5 text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full">
                 {activeFilterCount} active
               </span>
             )}
           </div>
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -274,10 +274,10 @@ export default function AdminErrors() {
         </button>
 
         {filtersOpen && (
-          <div className="px-5 pb-5 space-y-4 border-t border-gray-100">
+          <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-700/40">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
               <div className="sm:col-span-2 lg:col-span-3">
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Message contains</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Message contains</label>
                 <input
                   type="text"
                   value={draftFilters.message}
@@ -287,7 +287,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Actor User ID</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Actor User ID</label>
                 <input
                   type="text"
                   value={draftFilters.actorUserId}
@@ -297,7 +297,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Source</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Source</label>
                 <input
                   type="text"
                   value={draftFilters.source}
@@ -307,7 +307,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Process</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Process</label>
                 <input
                   type="text"
                   value={draftFilters.process}
@@ -317,7 +317,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Function</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Function</label>
                 <input
                   type="text"
                   value={draftFilters.functionName}
@@ -327,7 +327,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Request ID</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Request ID</label>
                 <input
                   type="text"
                   value={draftFilters.requestId}
@@ -337,7 +337,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Color Code</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Color Code</label>
                 <input
                   type="text"
                   value={draftFilters.colorCode}
@@ -347,7 +347,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">From Date</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">From Date</label>
                 <input
                   type="date"
                   value={draftFilters.from}
@@ -356,7 +356,7 @@ export default function AdminErrors() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">To Date</label>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">To Date</label>
                 <input
                   type="date"
                   value={draftFilters.to}
@@ -378,21 +378,21 @@ export default function AdminErrors() {
                 <button
                   type="button"
                   onClick={onResetFilters}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                 >
                   Reset
                 </button>
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">Rows</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Rows</label>
                 <select
                   value={limit}
                   onChange={(e) => {
                     setPage(1);
                     setLimit(Number(e.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
                   }}
-                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
                 >
                   {PAGE_SIZE_OPTIONS.map((size) => (
                     <option key={size} value={size}>
@@ -407,17 +407,17 @@ export default function AdminErrors() {
       </div>
 
       {/* Error logs */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <h2 className="text-base font-semibold text-gray-900">Internal Error Logs</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Internal Error Logs</h2>
             {!loading && total > 0 && (
-              <span className="px-2.5 py-0.5 text-[11px] font-medium bg-red-100 text-red-700 rounded-full">
+              <span className="px-2.5 py-0.5 text-[11px] font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
                 {total.toLocaleString()} total
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {loading ? "Loading..." : `${currentPageStart}\u2013${currentPageEnd} of ${total}`}
           </p>
         </div>
@@ -427,11 +427,11 @@ export default function AdminErrors() {
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="px-5 py-4 animate-pulse">
                 <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 mt-1.5 rounded-full bg-gray-200 shrink-0" />
+                  <div className="w-2 h-2 mt-1.5 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-3/4" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2" />
-                    <div className="h-3 bg-gray-100 rounded w-1/3" />
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                    <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+                    <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
                   </div>
                 </div>
               </div>
@@ -442,11 +442,11 @@ export default function AdminErrors() {
             <svg className="w-10 h-10 text-red-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
-            <p className="text-sm text-red-600 font-medium">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
             <button
               type="button"
               onClick={() => void loadInternalErrors()}
-              className="mt-3 px-4 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+              className="mt-3 px-4 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 transition-colors"
             >
               Retry
             </button>
@@ -456,8 +456,8 @@ export default function AdminErrors() {
             <svg className="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm text-gray-500 font-medium">No error logs found</p>
-            <p className="text-xs text-gray-400 mt-1">All clear — no internal errors to display.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">No error logs found</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">All clear — no internal errors to display.</p>
           </div>
         ) : (
           <>
@@ -465,7 +465,7 @@ export default function AdminErrors() {
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider bg-gray-50/80 border-b border-gray-200">
+                  <tr className="text-left text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/80 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
                     <th className="px-5 py-3 font-medium">Time</th>
                     <th className="px-5 py-3 font-medium">Source</th>
                     <th className="px-5 py-3 font-medium">Process / Function</th>
@@ -479,11 +479,11 @@ export default function AdminErrors() {
                     <tr
                       key={row.id}
                       onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
-                      className="hover:bg-gray-50/80 transition-colors cursor-pointer group"
+                      className="hover:bg-gray-50/80 dark:hover:bg-gray-800/60 transition-colors cursor-pointer group"
                     >
-                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap align-top">
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap align-top">
                         <p className="text-xs">{formatDateTime(row.createdAt)}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{formatRelativeTime(row.createdAt)}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{formatRelativeTime(row.createdAt)}</p>
                       </td>
                       <td className="px-5 py-3 align-top">
                         <div className="flex items-center gap-2">
@@ -494,39 +494,39 @@ export default function AdminErrors() {
                             />
                           )}
                           <div>
-                            <p className="text-gray-700 font-medium text-xs">{row.source || "-"}</p>
+                            <p className="text-gray-700 dark:text-gray-300 font-medium text-xs">{row.source || "-"}</p>
                             {row.colorCode && (
-                              <p className="text-[10px] text-gray-400 font-mono">{row.colorCode}</p>
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">{row.colorCode}</p>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-gray-700 align-top">
+                      <td className="px-5 py-3 text-gray-700 dark:text-gray-300 align-top">
                         <p className="text-xs">{row.process || "-"}</p>
                         {row.functionName && (
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5">{row.functionName}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">{row.functionName}</p>
                         )}
                       </td>
-                      <td className="px-5 py-3 text-gray-600 max-w-md align-top">
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 max-w-md align-top">
                         <p className={`text-xs break-words ${expandedRow === row.id ? "" : "line-clamp-2"}`}>
                           {row.message || "-"}
                         </p>
                         {expandedRow === row.id && row.stack && (
-                          <pre className="text-[10px] text-gray-400 mt-2 p-2.5 bg-gray-50 rounded-lg overflow-x-auto whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
+                          <pre className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg overflow-x-auto whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
                             {row.stack}
                           </pre>
                         )}
                       </td>
                       <td className="px-5 py-3 align-top">
-                        <p className="font-mono text-[11px] text-gray-700 truncate max-w-[120px]">{row.actorUserId || "-"}</p>
+                        <p className="font-mono text-[11px] text-gray-700 dark:text-gray-300 truncate max-w-[120px]">{row.actorUserId || "-"}</p>
                         {row.actorEmail && (
-                          <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{row.actorEmail}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[120px]">{row.actorEmail}</p>
                         )}
                       </td>
                       <td className="px-5 py-3 align-top">
-                        <p className="font-mono text-[11px] text-gray-700 truncate max-w-[120px]">{row.requestId || "-"}</p>
+                        <p className="font-mono text-[11px] text-gray-700 dark:text-gray-300 truncate max-w-[120px]">{row.requestId || "-"}</p>
                         {row.ipAddress && (
-                          <p className="text-[10px] text-gray-400">{row.ipAddress}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500">{row.ipAddress}</p>
                         )}
                       </td>
                     </tr>
@@ -542,7 +542,7 @@ export default function AdminErrors() {
                 return (
                   <div
                     key={row.id}
-                    className="px-4 py-3.5 hover:bg-gray-50/50 transition-colors"
+                    className="px-4 py-3.5 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
                   >
                     <button
                       type="button"
@@ -556,17 +556,17 @@ export default function AdminErrors() {
                             className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow-sm"
                             style={{ backgroundColor: row.colorCode || "#94a3b8" }}
                           />
-                          <span className="text-xs font-medium text-gray-800 truncate">
+                          <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
                             {row.source || "Unknown"}
                           </span>
                           {row.process && (
-                            <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded-md truncate max-w-[120px]">
+                            <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md truncate max-w-[120px]">
                               {row.process}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] text-gray-400">{formatRelativeTime(row.createdAt)}</span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatRelativeTime(row.createdAt)}</span>
                           <svg
                             className={`w-3.5 h-3.5 text-gray-300 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
                             fill="none"
@@ -580,54 +580,54 @@ export default function AdminErrors() {
                       </div>
 
                       {/* Message preview */}
-                      <p className={`text-xs text-gray-600 mt-1.5 ${isExpanded ? "" : "line-clamp-2"} break-words`}>
+                      <p className={`text-xs text-gray-600 dark:text-gray-300 mt-1.5 ${isExpanded ? "" : "line-clamp-2"} break-words`}>
                         {row.message || "No message"}
                       </p>
 
                       {row.functionName && (
-                        <p className="text-[10px] text-gray-400 font-mono mt-1">{row.functionName}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-1">{row.functionName}</p>
                       )}
                     </button>
 
                     {/* Expanded details */}
                     {isExpanded && (
-                      <div className="mt-3 space-y-2.5 pl-4 border-l-2 border-gray-100">
+                      <div className="mt-3 space-y-2.5 pl-4 border-l-2 border-gray-100 dark:border-gray-700/40">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Time</p>
-                            <p className="text-xs text-gray-600 mt-0.5">{formatDateTime(row.createdAt)}</p>
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Time</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{formatDateTime(row.createdAt)}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Source</p>
-                            <p className="text-xs text-gray-600 mt-0.5">
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Source</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                               {row.source || "-"}
-                              {row.colorCode && <span className="text-gray-400 ml-1 font-mono text-[10px]">{row.colorCode}</span>}
+                              {row.colorCode && <span className="text-gray-400 dark:text-gray-500 ml-1 font-mono text-[10px]">{row.colorCode}</span>}
                             </p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Process</p>
-                            <p className="text-xs text-gray-600 mt-0.5">{row.process || "-"}</p>
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Process</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{row.process || "-"}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Function</p>
-                            <p className="text-xs text-gray-600 font-mono mt-0.5">{row.functionName || "-"}</p>
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Function</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 font-mono mt-0.5">{row.functionName || "-"}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Actor</p>
-                            <p className="text-xs text-gray-600 font-mono mt-0.5 break-all">{row.actorUserId || "-"}</p>
-                            {row.actorEmail && <p className="text-[10px] text-gray-400">{row.actorEmail}</p>}
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Actor</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 font-mono mt-0.5 break-all">{row.actorUserId || "-"}</p>
+                            {row.actorEmail && <p className="text-[10px] text-gray-400 dark:text-gray-500">{row.actorEmail}</p>}
                           </div>
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Request</p>
-                            <p className="text-xs text-gray-600 font-mono mt-0.5 break-all">{row.requestId || "-"}</p>
-                            {row.ipAddress && <p className="text-[10px] text-gray-400">{row.ipAddress}</p>}
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Request</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 font-mono mt-0.5 break-all">{row.requestId || "-"}</p>
+                            {row.ipAddress && <p className="text-[10px] text-gray-400 dark:text-gray-500">{row.ipAddress}</p>}
                           </div>
                         </div>
 
                         {row.stack && (
                           <div>
-                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">Stack Trace</p>
-                            <pre className="text-[10px] text-gray-500 p-2.5 bg-gray-50 rounded-lg overflow-x-auto whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
+                            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Stack Trace</p>
+                            <pre className="text-[10px] text-gray-500 dark:text-gray-400 p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg overflow-x-auto whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
                               {row.stack}
                             </pre>
                           </div>
@@ -643,8 +643,8 @@ export default function AdminErrors() {
 
         {/* Pagination */}
         {!loading && !error && rows.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-2">
-            <p className="text-xs text-gray-500 hidden sm:block">
+          <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
               Showing {currentPageStart}&ndash;{currentPageEnd} of {total.toLocaleString()} errors
             </p>
             <div className="flex items-center gap-1.5 ml-auto">
@@ -652,7 +652,7 @@ export default function AdminErrors() {
                 type="button"
                 onClick={() => setPage(1)}
                 disabled={!canGoPrev}
-                className="px-2 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 First
               </button>
@@ -660,18 +660,18 @@ export default function AdminErrors() {
                 type="button"
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                 disabled={!canGoPrev}
-                className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Prev
               </button>
-              <span className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-emerald-50 rounded-md min-w-[60px] text-center">
+              <span className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-md min-w-[60px] text-center">
                 {page} / {totalPages}
               </span>
               <button
                 type="button"
                 onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                 disabled={!canGoNext}
-                className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>
@@ -679,7 +679,7 @@ export default function AdminErrors() {
                 type="button"
                 onClick={() => setPage(totalPages)}
                 disabled={!canGoNext}
-                className="px-2 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Last
               </button>
@@ -689,20 +689,20 @@ export default function AdminErrors() {
       </div>
 
       {/* Danger zone */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
         <button
           type="button"
           onClick={() => setDangerOpen((prev) => !prev)}
           className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-red-50/30 transition-colors"
         >
           <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
-            <span className="text-sm font-medium text-red-700">Danger Zone</span>
+            <span className="text-sm font-medium text-red-700 dark:text-red-300">Danger Zone</span>
           </div>
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${dangerOpen ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200 ${dangerOpen ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -714,8 +714,8 @@ export default function AdminErrors() {
 
         {dangerOpen && (
           <div className="px-5 pb-5 border-t border-red-100">
-            <div className="mt-4 bg-red-50 rounded-lg p-4 space-y-3">
-              <p className="text-sm font-medium text-red-800">Clear Internal Error Logs</p>
+            <div className="mt-4 bg-red-50 dark:bg-red-900/20 rounded-lg p-4 space-y-3">
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">Clear Internal Error Logs</p>
               <p className="text-xs text-red-600/80">
                 This action is irreversible. A backup file will be generated before deletion.
               </p>
@@ -725,7 +725,7 @@ export default function AdminErrors() {
                   value={clearReason}
                   onChange={(e) => setClearReason(e.target.value)}
                   placeholder="Reason for clearing logs"
-                  className="flex-1 px-3.5 py-2.5 text-sm bg-white border border-red-200 rounded-lg outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors placeholder:text-red-300"
+                  className="flex-1 px-3.5 py-2.5 text-sm bg-white dark:bg-gray-900 border border-red-200 dark:border-red-700/50 rounded-lg outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors placeholder:text-red-300 dark:placeholder:text-red-400"
                 />
                 <button
                   type="button"
@@ -737,19 +737,19 @@ export default function AdminErrors() {
                 </button>
               </div>
               {clearError && (
-                <div className="flex items-center gap-2 p-2.5 bg-red-100 rounded-lg">
-                  <svg className="w-3.5 h-3.5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                  <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <p className="text-xs text-red-700">{clearError}</p>
+                  <p className="text-xs text-red-700 dark:text-red-300">{clearError}</p>
                 </div>
               )}
               {clearMessage && (
-                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                  <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 rounded-lg">
+                  <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
-                  <p className="text-xs text-emerald-700">{clearMessage}</p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">{clearMessage}</p>
                 </div>
               )}
             </div>
