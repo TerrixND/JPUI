@@ -1,46 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
-  getAdminStaffRules,
-  createAdminStaffRule,
-  revokeAdminStaffRule,
-  type StaffOnboardingRule,
+  createManagerStaffRule,
+  getManagerStaffRules,
+  revokeManagerStaffRule,
   type CreateStaffRulePayload,
-  type StaffRuleVisibilityRole,
-  type StaffRuleManagerType,
-  type StaffRuleAdminCapabilities,
+  type StaffOnboardingRule,
   type StaffRuleManagerCapabilities,
+  type StaffRuleManagerType,
+  type StaffRuleVisibilityRole,
 } from "@/lib/apiClient";
-import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
 /* ------------------------------------------------------------------ */
 
-const PROVISIONABLE_ROLES = ["ADMIN", "MANAGER", "SALES"] as const;
-const BRANCH_REQUIRED_ROLES: ReadonlySet<string> = new Set(["SALES"]);
+const PROVISIONABLE_ROLES = ["MANAGER", "SALES"] as const;
 const STATUS_TABS = ["ALL", "PENDING", "EXPIRED", "CLAIMED", "REVOKED"] as const;
+const MANAGER_TYPE_OPTIONS: StaffRuleManagerType[] = ["BRANCH_MANAGER", "BRANCH_ADMIN"];
 const VISIBILITY_ROLE_OPTIONS: StaffRuleVisibilityRole[] = ["ADMIN", "MANAGER", "SALES"];
-const MANAGER_TYPE_OPTIONS: StaffRuleManagerType[] = ["STANDALONE", "BRANCH_MANAGER", "BRANCH_ADMIN"];
-
-const ADMIN_CAPABILITY_OPTIONS: Array<{
-  key: keyof StaffRuleAdminCapabilities;
-  label: string;
-}> = [
-  { key: "canReadProducts", label: "Read products" },
-  { key: "canCreateProducts", label: "Create products" },
-  { key: "canEditProducts", label: "Edit products" },
-  { key: "canHandleRequests", label: "Handle requests" },
-  { key: "canDeleteLogs", label: "Delete logs" },
-  { key: "canManageProductVisibility", label: "Manage product visibility" },
-  { key: "canManageStaffRules", label: "Manage staff rules" },
-  { key: "canRestrictUsers", label: "Restrict users" },
-  { key: "canBanUsers", label: "Ban users" },
-];
 
 const MANAGER_CAPABILITY_OPTIONS: Array<{
   key: keyof StaffRuleManagerCapabilities;
@@ -55,18 +37,6 @@ const MANAGER_CAPABILITY_OPTIONS: Array<{
   { key: "canBanSubordinates", label: "Ban subordinates" },
   { key: "canLimitSubordinatePermissions", label: "Limit subordinate permissions" },
 ];
-
-const DEFAULT_ADMIN_CAPABILITIES: StaffRuleAdminCapabilities = {
-  canReadProducts: true,
-  canCreateProducts: true,
-  canEditProducts: true,
-  canHandleRequests: true,
-  canDeleteLogs: true,
-  canManageProductVisibility: true,
-  canManageStaffRules: true,
-  canRestrictUsers: true,
-  canBanUsers: true,
-};
 
 const DEFAULT_MANAGER_CAPABILITIES: StaffRuleManagerCapabilities = {
   canCreateStaffRules: true,
@@ -92,24 +62,14 @@ const normalizeManagerCapabilities = (
     }
   };
 
-  if (managerType === "STANDALONE") {
-    apply("canCreateStaffRules", false);
-    apply("canApproveRequests", false);
-    apply("canRequestProductsFromAdmin", true);
-    apply("canRequestManagerRestrictions", true);
-    apply("canRequestManagerBans", true);
+  /* Non-standalone managers cannot use manager restriction/ban requests */
+  apply("canRequestManagerRestrictions", false);
+  apply("canRequestManagerBans", false);
+
+  if (managerType !== "BRANCH_ADMIN") {
     apply("canRestrictSubordinates", false);
     apply("canBanSubordinates", false);
     apply("canLimitSubordinatePermissions", false);
-  } else {
-    apply("canRequestManagerRestrictions", false);
-    apply("canRequestManagerBans", false);
-
-    if (managerType !== "BRANCH_ADMIN") {
-      apply("canRestrictSubordinates", false);
-      apply("canBanSubordinates", false);
-      apply("canLimitSubordinatePermissions", false);
-    }
   }
 
   if (managerType === "BRANCH_ADMIN") {
@@ -118,9 +78,6 @@ const normalizeManagerCapabilities = (
     apply("canRequestProductsFromAdmin", true);
   }
 
-  if (!next.canRequestManagerRestrictions) {
-    apply("canRequestManagerBans", false);
-  }
   if (!next.canRestrictSubordinates) {
     apply("canBanSubordinates", false);
   }
@@ -139,23 +96,7 @@ type BranchOption = {
   status: string;
 };
 
-type ApiErrorPayload = {
-  message?: unknown;
-  code?: unknown;
-  reason?: unknown;
-};
-
-type BranchAnalyticsResponse = {
-  branches?: BranchOption[];
-  message?: string;
-};
-
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = typeof payload?.message === "string" ? payload.message : fallback;
-  const code = typeof payload?.code === "string" ? ` (code: ${payload.code})` : "";
-  const reason = typeof payload?.reason === "string" ? ` (reason: ${payload.reason})` : "";
-  return `${message}${code}${reason}`;
-};
+type JsonRecord = Record<string, unknown>;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -200,6 +141,30 @@ const formatBranchLabel = (branch: BranchOption) => {
   return `${code}${branch.name}${city}${status}`;
 };
 
+const readRuleCommission = (rule: StaffOnboardingRule) => {
+  if (!rule.permissions || typeof rule.permissions !== "object") return null;
+  const permissions = rule.permissions as JsonRecord;
+  const salesScoped = (permissions.sales as JsonRecord) || permissions;
+  const commission = (salesScoped?.commission as JsonRecord) || null;
+  if (!commission) return null;
+  const rate = typeof commission.rate === "number" ? commission.rate : null;
+  const priority = typeof commission.priority === "number" ? commission.priority : null;
+  const note = typeof commission.note === "string" ? commission.note : null;
+  if (rate === null && priority === null && !note) return null;
+  return { rate, priority, note };
+};
+
+const readRuleManagerType = (rule: StaffOnboardingRule) => {
+  if (!rule.permissions || typeof rule.permissions !== "object") return null;
+  const permissions = rule.permissions as JsonRecord;
+  const managerScoped = (permissions.manager as JsonRecord) || permissions;
+  const mt = typeof managerScoped?.managerType === "string"
+    ? managerScoped.managerType.toUpperCase()
+    : null;
+  if (mt === "BRANCH_MANAGER" || mt === "BRANCH_ADMIN" || mt === "STANDALONE") return mt;
+  return null;
+};
+
 /* ------------------------------------------------------------------ */
 /* Status / role styling                                               */
 /* ------------------------------------------------------------------ */
@@ -212,7 +177,6 @@ const statusBadgeClass: Record<string, string> = {
 };
 
 const roleBadgeClass: Record<string, string> = {
-  ADMIN: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
   MANAGER: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300",
   SALES: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300",
 };
@@ -261,12 +225,11 @@ const IconRefresh = () => (
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function AdminStaffRules() {
+export default function ManagerStaffRules() {
   type ProvisionableRole = (typeof PROVISIONABLE_ROLES)[number];
 
-  const { isAdminActionBlocked } = useRole();
-  const staffRuleManageBlocked = isAdminActionBlocked("STAFF_RULE_MANAGE");
-  const staffRuleManageTooltip = getAdminActionRestrictionTooltip("STAFF_RULE_MANAGE");
+  /* useRole keeps component within dashboard context */
+  useRole();
 
   /* -------- Rules state -------- */
   const [rules, setRules] = useState<StaffOnboardingRule[]>([]);
@@ -287,16 +250,11 @@ export default function AdminStaffRules() {
   const [formLineId, setFormLineId] = useState("");
   const [formNote, setFormNote] = useState("");
   const [formBranchId, setFormBranchId] = useState("");
-  const [formBranchName, setFormBranchName] = useState("");
   const [formSetAsPrimaryManager, setFormSetAsPrimaryManager] = useState(false);
   const [formExpiresAt, setFormExpiresAt] = useState("");
-  const [formAdminVisibilityRole, setFormAdminVisibilityRole] =
-    useState<StaffRuleVisibilityRole>("SALES");
-  const [formAdminCapabilities, setFormAdminCapabilities] =
-    useState<StaffRuleAdminCapabilities>({ ...DEFAULT_ADMIN_CAPABILITIES });
   const [formManagerType, setFormManagerType] = useState<StaffRuleManagerType>("BRANCH_MANAGER");
   const [formManagerVisibilityRole, setFormManagerVisibilityRole] =
-    useState<StaffRuleVisibilityRole>("SALES");
+    useState<StaffRuleVisibilityRole>("MANAGER");
   const [formManagerCapabilities, setFormManagerCapabilities] =
     useState<StaffRuleManagerCapabilities>({ ...DEFAULT_MANAGER_CAPABILITIES });
   const [formCommissionRate, setFormCommissionRate] = useState("");
@@ -330,7 +288,7 @@ export default function AdminStaffRules() {
     setError("");
     try {
       const accessToken = await getAccessToken();
-      const data = await getAdminStaffRules({
+      const data = await getManagerStaffRules({
         accessToken,
         status: activeTab === "ALL" ? undefined : activeTab,
         limit: 200,
@@ -348,30 +306,25 @@ export default function AdminStaffRules() {
     void loadRules();
   }, [loadRules]);
 
-  /* -------- Load branches -------- */
+  /* -------- Load branches from rules + try analytics -------- */
   useEffect(() => {
     const loadBranches = async () => {
       setBranchesLoading(true);
       try {
         const accessToken = await getAccessToken();
-        const response = await fetch("/api/v1/admin/analytics/branches", {
+        /* Try manager analytics endpoint (may not exist on all backends) */
+        const response = await fetch("/api/v1/manager/analytics/branches", {
           method: "GET",
           headers: { Authorization: `Bearer ${accessToken}` },
           cache: "no-store",
         });
-        const payload = (await response.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchAnalyticsResponse
-          | null;
-
-        if (!response.ok) {
-          throw new Error(toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branches."));
+        if (response.ok) {
+          const payload = await response.json().catch(() => null);
+          const branchRows = Array.isArray(payload?.branches) ? payload.branches : [];
+          setBranches(branchRows);
+        } else {
+          setBranches([]);
         }
-
-        const branchRows = Array.isArray((payload as BranchAnalyticsResponse)?.branches)
-          ? ((payload as BranchAnalyticsResponse).branches as BranchOption[])
-          : [];
-        setBranches(branchRows);
       } catch {
         setBranches([]);
       } finally {
@@ -380,6 +333,26 @@ export default function AdminStaffRules() {
     };
     loadBranches();
   }, [getAccessToken]);
+
+  /* Derive branch options from rules as fallback if analytics endpoint didn't return data */
+  const branchOptionsFromRules = useMemo(() => {
+    const branchMap = new Map<string, BranchOption>();
+    for (const rule of rules) {
+      if (rule.branch && rule.branch.id) {
+        branchMap.set(rule.branch.id, {
+          id: rule.branch.id,
+          code: rule.branch.code || "",
+          name: rule.branch.name || "Unknown",
+          city: null,
+          status: rule.branch.status || "ACTIVE",
+        });
+      }
+    }
+    return Array.from(branchMap.values());
+  }, [rules]);
+
+  const availableBranches = branches.length > 0 ? branches : branchOptionsFromRules;
+  const activeBranches = availableBranches.filter((b) => b.status === "ACTIVE");
 
   /* -------- Create rule -------- */
   const resetForm = () => {
@@ -390,13 +363,10 @@ export default function AdminStaffRules() {
     setFormLineId("");
     setFormNote("");
     setFormBranchId("");
-    setFormBranchName("");
     setFormSetAsPrimaryManager(false);
     setFormExpiresAt("");
-    setFormAdminVisibilityRole("SALES");
-    setFormAdminCapabilities({ ...DEFAULT_ADMIN_CAPABILITIES });
     setFormManagerType("BRANCH_MANAGER");
-    setFormManagerVisibilityRole("SALES");
+    setFormManagerVisibilityRole("MANAGER");
     setFormManagerCapabilities({ ...DEFAULT_MANAGER_CAPABILITIES });
     setFormCommissionRate("");
     setFormCommissionPriority("");
@@ -405,13 +375,6 @@ export default function AdminStaffRules() {
   };
 
   useEffect(() => {
-    if (formManagerType === "STANDALONE") {
-      setFormBranchId("");
-      setFormSetAsPrimaryManager(false);
-    }
-    if (formManagerType !== "BRANCH_ADMIN") {
-      setFormBranchName("");
-    }
     if (formManagerType !== "BRANCH_ADMIN") {
       setFormSetAsPrimaryManager(false);
     }
@@ -422,55 +385,21 @@ export default function AdminStaffRules() {
 
   const onCreateRule = async () => {
     setCreateError("");
-    const normalizedBranchName = formBranchName.trim();
-
-    if (staffRuleManageBlocked) {
-      setCreateError(staffRuleManageTooltip);
-      return;
-    }
 
     if (!formEmail.trim()) {
       setCreateError("Email is required.");
       return;
     }
     if (!formPhone.trim()) {
-      setCreateError("Phone is required.");
-      return;
-    }
-    if (formBranchId && normalizedBranchName) {
-      setCreateError("Use either branch selection or branch name, not both.");
-      return;
-    }
-    if (formRole === "ADMIN" && (formBranchId || normalizedBranchName)) {
-      setCreateError("Branch fields are not allowed for ADMIN role.");
-      return;
-    }
-    if (formRole === "MANAGER" && formSetAsPrimaryManager && formManagerType !== "BRANCH_ADMIN") {
-      setCreateError("Set as primary manager is allowed only for BRANCH_ADMIN manager type.");
-      return;
-    }
-    if (BRANCH_REQUIRED_ROLES.has(formRole) && !formBranchId) {
-      setCreateError(`Branch is required for ${formRole} role.`);
-      return;
-    }
-    if (formRole === "MANAGER" && formManagerType === "STANDALONE" && (formBranchId || normalizedBranchName)) {
-      setCreateError("Standalone manager cannot have branch selection or branch name.");
-      return;
-    }
-    if (formRole === "MANAGER" && formManagerType === "BRANCH_MANAGER" && !formBranchId) {
-      setCreateError("Branch is required for BRANCH_MANAGER manager type.");
-      return;
-    }
-    if (formRole === "MANAGER" && formManagerType === "BRANCH_MANAGER" && normalizedBranchName) {
-      setCreateError("Branch name is only supported for BRANCH_ADMIN manager type.");
-      return;
-    }
-    if (formRole === "MANAGER" && formManagerType === "BRANCH_ADMIN" && !formBranchId && !normalizedBranchName) {
-      setCreateError("Provide existing branch or branch name for BRANCH_ADMIN onboarding.");
+      setCreateError("Phone is required (E.164 format, e.g. +66812345678).");
       return;
     }
     if (formRole === "SALES" && !formDisplayName.trim()) {
       setCreateError("Display name is required for SALES role.");
+      return;
+    }
+    if (formRole === "MANAGER" && formSetAsPrimaryManager && formManagerType !== "BRANCH_ADMIN") {
+      setCreateError("Set as primary manager is allowed only for BRANCH_ADMIN manager type.");
       return;
     }
     if (formRole === "SALES" && formCommissionRate.trim()) {
@@ -500,28 +429,8 @@ export default function AdminStaffRules() {
       if (formDisplayName.trim()) payload.displayName = formDisplayName.trim();
       if (formLineId.trim()) payload.lineId = formLineId.trim();
       if (formNote.trim()) payload.note = formNote.trim();
-      if (
-        formBranchId &&
-        (formRole === "SALES" ||
-          (formRole === "MANAGER" &&
-            (formManagerType === "BRANCH_MANAGER" || formManagerType === "BRANCH_ADMIN")))
-      ) {
-        payload.branchId = formBranchId;
-      }
-      if (formRole === "MANAGER" && formManagerType === "BRANCH_ADMIN" && normalizedBranchName) {
-        payload.branchName = normalizedBranchName;
-      }
-      if (formRole === "MANAGER" && formManagerType === "BRANCH_ADMIN") {
-        payload.setAsPrimaryManager = formSetAsPrimaryManager;
-      }
+      if (formBranchId) payload.branchId = formBranchId;
       if (formExpiresAt) payload.expiresAt = new Date(formExpiresAt).toISOString();
-
-      if (formRole === "ADMIN") {
-        payload.permissions = {
-          visibilityRole: formAdminVisibilityRole,
-          capabilities: formAdminCapabilities,
-        };
-      }
 
       if (formRole === "SALES" && formCommissionRate.trim()) {
         const commission: Record<string, unknown> = {
@@ -542,9 +451,10 @@ export default function AdminStaffRules() {
           visibilityRole: formManagerVisibilityRole,
           capabilities: normalizeManagerCapabilities(formManagerType, formManagerCapabilities),
         };
+        payload.setAsPrimaryManager = formSetAsPrimaryManager;
       }
 
-      await createAdminStaffRule({ accessToken, payload });
+      await createManagerStaffRule({ accessToken, payload });
       resetForm();
       setFormOpen(false);
       await loadRules();
@@ -558,16 +468,10 @@ export default function AdminStaffRules() {
   /* -------- Revoke rule -------- */
   const onRevokeRule = async (ruleId: string) => {
     setRevokeError("");
-
-    if (staffRuleManageBlocked) {
-      setRevokeError(staffRuleManageTooltip);
-      return;
-    }
-
     setRevokingId(ruleId);
     try {
       const accessToken = await getAccessToken();
-      await revokeAdminStaffRule({ accessToken, ruleId });
+      await revokeManagerStaffRule({ accessToken, ruleId });
       await loadRules();
     } catch (caughtError) {
       setRevokeError(getErrorMessage(caughtError));
@@ -577,26 +481,14 @@ export default function AdminStaffRules() {
   };
 
   /* -------- Derived -------- */
-  const managerRequiresBranch = formRole === "MANAGER" && formManagerType === "BRANCH_MANAGER";
-  const canSelectExistingBranch =
-    BRANCH_REQUIRED_ROLES.has(formRole) ||
-    (formRole === "MANAGER" &&
-      (formManagerType === "BRANCH_MANAGER" || formManagerType === "BRANCH_ADMIN"));
-  const isBranchSelectionRequired = BRANCH_REQUIRED_ROLES.has(formRole) || managerRequiresBranch;
-  const canInputBranchName = formRole === "MANAGER" && formManagerType === "BRANCH_ADMIN";
   const canSetPrimaryManager = formRole === "MANAGER" && formManagerType === "BRANCH_ADMIN";
   const needsDisplayName = formRole === "SALES";
-  const managerTypeRequiresBranchAdminNote =
-    formRole === "MANAGER" && formManagerType !== "BRANCH_ADMIN";
   const managerCapabilitiesForForm = normalizeManagerCapabilities(
     formManagerType,
     formManagerCapabilities,
   );
   const isManagerCapabilityDisabled = (capabilityKey: keyof StaffRuleManagerCapabilities) => {
-    if (formManagerType === "STANDALONE") {
-      return true;
-    }
-
+    /* Non-standalone managers cannot request manager restriction/ban actions */
     if (
       capabilityKey === "canRequestManagerRestrictions" ||
       capabilityKey === "canRequestManagerBans"
@@ -604,6 +496,7 @@ export default function AdminStaffRules() {
       return true;
     }
 
+    /* Restrict/ban/limit subordinate capabilities only for BRANCH_ADMIN */
     if (
       (capabilityKey === "canRestrictSubordinates" ||
         capabilityKey === "canBanSubordinates" ||
@@ -613,6 +506,7 @@ export default function AdminStaffRules() {
       return true;
     }
 
+    /* BRANCH_ADMIN must keep these ON */
     if (
       formManagerType === "BRANCH_ADMIN" &&
       (capabilityKey === "canCreateStaffRules" ||
@@ -622,17 +516,10 @@ export default function AdminStaffRules() {
       return true;
     }
 
-    if (
-      capabilityKey === "canRequestManagerBans" &&
-      !managerCapabilitiesForForm.canRequestManagerRestrictions
-    ) {
-      return true;
-    }
-
+    /* Dependent capabilities */
     if (capabilityKey === "canBanSubordinates" && !managerCapabilitiesForForm.canRestrictSubordinates) {
       return true;
     }
-
     if (
       capabilityKey === "canLimitSubordinatePermissions" &&
       !managerCapabilitiesForForm.canCreateStaffRules
@@ -642,7 +529,6 @@ export default function AdminStaffRules() {
 
     return false;
   };
-  const activeBranches = branches.filter((b) => b.status === "ACTIVE");
 
   const statusCounts = rules.reduce<Record<string, number>>((acc, rule) => {
     acc[rule.status] = (acc[rule.status] || 0) + 1;
@@ -650,25 +536,20 @@ export default function AdminStaffRules() {
   }, {});
 
   const inputClass =
-    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
+    "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500 dark:text-gray-200";
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Staff Onboarding Rules"
-        description="Pre-configure rules for new staff members. Each rule is claimed when the matching user signs up."
+        description="Create and manage onboarding rules for new staff members within your branch scope."
         action={
           <button
             type="button"
             onClick={() => {
-              if (staffRuleManageBlocked) {
-                return;
-              }
               resetForm();
               setFormOpen(true);
             }}
-            disabled={staffRuleManageBlocked}
-            title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
           >
             <IconPlus />
@@ -677,11 +558,10 @@ export default function AdminStaffRules() {
         }
       />
 
-      {staffRuleManageBlocked && (
-        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs text-amber-700 dark:text-amber-300">
-          {staffRuleManageTooltip}
-        </div>
-      )}
+      {/* -------- Info banner -------- */}
+      <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs text-amber-700 dark:text-amber-300">
+        Manager scope: You can create rules for <strong>Manager</strong> and <strong>Sales</strong> roles only. Branch is auto-resolved from your scope if omitted.
+      </div>
 
       {/* -------- Status tabs -------- */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -786,6 +666,8 @@ export default function AdminStaffRules() {
             const isExpanded = expandedId === rule.id;
             const isRevoking = revokingId === rule.id;
             const canRevoke = rule.status === "PENDING";
+            const managerTypeTag = rule.role === "MANAGER" ? readRuleManagerType(rule) : null;
+            const commissionTag = rule.role === "SALES" ? readRuleCommission(rule) : null;
 
             return (
               <div
@@ -804,6 +686,11 @@ export default function AdminStaffRules() {
                         >
                           {rule.role}
                         </span>
+                        {managerTypeTag && (
+                          <span className="inline-block px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-[11px] font-medium">
+                            {managerTypeTag}
+                          </span>
+                        )}
                         {rule.branch && (
                           <span className="inline-block px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
                             {rule.branch.code ? `${rule.branch.code} – ` : ""}
@@ -835,7 +722,7 @@ export default function AdminStaffRules() {
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                         <span>Created {formatDateTime(rule.createdAt)}</span>
                         {rule.createdAt && (
-                          <span className="text-gray-300">{formatRelativeTime(rule.createdAt)}</span>
+                          <span className="text-gray-300 dark:text-gray-600">{formatRelativeTime(rule.createdAt)}</span>
                         )}
                         {rule.expiresAt && (
                           <span className="text-amber-500 dark:text-amber-400">Expires {formatDateTime(rule.expiresAt)}</span>
@@ -847,19 +734,19 @@ export default function AdminStaffRules() {
                       )}
 
                       {/* Commission info for SALES */}
-                      {rule.role === "SALES" && rule.permissions && typeof rule.permissions === "object" && "commission" in rule.permissions && rule.permissions.commission && typeof rule.permissions.commission === "object" && (
+                      {commissionTag && (
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
-                            Commission: {(rule.permissions.commission as Record<string, unknown>).rate ?? "-"}%
+                            Commission: {commissionTag.rate ?? "-"}%
                           </span>
-                          {(rule.permissions.commission as Record<string, unknown>).priority != null && (
+                          {commissionTag.priority != null && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
-                              Priority: {String((rule.permissions.commission as Record<string, unknown>).priority)}
+                              Priority: {commissionTag.priority}
                             </span>
                           )}
-                          {(rule.permissions.commission as Record<string, unknown>).note && (
+                          {commissionTag.note && (
                             <span className="text-[11px] text-gray-400 dark:text-gray-500 italic">
-                              {String((rule.permissions.commission as Record<string, unknown>).note)}
+                              {commissionTag.note}
                             </span>
                           )}
                         </div>
@@ -889,9 +776,8 @@ export default function AdminStaffRules() {
                         <button
                           type="button"
                           onClick={() => void onRevokeRule(rule.id)}
-                          disabled={isRevoking || staffRuleManageBlocked}
-                          title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
-                          className="px-3 py-1.5 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          disabled={isRevoking}
+                          className="px-3 py-1.5 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {isRevoking ? "Revoking..." : "Revoke"}
                         </button>
@@ -1026,14 +912,6 @@ export default function AdminStaffRules() {
                       type="button"
                       onClick={() => {
                         setFormRole(role);
-                        if (role === "ADMIN") {
-                          setFormBranchId("");
-                          setFormBranchName("");
-                          setFormSetAsPrimaryManager(false);
-                        }
-                        if (role !== "MANAGER") {
-                          setFormBranchName("");
-                        }
                         if (role !== "MANAGER") {
                           setFormSetAsPrimaryManager(false);
                         }
@@ -1050,58 +928,7 @@ export default function AdminStaffRules() {
                 </div>
               </div>
 
-              {/* Permission Configuration */}
-              {formRole === "ADMIN" && (
-                <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/50 space-y-3">
-                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Permission Configuration
-                  </p>
-                  <div>
-                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                      Visibility Role
-                    </label>
-                    <select
-                      value={formAdminVisibilityRole}
-                      onChange={(e) => setFormAdminVisibilityRole(e.target.value as StaffRuleVisibilityRole)}
-                      className={inputClass}
-                    >
-                      {VISIBILITY_ROLE_OPTIONS.map((roleOption) => (
-                        <option key={roleOption} value={roleOption}>
-                          {roleOption}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                      Capabilities
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {ADMIN_CAPABILITY_OPTIONS.map((option) => (
-                        <label
-                          key={option.key}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={formAdminCapabilities[option.key] === true}
-                            onChange={(e) =>
-                              setFormAdminCapabilities((previous) => ({
-                                ...previous,
-                                [option.key]: e.target.checked,
-                              }))
-                            }
-                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-emerald-600 dark:text-emerald-400 focus:ring-emerald-500"
-                          />
-                          <span className="text-xs text-gray-700 dark:text-gray-300">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              {/* Manager Permission Configuration */}
               {formRole === "MANAGER" && (
                 <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/50 space-y-3">
                   <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -1124,11 +951,6 @@ export default function AdminStaffRules() {
                           </option>
                         ))}
                       </select>
-                      {formManagerType === "BRANCH_ADMIN" && (
-                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-1.5">
-                          Use existing branch selection or provide a new branch name below.
-                        </p>
-                      )}
                     </div>
 
                     <div>
@@ -1184,15 +1006,9 @@ export default function AdminStaffRules() {
                         );
                       })}
                     </div>
-                    {managerTypeRequiresBranchAdminNote && (
+                    {formManagerType !== "BRANCH_ADMIN" && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
-                        Restrict, ban, and limit-subordinate capabilities are available only for
-                        BRANCH_ADMIN manager type.
-                      </p>
-                    )}
-                    {formManagerType === "STANDALONE" && (
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
-                        Standalone capability profile is fixed by policy and cannot be edited.
+                        Restrict, ban, and limit-subordinate capabilities are available only for BRANCH_ADMIN manager type.
                       </p>
                     )}
                   </div>
@@ -1314,51 +1130,38 @@ export default function AdminStaffRules() {
               </div>
 
               {/* Branch */}
-              {canSelectExistingBranch && (
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                    Branch {isBranchSelectionRequired && <span className="text-red-400">*</span>}
-                  </label>
-                  {branchesLoading ? (
-                    <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
-                  ) : activeBranches.length === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 py-2">No active branches available.</p>
-                  ) : (
-                    <select
-                      value={formBranchId}
-                      onChange={(e) => setFormBranchId(e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">Select branch...</option>
-                      {activeBranches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {formatBranchLabel(branch)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-
-              {/* Branch Name (BRANCH_ADMIN only, admin route) */}
-              {canInputBranchName && (
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                    New Branch Name
-                  </label>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                  Branch
+                </label>
+                {branchesLoading ? (
+                  <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+                ) : activeBranches.length > 0 ? (
+                  <select
+                    value={formBranchId}
+                    onChange={(e) => setFormBranchId(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Auto-resolve from scope...</option>
+                    {activeBranches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {formatBranchLabel(branch)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <input
                     type="text"
-                    value={formBranchName}
-                    onChange={(e) => setFormBranchName(e.target.value)}
-                    placeholder="Create new branch (leave empty to use selected branch)"
+                    value={formBranchId}
+                    onChange={(e) => setFormBranchId(e.target.value)}
+                    placeholder="Branch UUID (optional, auto-resolved if omitted)"
                     className={inputClass}
                   />
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-                    For BRANCH_ADMIN on admin route, provide either branch selection or new branch
-                    name, not both.
-                  </p>
-                </div>
-              )}
+                )}
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                  Leave empty to auto-resolve from your branch scope. Required if you manage multiple branches.
+                </p>
+              </div>
 
               {/* Set as Primary Manager */}
               {formRole === "MANAGER" && (
@@ -1379,7 +1182,7 @@ export default function AdminStaffRules() {
                       Set as primary manager for the branch
                     </span>
                   </label>
-                  {managerTypeRequiresBranchAdminNote && (
+                  {formManagerType !== "BRANCH_ADMIN" && (
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
                       Available only when manager type is BRANCH_ADMIN.
                     </p>
@@ -1439,8 +1242,7 @@ export default function AdminStaffRules() {
               <button
                 type="button"
                 onClick={() => void onCreateRule()}
-                disabled={creating || staffRuleManageBlocked}
-                title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
+                disabled={creating}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {creating ? (

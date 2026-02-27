@@ -9,7 +9,9 @@
       "Bash(npx tsc:*)",
       "Bash(powershell.exe -Command \":*)",
       "Bash(pwsh -NoProfile:*)",
-      "Bash(cmd.exe /c \"pwsh -NoProfile -NonInteractive -Command \"\"Write-Host ''pwsh ok''\"\"\")"
+      "Bash(cmd.exe /c \"pwsh -NoProfile -NonInteractive -Command \"\"Write-Host ''pwsh ok''\"\"\")",
+      "Bash(npx next lint --file \"app/\\(dashboard\\)/manager/dashboard/[id]/staff-rules/page.tsx\" --file \"app/\\(dashboard\\)/admin/dashboard/[id]/staff-rules/page.tsx\")",
+      "Bash(powershell -Command \"cd ''D:\\\\Work-Projects\\\\Jade-Palace\\\\Full-Stack\\\\JPUI''; npx tsc --noEmit --pretty 2>&1 | Select-Object -Last 30\")"
     ]
   }
 }

@@ -26,6 +26,7 @@ const managerNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Appointments", pathSuffix: "appointments", icon: "calendar" },
   { label: "Salespersons", pathSuffix: "salespersons", icon: "users" },
+  { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Commissions", pathSuffix: "commissions", icon: "dollar" },
   { label: "Targeting", pathSuffix: "targeting", icon: "target" },

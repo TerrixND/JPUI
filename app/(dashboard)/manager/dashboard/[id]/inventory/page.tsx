@@ -10,10 +10,10 @@ const myRequests = [
 
 function statusStyle(status: string) {
   switch (status) {
-    case "PENDING":  return "bg-yellow-100 text-yellow-700";
-    case "APPROVED": return "bg-green-100 text-green-700";
-    case "REJECTED": return "bg-red-100 text-red-600";
-    default:         return "bg-gray-100 text-gray-600";
+    case "PENDING":  return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+    case "APPROVED": return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+    case "REJECTED": return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+    default:         return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400";
   }
 }
 
@@ -31,16 +31,16 @@ export default function ManagerInventory() {
       />
 
       <div className="flex flex-wrap gap-2">
-        <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-[11px] font-mono rounded-md">POST /manager/inventory-requests</span>
+        <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[11px] font-mono rounded-md">POST /manager/inventory-requests</span>
       </div>
 
       {/* Form placeholder */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Request</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Quick Request</h2>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-            <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white">
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Product</label>
+            <select className="w-full border border-gray-200 dark:border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/50 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors">
               <option>Select product...</option>
               <option>Widget Pro</option>
               <option>Widget Pro Max</option>
@@ -49,12 +49,12 @@ export default function ManagerInventory() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
-            <input type="number" placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Quantity</label>
+            <input type="number" placeholder="0" className="w-full border border-gray-200 dark:border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Appointment</label>
-            <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white">
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Appointment</label>
+            <select className="w-full border border-gray-200 dark:border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/50 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors">
               <option>Select appointment...</option>
               <option>APT-305</option>
               <option>APT-304</option>
@@ -70,14 +70,14 @@ export default function ManagerInventory() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">My Requests</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">My Requests</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+              <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                 <th className="px-5 py-3 font-medium">Request</th>
                 <th className="px-5 py-3 font-medium">Product</th>
                 <th className="px-5 py-3 font-medium">Qty</th>
@@ -88,12 +88,12 @@ export default function ManagerInventory() {
             </thead>
             <tbody>
               {myRequests.map((r) => (
-                <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-mono text-xs text-gray-400">{r.id}</td>
-                  <td className="px-5 py-3 text-gray-900 font-medium">{r.product}</td>
-                  <td className="px-5 py-3 text-gray-600">{r.qty}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{r.appointment}</td>
-                  <td className="px-5 py-3 text-gray-500">{r.date}</td>
+                <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <td className="px-5 py-3 font-mono text-xs text-gray-400 dark:text-gray-500">{r.id}</td>
+                  <td className="px-5 py-3 text-gray-900 dark:text-gray-100 font-medium">{r.product}</td>
+                  <td className="px-5 py-3 text-gray-600 dark:text-gray-400">{r.qty}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{r.appointment}</td>
+                  <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{r.date}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(r.status)}`}>{r.status}</span>
                   </td>
@@ -106,4 +106,3 @@ export default function ManagerInventory() {
     </div>
   );
 }
-

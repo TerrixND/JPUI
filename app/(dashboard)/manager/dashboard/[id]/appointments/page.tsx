@@ -11,11 +11,11 @@ const appointments = [
 
 function statusStyle(status: string) {
   switch (status) {
-    case "PENDING":   return "bg-yellow-100 text-yellow-700";
-    case "APPROVED":  return "bg-green-100 text-green-700";
-    case "COMPLETED": return "bg-blue-100 text-blue-700";
-    case "CANCELLED": return "bg-red-100 text-red-600";
-    default:          return "bg-gray-100 text-gray-600";
+    case "PENDING":   return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+    case "APPROVED":  return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+    case "COMPLETED": return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300";
+    case "CANCELLED": return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+    default:          return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400";
   }
 }
 
@@ -29,7 +29,7 @@ export default function ManagerAppointments() {
 
       <div className="flex flex-wrap gap-2">
         {["GET /manager/appointments/pending", "PATCH /manager/appointments/:id/approve", "POST /manager/appointments/:id/possessions"].map((ep) => (
-          <span key={ep} className="px-2.5 py-1 bg-gray-100 text-gray-500 text-[11px] font-mono rounded-md">{ep}</span>
+          <span key={ep} className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[11px] font-mono rounded-md">{ep}</span>
         ))}
       </div>
 
@@ -40,8 +40,8 @@ export default function ManagerAppointments() {
             key={f}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               f === "All"
-                ? "bg-gray-900 text-white"
-                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                ? "bg-gray-900 dark:bg-emerald-600 text-white"
+                : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
             }`}
           >
             {f}
@@ -52,28 +52,28 @@ export default function ManagerAppointments() {
       {/* Cards view */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {appointments.map((apt) => (
-          <div key={apt.id} className="bg-white rounded-xl border border-gray-200 p-5">
+          <div key={apt.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="font-mono text-xs text-gray-400">{apt.id}</span>
+              <span className="font-mono text-xs text-gray-400 dark:text-gray-500">{apt.id}</span>
               <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(apt.status)}`}>
                 {apt.status}
               </span>
             </div>
-            <h3 className="text-sm font-semibold text-gray-900">{apt.customer}</h3>
-            <p className="text-xs text-gray-500 mt-1">{apt.branch}</p>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{apt.customer}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{apt.branch}</p>
 
             <div className="mt-3 grid grid-cols-3 gap-3 text-center">
-              <div className="bg-gray-50 rounded-lg py-2">
-                <p className="text-xs text-gray-400">Date</p>
-                <p className="text-xs font-medium text-gray-700 mt-0.5">{apt.date}</p>
+              <div className="bg-gray-50 dark:bg-gray-800/60 rounded-lg py-2">
+                <p className="text-xs text-gray-400 dark:text-gray-500">Date</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mt-0.5">{apt.date}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg py-2">
-                <p className="text-xs text-gray-400">Time</p>
-                <p className="text-xs font-medium text-gray-700 mt-0.5">{apt.time}</p>
+              <div className="bg-gray-50 dark:bg-gray-800/60 rounded-lg py-2">
+                <p className="text-xs text-gray-400 dark:text-gray-500">Time</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mt-0.5">{apt.time}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg py-2">
-                <p className="text-xs text-gray-400">Items</p>
-                <p className="text-xs font-medium text-gray-700 mt-0.5">{apt.items}</p>
+              <div className="bg-gray-50 dark:bg-gray-800/60 rounded-lg py-2">
+                <p className="text-xs text-gray-400 dark:text-gray-500">Items</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mt-0.5">{apt.items}</p>
               </div>
             </div>
 
@@ -82,7 +82,7 @@ export default function ManagerAppointments() {
                 <button className="flex-1 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 transition-colors">
                   Approve
                 </button>
-                <button className="flex-1 py-2 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                <button className="flex-1 py-2 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   Allocate Product
                 </button>
               </div>
@@ -93,4 +93,3 @@ export default function ManagerAppointments() {
     </div>
   );
 }
-
