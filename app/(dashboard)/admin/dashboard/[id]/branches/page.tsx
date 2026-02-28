@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import StatCard from "@/components/ui/dashboard/StatCard";
+import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
   getAdminBranchesWithManagers,
@@ -70,6 +72,7 @@ const getPrimaryManagerLabel = (row: AdminBranchWithManagersRecord) => {
 };
 
 export default function AdminBranches() {
+  const { dashboardBasePath } = useRole();
   const [rows, setRows] = useState<AdminBranchWithManagersRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -215,7 +218,7 @@ export default function AdminBranches() {
     <div className="space-y-6">
       <PageHeader
         title="Branch Network"
-        description="Live branch list with assigned managers and status filtering."
+        description="Filter branches, review network analytics, and open branch detail pages."
       />
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
@@ -322,8 +325,12 @@ export default function AdminBranches() {
                     className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">{branch.name || "Unnamed Branch"}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{branch.code || branch.id}</p>
+                      <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="group">
+                        <p className="font-medium text-gray-900 transition-colors group-hover:text-emerald-700 dark:text-gray-100 dark:group-hover:text-emerald-300">
+                          {branch.name || "Unnamed Branch"}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{branch.code || branch.id}</p>
+                      </Link>
                     </td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.city || "-"}</td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{getPrimaryManagerLabel(branch)}</td>
@@ -370,6 +377,11 @@ export default function AdminBranches() {
             Next
           </button>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
+        Branch rows now route into a dedicated branch detail page with analytics, branch users, and
+        branch audit log flow.
       </div>
     </div>
   );

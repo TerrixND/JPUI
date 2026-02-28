@@ -14,7 +14,7 @@ const adminNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Products", pathSuffix: "products", icon: "box" },
   { label: "Users", pathSuffix: "users", icon: "users" },
-  { label: "Branches", pathSuffix: "branches", icon: "building" },
+  { label: "Branch Network", pathSuffix: "branches", icon: "building" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
   { label: "Errors", pathSuffix: "errors", icon: "file" },

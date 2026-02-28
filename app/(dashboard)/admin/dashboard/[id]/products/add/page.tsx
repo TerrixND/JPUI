@@ -12,15 +12,21 @@ import { type CustomerTier, type MediaVisibilityPreset } from "@/lib/apiClient";
 import {
   CUSTOMER_TIER_OPTIONS as MEDIA_CUSTOMER_TIER_OPTIONS,
   PUBLIC_MEDIA_VISIBILITY_PRESETS,
-  ROLE_MEDIA_VISIBILITY_PRESETS,
   parseTargetUserIdsInput,
 } from "@/lib/mediaVisibility";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
+import {
+  caratsToGrams,
+  deriveQuickVisibilityChoices,
+  gramsToCarats,
+} from "@/lib/adminUiConfig";
 
 type ProductForm = {
   sku: string;
   name: string;
   color: string;
+  origin: string;
+  description: string;
   weight: string;
   length: string;
   depth: string;
@@ -33,8 +39,10 @@ type ProductForm = {
   tier: string;
   status: string;
   minCustomerTier: string;
+  targetUserIdsInput: string;
   sourceType: string;
   consignmentAgreementId: string;
+  consignmentCommissionRate: string;
   buyPrice: string;
   saleMinPrice: string;
   saleMaxPrice: string;
@@ -99,6 +107,8 @@ const initialForm: ProductForm = {
   sku: "",
   name: "",
   color: "",
+  origin: "",
+  description: "",
   weight: "",
   length: "",
   depth: "",
@@ -111,14 +121,23 @@ const initialForm: ProductForm = {
   tier: "STANDARD",
   status: "AVAILABLE",
   minCustomerTier: "",
+  targetUserIdsInput: "",
   sourceType: "OWNED",
   consignmentAgreementId: "",
+  consignmentCommissionRate: "",
   buyPrice: "",
   saleMinPrice: "",
   saleMaxPrice: "",
 };
 
-const VISIBILITY_OPTIONS = ["PRIVATE", "PUBLIC", "TOP_SHELF", "TARGETED"];
+const VISIBILITY_OPTIONS = [
+  "PRIVATE",
+  "STAFF",
+  "PUBLIC",
+  "TOP_SHELF",
+  "USER_TIER",
+  "TARGETED_USER",
+];
 const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"];
 const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"];
 const PRODUCT_CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"];
@@ -183,6 +202,7 @@ export default function AddProductPage() {
   const productCreateTooltip = getAdminActionRestrictionTooltip("PRODUCT_CREATE");
 
   const [form, setForm] = useState<ProductForm>(initialForm);
+  const [weightUnit, setWeightUnit] = useState<"g" | "ct">("g");
   const [publicVisibilityPreset, setPublicVisibilityPreset] = useState<PublicMediaVisibilityPreset>("PUBLIC");
   const [publicMinCustomerTier, setPublicMinCustomerTier] = useState<CustomerTier | "">("");
   const [publicTargetUserIdsInput, setPublicTargetUserIdsInput] = useState("");
@@ -192,6 +212,7 @@ export default function AddProductPage() {
   const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
+  const [consignmentAgreementFiles, setConsignmentAgreementFiles] = useState<MediaFile[]>([]);
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -217,6 +238,31 @@ export default function AddProductPage() {
       return sum + rate;
     }, 0);
   }, [allocations]);
+  const quickVisibilityChoices = useMemo(
+    () =>
+      deriveQuickVisibilityChoices({
+        visibility: form.visibility,
+        customerTier: form.minCustomerTier,
+      }),
+    [form.minCustomerTier, form.visibility],
+  );
+  const convertedWeight = useMemo(() => {
+    const rawWeight = Number(form.weight);
+    if (!Number.isFinite(rawWeight) || rawWeight <= 0) {
+      return "";
+    }
+
+    return weightUnit === "g"
+      ? `${gramsToCarats(rawWeight).toFixed(2)} ct`
+      : `${caratsToGrams(rawWeight).toFixed(2)} g`;
+  }, [form.weight, weightUnit]);
+  const roleVisibilityOptions = useMemo(
+    () =>
+      form.visibility === "PRIVATE"
+        ? (["ADMIN"] as RoleMediaVisibilityPreset[])
+        : (["ADMIN", "MANAGER", "SALES"] as RoleMediaVisibilityPreset[]),
+    [form.visibility],
+  );
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -366,6 +412,44 @@ export default function AddProductPage() {
     void loadBranches();
   }, [getAccessToken]);
 
+  useEffect(() => {
+    if (!roleVisibilityOptions.includes(roleVisibilityPreset)) {
+      setRoleVisibilityPreset(roleVisibilityOptions[0]);
+    }
+  }, [roleVisibilityOptions, roleVisibilityPreset]);
+
+  useEffect(() => {
+    if (form.visibility === "PUBLIC") {
+      setPublicVisibilityPreset("PUBLIC");
+      return;
+    }
+
+    if (form.visibility === "TOP_SHELF") {
+      setPublicVisibilityPreset("TOP_SHELF");
+      return;
+    }
+
+    if (form.visibility === "USER_TIER") {
+      setPublicVisibilityPreset("USER_TIER");
+      if (
+        form.minCustomerTier === "REGULAR"
+        || form.minCustomerTier === "VIP"
+        || form.minCustomerTier === "ULTRA_VIP"
+      ) {
+        setPublicMinCustomerTier(form.minCustomerTier);
+      }
+      return;
+    }
+
+    if (form.visibility === "TARGETED_USER") {
+      setPublicVisibilityPreset("TARGETED_USER");
+      setPublicTargetUserIdsInput(form.targetUserIdsInput);
+      return;
+    }
+
+    setPublicVisibilityPreset("PRIVATE");
+  }, [form.minCustomerTier, form.targetUserIdsInput, form.visibility]);
+
   const updateField = (field: keyof ProductForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -436,6 +520,17 @@ export default function AddProductPage() {
       const buyPrice = parseOptionalNumber(form.buyPrice, "Buy price");
       const saleMinPrice = parseOptionalNumber(form.saleMinPrice, "Minimum sale price");
       const saleMaxPrice = parseOptionalNumber(form.saleMaxPrice, "Maximum sale price");
+      const normalizedWeight = parseOptionalNumber(form.weight, "Weight");
+
+      if (
+        form.visibility === "STAFF"
+        || form.visibility === "USER_TIER"
+        || form.visibility === "TARGETED_USER"
+      ) {
+        throw new Error(
+          "This updated visibility option is staged in the UI and will be connected once the new product endpoint is provided.",
+        );
+      }
 
       if (saleMinPrice !== null && saleMaxPrice !== null && saleMaxPrice < saleMinPrice) {
         throw new Error("Maximum sale price must be greater than or equal to minimum sale price.");
@@ -487,7 +582,12 @@ export default function AddProductPage() {
         sku: form.sku.trim(),
         name: form.name.trim() || null,
         color: form.color.trim() || null,
-        weight: form.weight ? parseFloat(form.weight) : null,
+        weight:
+          normalizedWeight === null
+            ? null
+            : weightUnit === "g"
+              ? normalizedWeight
+              : caratsToGrams(normalizedWeight),
         length: form.length ? parseFloat(form.length) : null,
         depth: form.depth ? parseFloat(form.depth) : null,
         height: form.height ? parseFloat(form.height) : null,
@@ -615,6 +715,12 @@ export default function AddProductPage() {
           </div>
         )}
 
+        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+          Origin, description, weight conversion, new visibility modes, and consignment contract
+          upload are now visible in the UI. Submit remains on the current payload until the updated
+          product endpoint is provided.
+        </div>
+
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Basic Information</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -650,24 +756,50 @@ export default function AddProductPage() {
                 className={inputCls}
               />
             </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Origin</label>
+              <input
+                type="text"
+                value={form.origin}
+                onChange={(e) => updateField("origin", e.target.value)}
+                placeholder="e.g. Myanmar"
+                className={inputCls}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => updateField("description", e.target.value)}
+                rows={4}
+                placeholder="Detailed product description for staff review and future public listing."
+                className={inputCls}
+              />
+            </div>
           </div>
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.buyPrice}
-                onChange={(e) => updateField("buyPrice", e.target.value)}
-                placeholder="1000"
-                className={inputCls}
-              />
-            </div>
+            {form.sourceType !== "CONSIGNED" ? (
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.buyPrice}
+                  onChange={(e) => updateField("buyPrice", e.target.value)}
+                  placeholder="1000"
+                  className={inputCls}
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200">
+                Consigned products do not use buy price. Profit becomes commission on successful sale.
+              </div>
+            )}
             <div>
               <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Min Price</label>
               <input
@@ -692,6 +824,21 @@ export default function AddProductPage() {
                 className={inputCls}
               />
             </div>
+            {form.sourceType === "CONSIGNED" ? (
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Commission % Rate</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.consignmentCommissionRate}
+                  onChange={(e) => updateField("consignmentCommissionRate", e.target.value)}
+                  placeholder="10"
+                  className={inputCls}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -873,15 +1020,30 @@ export default function AddProductPage() {
           <SectionHeading>Dimensions &amp; Weight</SectionHeading>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Weight (g)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.weight}
-                onChange={(e) => updateField("weight", e.target.value)}
-                placeholder="0.00"
-                className={inputCls}
-              />
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                Weight ({weightUnit})
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.weight}
+                  onChange={(e) => updateField("weight", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls}
+                />
+                <select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value as "g" | "ct")}
+                  className={`${inputCls} max-w-[96px]`}
+                >
+                  <option value="g">g</option>
+                  <option value="ct">ct</option>
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {convertedWeight ? `Equivalent: ${convertedWeight}` : "Supports grams and carats."}
+              </p>
             </div>
             <div>
               <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Length (mm)</label>
@@ -961,12 +1123,24 @@ export default function AddProductPage() {
               <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility</label>
               <select
                 value={form.visibility}
-                onChange={(e) => updateField("visibility", e.target.value)}
+                onChange={(e) => {
+                  const nextVisibility = e.target.value;
+                  updateField("visibility", nextVisibility);
+
+                  if (nextVisibility === "PUBLIC" || nextVisibility === "TOP_SHELF") {
+                    updateField("minCustomerTier", "");
+                    updateField("targetUserIdsInput", "");
+                  }
+
+                  if (nextVisibility === "TARGETED_USER") {
+                    updateField("minCustomerTier", "");
+                  }
+                }}
                 className={inputCls}
               >
                 {VISIBILITY_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
-                    {opt}
+                    {opt.replace(/_/g, " ")}
                   </option>
                 ))}
               </select>
@@ -999,20 +1173,41 @@ export default function AddProductPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Min. Customer Tier</label>
-              <select
-                value={form.minCustomerTier}
-                onChange={(e) => updateField("minCustomerTier", e.target.value)}
-                className={inputCls}
-              >
-                {PRODUCT_CUSTOMER_TIER_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt || "None"}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {(form.visibility === "PRIVATE" || form.visibility === "STAFF" || form.visibility === "USER_TIER") ? (
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Customer Tier
+                </label>
+                <select
+                  value={form.minCustomerTier}
+                  onChange={(e) => updateField("minCustomerTier", e.target.value)}
+                  className={inputCls}
+                >
+                  {PRODUCT_CUSTOMER_TIER_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt || "None"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            {form.visibility === "TARGETED_USER" ? (
+              <div className="sm:col-span-2">
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Target Users
+                </label>
+                <textarea
+                  value={form.targetUserIdsInput}
+                  onChange={(e) => updateField("targetUserIdsInput", e.target.value)}
+                  rows={3}
+                  placeholder="Enter customer user ids separated by commas or new lines"
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  This will switch to a searchable customer selector once the new endpoint is available.
+                </p>
+              </div>
+            ) : null}
             <div className="sm:col-span-2">
               <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility Note</label>
               <input
@@ -1022,6 +1217,27 @@ export default function AddProductPage() {
                 placeholder="Optional note about visibility restrictions"
                 className={inputCls}
               />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+              Quick Visibility From Products Page
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {quickVisibilityChoices.map((choice) => (
+                <div
+                  key={choice.value}
+                  className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-4 py-3"
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {choice.label}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {choice.helper}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1058,13 +1274,38 @@ export default function AddProductPage() {
               </div>
             )}
           </div>
+
+          {form.sourceType === "CONSIGNED" ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 p-4">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Consignment Agreement Contract
+                </p>
+                <MediaUploader
+                  files={consignmentAgreementFiles}
+                  onChange={setConsignmentAgreementFiles}
+                  maxFiles={1}
+                  maxSizeMB={50}
+                  maxVideoSizeMB={500}
+                  allowedTypes={["PDF"]}
+                  helperText="Upload the signed consignment contract PDF. Endpoint mapping is staged."
+                />
+              </div>
+
+              <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-4 text-sm text-amber-800 dark:text-amber-200">
+                Profit analytics for consigned products should calculate commission on successful
+                sale instead of buy-versus-sale spread. The visual flow is ready here and will bind
+                to the final analytics endpoint later.
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Public Media Upload</SectionHeading>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-            Use one public preset for customer-facing media. Thumbnail and video are required when
-            uploading public media.
+            Public-ready media follows the product visibility flow. Thumbnail and feature video are
+            required when customer-facing media is uploaded.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -1162,15 +1403,15 @@ export default function AddProductPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File</p>
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File or Image</p>
               <MediaUploader
                 files={publicCertificateFiles}
                 onChange={setPublicCertificateFiles}
                 maxFiles={1}
                 maxSizeMB={50}
                 maxVideoSizeMB={500}
-                allowedTypes={["PDF"]}
-                helperText="Upload one PDF certificate file."
+                allowedTypes={["IMAGE", "PDF"]}
+                helperText="Upload one PDF or certificate image."
               />
             </div>
           </div>
@@ -1179,7 +1420,8 @@ export default function AddProductPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Role Based Media Upload</SectionHeading>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-            Upload internal media and restrict access to one role preset.
+            Upload internal media and restrict access by staff role. Manager and sales options stay
+            disabled while the product itself remains PRIVATE.
           </p>
 
           <div className="mb-4">
@@ -1191,7 +1433,7 @@ export default function AddProductPage() {
               onChange={(e) => setRoleVisibilityPreset(e.target.value as RoleMediaVisibilityPreset)}
               className={inputCls}
             >
-              {ROLE_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+              {roleVisibilityOptions.map((preset) => (
                 <option key={preset} value={preset}>
                   {preset}
                 </option>

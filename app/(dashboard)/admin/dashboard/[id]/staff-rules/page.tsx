@@ -622,13 +622,6 @@ export default function AdminStaffRules() {
       return true;
     }
 
-    if (
-      capabilityKey === "canRequestManagerBans" &&
-      !managerCapabilitiesForForm.canRequestManagerRestrictions
-    ) {
-      return true;
-    }
-
     if (capabilityKey === "canBanSubordinates" && !managerCapabilitiesForForm.canRestrictSubordinates) {
       return true;
     }
@@ -847,17 +840,17 @@ export default function AdminStaffRules() {
                       )}
 
                       {/* Commission info for SALES */}
-                      {rule.role === "SALES" && rule.permissions && typeof rule.permissions === "object" && "commission" in rule.permissions && rule.permissions.commission && typeof rule.permissions.commission === "object" && (
+                      {rule.role === "SALES" && rule.permissions && typeof rule.permissions === "object" && "commission" in rule.permissions && Boolean(rule.permissions.commission) && typeof rule.permissions.commission === "object" && (
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
-                            Commission: {(rule.permissions.commission as Record<string, unknown>).rate ?? "-"}%
+                            Commission: {String((rule.permissions.commission as Record<string, unknown>).rate ?? "-")}%
                           </span>
                           {(rule.permissions.commission as Record<string, unknown>).priority != null && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
                               Priority: {String((rule.permissions.commission as Record<string, unknown>).priority)}
                             </span>
                           )}
-                          {(rule.permissions.commission as Record<string, unknown>).note && (
+                          {Boolean((rule.permissions.commission as Record<string, unknown>).note) && (
                             <span className="text-[11px] text-gray-400 dark:text-gray-500 italic">
                               {String((rule.permissions.commission as Record<string, unknown>).note)}
                             </span>

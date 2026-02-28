@@ -7,6 +7,10 @@ import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import { getAdminMediaUrl } from "@/lib/apiClient";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
+import {
+  deriveQuickVisibilityChoices,
+  toVisibilityLabel,
+} from "@/lib/adminUiConfig";
 
 type ApiErrorPayload = {
   message?: string;
@@ -62,6 +66,13 @@ type AdminProductMediaRef = {
 
 type AdminProductListItem = {
   id: string;
+  sku?: string | null;
+  name?: string | null;
+  visibility?: string | null;
+  tier?: string | null;
+  minCustomerTier?: string | null;
+  visibilityNote?: string | null;
+  targetUserIds?: string[] | null;
   media?: AdminProductMediaRef[] | null;
 };
 
@@ -74,6 +85,14 @@ type AdminProductsListResponse = {
 type ProductImageRef = {
   mediaId: string | null;
   url: string;
+};
+
+type ProductMeta = {
+  visibility: string | null;
+  tier: string | null;
+  minCustomerTier: string | null;
+  visibilityNote: string | null;
+  targetUserIds: string[];
 };
 
 const money = new Intl.NumberFormat("en-US", {
@@ -225,6 +244,12 @@ export default function AdminProducts() {
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [mediaByProductId, setMediaByProductId] = useState<Record<string, ProductImageRef>>({});
+  const [productMetaById, setProductMetaById] = useState<Record<string, ProductMeta>>({});
+  const [quickVisibilityProductId, setQuickVisibilityProductId] = useState<string | null>(null);
+  const [quickVisibilityChoice, setQuickVisibilityChoice] = useState("");
+  const [quickVisibilityTargetTier, setQuickVisibilityTargetTier] = useState("");
+  const [quickVisibilityTargetUsers, setQuickVisibilityTargetUsers] = useState("");
+  const [quickVisibilityMessage, setQuickVisibilityMessage] = useState("");
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
 
   const getAccessToken = useCallback(async () => {
@@ -360,14 +385,28 @@ export default function AdminProducts() {
       const hasMediaReferences = productRows.some(hasMediaReference);
 
       const mediaMap: Record<string, ProductImageRef> = {};
+      const productMetaMap: Record<string, ProductMeta> = {};
       for (const product of productRows) {
         const resolvedImage = toProductImageRef(product);
         if (resolvedImage) {
           mediaMap[product.id] = resolvedImage;
         }
+
+        productMetaMap[product.id] = {
+          visibility: typeof product.visibility === "string" ? product.visibility : null,
+          tier: typeof product.tier === "string" ? product.tier : null,
+          minCustomerTier:
+            typeof product.minCustomerTier === "string" ? product.minCustomerTier : null,
+          visibilityNote:
+            typeof product.visibilityNote === "string" ? product.visibilityNote : null,
+          targetUserIds: Array.isArray(product.targetUserIds)
+            ? product.targetUserIds.filter((value): value is string => typeof value === "string")
+            : [],
+        };
       }
 
       setMediaByProductId(mediaMap);
+      setProductMetaById(productMetaMap);
       setAnalytics(analyticsData);
 
       if (productRows.length > 0) {
@@ -389,6 +428,7 @@ export default function AdminProducts() {
       setMediaHint("");
       setAnalytics(null);
       setMediaByProductId({});
+      setProductMetaById({});
     } finally {
       setLoading(false);
     }
@@ -419,6 +459,37 @@ export default function AdminProducts() {
   }, [mediaByProductId, refreshProductImage]);
 
   const totalProducts = useMemo(() => analytics?.totals.productCount || 0, [analytics]);
+  const selectedQuickProduct = useMemo(
+    () => analytics?.inventory.find((item) => item.id === quickVisibilityProductId) || null,
+    [analytics, quickVisibilityProductId],
+  );
+  const selectedQuickMeta = selectedQuickProduct
+    ? productMetaById[selectedQuickProduct.id] || null
+    : null;
+  const quickVisibilityChoices = useMemo(
+    () =>
+      selectedQuickMeta
+        ? deriveQuickVisibilityChoices({
+            visibility: selectedQuickMeta.visibility,
+            customerTier: selectedQuickMeta.minCustomerTier,
+          })
+        : [],
+    [selectedQuickMeta],
+  );
+
+  useEffect(() => {
+    if (!selectedQuickProduct) {
+      setQuickVisibilityChoice("");
+      setQuickVisibilityTargetTier("");
+      setQuickVisibilityTargetUsers("");
+      return;
+    }
+
+    const firstChoice = quickVisibilityChoices[0]?.value || "";
+    setQuickVisibilityChoice(firstChoice);
+    setQuickVisibilityTargetTier(selectedQuickMeta?.minCustomerTier || "");
+    setQuickVisibilityTargetUsers((selectedQuickMeta?.targetUserIds || []).join(", "));
+  }, [quickVisibilityChoices, selectedQuickMeta, selectedQuickProduct]);
 
   const handleDeleteProduct = useCallback(
     async (product: InventoryProduct) => {
@@ -467,6 +538,29 @@ export default function AdminProducts() {
     },
     [getAccessToken, loadData, productDeleteBlocked, productDeleteTooltip],
   );
+
+  const stageQuickVisibility = useCallback(() => {
+    if (!selectedQuickProduct) {
+      return;
+    }
+
+    const label = selectedQuickProduct.name || selectedQuickProduct.sku || selectedQuickProduct.id;
+    const extra =
+      quickVisibilityChoice === "TARGETED_USER"
+        ? ` Targets: ${quickVisibilityTargetUsers || "pending selection"}.`
+        : quickVisibilityChoice === "USER_TIER"
+          ? ` Tier: ${quickVisibilityTargetTier || "pending tier"}.`
+          : "";
+
+    setQuickVisibilityMessage(
+      `Quick visibility flow staged for ${label}: ${quickVisibilityChoice || "no selection"}.${extra} API mapping pending.`,
+    );
+  }, [
+    quickVisibilityChoice,
+    quickVisibilityTargetTier,
+    quickVisibilityTargetUsers,
+    selectedQuickProduct,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -595,6 +689,152 @@ export default function AdminProducts() {
             </div>
           )}
 
+          <div className="rounded-xl border border-blue-200 dark:border-blue-700/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+            Quick visibility is now part of the products page flow. The panel stages the UI
+            interaction for the new endpoint contract without changing backend behavior yet.
+          </div>
+
+          {selectedQuickProduct && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Quick Visibility Flow
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {selectedQuickProduct.name || "Unnamed Product"} • {selectedQuickProduct.sku}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickVisibilityProductId(null);
+                    setQuickVisibilityMessage("");
+                  }}
+                  className="rounded-lg bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Current Visibility
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {toVisibilityLabel(selectedQuickMeta?.visibility)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Product Tier
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {selectedQuickMeta?.tier || "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Customer Tier
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {selectedQuickMeta?.minCustomerTier || "None"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Visibility Note
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {selectedQuickMeta?.visibilityNote || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Quick Option
+                    </label>
+                    <select
+                      value={quickVisibilityChoice}
+                      onChange={(event) => setQuickVisibilityChoice(event.target.value)}
+                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                    >
+                      {quickVisibilityChoices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </select>
+                    {quickVisibilityChoices.length ? (
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        {quickVisibilityChoices.find((choice) => choice.value === quickVisibilityChoice)?.helper}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {quickVisibilityChoice === "USER_TIER" ? (
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Customer Tier
+                      </label>
+                      <select
+                        value={quickVisibilityTargetTier}
+                        onChange={(event) => setQuickVisibilityTargetTier(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                      >
+                        <option value="">Select tier</option>
+                        <option value="REGULAR">REGULAR</option>
+                        <option value="VIP">VIP</option>
+                        <option value="ULTRA_VIP">ULTRA_VIP</option>
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {quickVisibilityChoice === "TARGETED_USER" ? (
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Target Users
+                      </label>
+                      <textarea
+                        value={quickVisibilityTargetUsers}
+                        onChange={(event) => setQuickVisibilityTargetUsers(event.target.value)}
+                        rows={3}
+                        placeholder="Enter target user ids separated by commas"
+                        className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Approval Flow
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    This quick action mirrors the spec: some visibility changes remain subject to
+                    main admin approval or auto-approval rules.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={stageQuickVisibility}
+                    className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Stage Quick Visibility
+                  </button>
+                  {quickVisibilityMessage ? (
+                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                      {quickVisibilityMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ───── stat cards ───── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
@@ -679,6 +919,7 @@ export default function AdminProducts() {
                     <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                       <th className="px-5 py-3 font-medium">Product</th>
                       <th className="px-5 py-3 font-medium">Status</th>
+                      <th className="px-5 py-3 font-medium">Visibility</th>
                       <th className="px-5 py-3 font-medium">Buy Price</th>
                       <th className="px-5 py-3 font-medium">Sale Range</th>
                       <th className="px-5 py-3 font-medium">Allocation Rate</th>
@@ -691,6 +932,7 @@ export default function AdminProducts() {
                     {analytics.inventory.map((item) => {
                       const productImage = mediaByProductId[item.id];
                       const productImageUrl = productImage?.url || "";
+                      const productMeta = productMetaById[item.id];
 
                       return (
                         <tr
@@ -734,6 +976,14 @@ export default function AdminProducts() {
                               {item.status}
                             </span>
                           </td>
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                            <div>
+                              <p className="font-medium">{toVisibilityLabel(productMeta?.visibility)}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {productMeta?.minCustomerTier || productMeta?.tier || "-"}
+                              </p>
+                            </div>
+                          </td>
                           <td className="px-5 py-3 text-gray-700 dark:text-gray-300">{toMoney(item.pricing.buyPrice)}</td>
                           <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
@@ -765,6 +1015,16 @@ export default function AdminProducts() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setQuickVisibilityProductId(item.id);
+                                  setQuickVisibilityMessage("");
+                                }}
+                                className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition-colors"
+                              >
+                                Quick Visibility
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   void handleDeleteProduct(item);
                                 }}
                                 disabled={productDeleteBlocked || deletingProductId === item.id}
@@ -789,6 +1049,7 @@ export default function AdminProducts() {
                 {analytics.inventory.map((item) => {
                   const productImage = mediaByProductId[item.id];
                   const productImageUrl = productImage?.url || "";
+                  const productMeta = productMetaById[item.id];
 
                   return (
                     <div key={item.id} className="px-4 py-4">
@@ -836,6 +1097,12 @@ export default function AdminProducts() {
                           {/* details grid */}
                           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                             <div>
+                              <span className="text-gray-400 dark:text-gray-500">Visibility:</span>{" "}
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                {toVisibilityLabel(productMeta?.visibility)}
+                              </span>
+                            </div>
+                            <div>
                               <span className="text-gray-400 dark:text-gray-500">Buy:</span>{" "}
                               <span className="text-gray-700 dark:text-gray-300 font-medium">{toMoney(item.pricing.buyPrice)}</span>
                             </div>
@@ -861,6 +1128,16 @@ export default function AdminProducts() {
 
                           {/* actions */}
                           <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuickVisibilityProductId(item.id);
+                                setQuickVisibilityMessage("");
+                              }}
+                              className="px-3 py-1.5 text-xs rounded-lg border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition-colors"
+                            >
+                              Quick Visibility
+                            </button>
                             {productEditBlocked ? (
                               <span
                                 title={productEditTooltip}

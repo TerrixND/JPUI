@@ -341,7 +341,7 @@ export default function AdminDashboard() {
         ),
       },
     ],
-    [counts, countsLoading, profitLoading, t],
+    [counts, countsLoading, dashboardBasePath, profitLoading, t],
   );
 
   return (
@@ -551,12 +551,14 @@ export default function AdminDashboard() {
                     {branchRows.map((branch) => (
                       <tr key={branch.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors">
                         <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-2.5">
+                          <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="flex items-center gap-2.5 group">
                             <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-bold flex items-center justify-center shrink-0">
                               {branch.code || "--"}
                             </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{branch.name || "Unnamed Branch"}</span>
-                          </div>
+                            <span className="font-medium text-gray-900 transition-colors group-hover:text-emerald-700 dark:text-gray-100 dark:group-hover:text-emerald-300">
+                              {branch.name || "Unnamed Branch"}
+                            </span>
+                          </Link>
                         </td>
                         <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400">{branch.city || "-"}</td>
                         <td className="px-5 py-3.5 text-gray-700 dark:text-gray-300 max-w-[140px] truncate">
@@ -580,28 +582,30 @@ export default function AdminDashboard() {
               <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/40">
                 {branchRows.map((branch) => (
                   <div key={branch.id} className="px-4 py-3.5 flex items-center gap-3">
-                    <span className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                      {branch.code || "--"}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {branch.name || "Unnamed Branch"}
-                        </p>
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${getBranchStatusBadge(branch.status)}`}
-                        >
-                          {branch.status || "-"}
-                        </span>
+                    <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="flex flex-1 items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {branch.code || "--"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {branch.name || "Unnamed Branch"}
+                          </p>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${getBranchStatusBadge(branch.status)}`}
+                          >
+                            {branch.status || "-"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                          <span>{branch.city || "Unknown city"}</span>
+                          <span>·</span>
+                          <span>{branch.managerCount} mgr</span>
+                          <span>·</span>
+                          <span>{formatDate(branch.updatedAt)}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                        <span>{branch.city || "Unknown city"}</span>
-                        <span>·</span>
-                        <span>{branch.managerCount} mgr</span>
-                        <span>·</span>
-                        <span>{formatDate(branch.updatedAt)}</span>
-                      </div>
-                    </div>
+                    </Link>
                   </div>
                 ))}
               </div>
