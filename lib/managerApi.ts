@@ -202,6 +202,139 @@ const normalizeManagerBranch = (value: unknown): ManagerBranchRef | null => {
   };
 };
 
+export type ManagerBranchUser = {
+  membershipId: string;
+  memberRole: string | null;
+  isPrimary: boolean;
+  assignedAt: string | null;
+  branchId: string | null;
+  branch: ManagerBranchRef | null;
+  userId: string;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  displayName: string | null;
+  accessRestrictionCount: number;
+  commissionSummary: {
+    salespersonPolicyCount: number;
+    activeSalespersonPolicyCount: number;
+    productAllocationCount: number;
+    highestActivePolicyRate: number | null;
+    highestProductAllocationRate: number | null;
+  };
+  raw: JsonRecord;
+};
+
+export type ManagerBranchUsersResponse = {
+  branch: ManagerBranchRef | null;
+  totalUsers: number;
+  users: ManagerBranchUser[];
+  raw: unknown;
+};
+
+const normalizeManagerBranchUser = (
+  value: unknown,
+  fallbackBranch?: ManagerBranchRef | null,
+): ManagerBranchUser | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const membershipId =
+    asString(row.membershipId) ||
+    asString(row.id);
+  const user = asRecord(row.user);
+  const userId = asString(user?.id);
+
+  if (!membershipId || !userId) {
+    return null;
+  }
+
+  const managerProfile = asRecord(user?.managerProfile);
+  const salespersonProfile = asRecord(user?.salespersonProfile);
+  const commissions = asRecord(row.commissions);
+  const summary = asRecord(commissions?.summary);
+  const branch = normalizeManagerBranch(row.branch) ?? fallbackBranch ?? null;
+
+  return {
+    membershipId,
+    memberRole: asNullableString(row.memberRole),
+    isPrimary: asBoolean(row.isPrimary),
+    assignedAt: asNullableString(row.assignedAt),
+    branchId: asNullableString(row.branchId) || branch?.id || null,
+    branch,
+    userId,
+    email: asNullableString(user?.email),
+    role: asNullableString(user?.role),
+    status: asNullableString(user?.status),
+    displayName:
+      asNullableString(managerProfile?.displayName) ||
+      asNullableString(salespersonProfile?.displayName) ||
+      asNullableString(user?.displayName),
+    accessRestrictionCount: Array.isArray(user?.accessRestrictions)
+      ? user.accessRestrictions.length
+      : 0,
+    commissionSummary: {
+      salespersonPolicyCount: asPositiveInt(summary?.salespersonPolicyCount) ?? 0,
+      activeSalespersonPolicyCount:
+        asPositiveInt(summary?.activeSalespersonPolicyCount) ?? 0,
+      productAllocationCount: asPositiveInt(summary?.productAllocationCount) ?? 0,
+      highestActivePolicyRate: asFiniteNumber(summary?.highestActivePolicyRate),
+      highestProductAllocationRate: asFiniteNumber(
+        summary?.highestProductAllocationRate,
+      ),
+    },
+    raw: row,
+  };
+};
+
+export const getManagerBranchUsers = async ({
+  accessToken,
+  branchId,
+}: {
+  accessToken: string;
+  branchId?: string;
+}): Promise<ManagerBranchUsersResponse> => {
+  const query = new URLSearchParams();
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/branch-users${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load branch users.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const branch = normalizeManagerBranch(root.branch);
+  const users = extractRows(payload)
+    .map((entry) => normalizeManagerBranchUser(entry, branch))
+    .filter((entry): entry is ManagerBranchUser => Boolean(entry));
+
+  return {
+    branch,
+    totalUsers: asPositiveInt(root.totalUsers) ?? users.length,
+    users,
+    raw: payload,
+  };
+};
+
+export const filterManagerBranchStaff = (
+  rows: ManagerBranchUser[],
+  roles: Array<"MANAGER" | "SALES"> = ["MANAGER", "SALES"],
+) => {
+  const allowed = new Set(roles);
+  return rows.filter((row) => {
+    const role = asString(row.role).toUpperCase();
+    return role === "MANAGER" || role === "SALES"
+      ? allowed.has(role as "MANAGER" | "SALES")
+      : false;
+  });
+};
+
 export type ManagerProductSummary = {
   id: string;
   sku: string | null;
@@ -1340,8 +1473,8 @@ export const updateManagerProductTargeting = async ({
   if (minCustomerTier) {
     body.minCustomerTier = minCustomerTier;
   }
-  if (userIds && userIds.length) {
-    body.userIds = userIds;
+  if (Array.isArray(userIds)) {
+    body.userIds = userIds.map((entry) => entry.trim()).filter(Boolean);
   }
   if (visibilityNote) {
     body.visibilityNote = visibilityNote.trim();

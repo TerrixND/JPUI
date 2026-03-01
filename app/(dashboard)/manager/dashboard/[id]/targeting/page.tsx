@@ -6,12 +6,11 @@ import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   createManagerBranchProductRequest,
+  getManagerAnalyticsBranches,
   getManagerBranchProductRequests,
-  getManagerDashboard,
   getManagerProducts,
   updateManagerProductTargeting,
   type ManagerBranchProductRequestRecord,
-  type ManagerDashboardBranch,
   type ManagerProductSummary,
 } from "@/lib/managerApi";
 
@@ -21,9 +20,9 @@ const getErrorMessage = (value: unknown) =>
 const statusStyle = (status: string | null) => {
   switch (status) {
     case "PENDING":
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
     case "APPROVED":
-      return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
     case "REJECTED":
       return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
     case "CANCELLED":
@@ -33,18 +32,24 @@ const statusStyle = (status: string | null) => {
   }
 };
 
+const parseUserIds = (value: string) =>
+  value
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
 export default function ManagerTargeting() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [branches, setBranches] = useState<ManagerDashboardBranch[]>([]);
   const [branchId, setBranchId] = useState("");
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [products, setProducts] = useState<ManagerProductSummary[]>([]);
   const [requests, setRequests] = useState<ManagerBranchProductRequestRecord[]>([]);
   const [targetingSubmitting, setTargetingSubmitting] = useState(false);
   const [requestSubmitting, setRequestSubmitting] = useState(false);
 
-  const [selectedProductId, setSelectedProductId] = useState("");
+  const [targetingProductId, setTargetingProductId] = useState("");
   const [visibility, setVisibility] = useState<"PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED">(
     "TARGETED",
   );
@@ -70,101 +75,97 @@ export default function ManagerTargeting() {
   }, []);
 
   const loadBranches = useCallback(async () => {
-    try {
-      const accessToken = await getAccessToken();
-      const dashboard = await getManagerDashboard({ accessToken });
-      setBranches(dashboard.branches);
+    const accessToken = await getAccessToken();
+    const analytics = await getManagerAnalyticsBranches({ accessToken });
+    const options = analytics.branches
+      .map((row) => row.branch)
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .map((branch) => ({
+        id: branch.id,
+        label: [branch.code, branch.name].filter(Boolean).join(" · ") || branch.id,
+      }));
 
-      if (!branchId && dashboard.branches[0]?.id) {
-        setBranchId(dashboard.branches[0].id);
-      }
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
+    setBranchOptions(options);
+    setBranchId((current) => current || options[0]?.id || "");
+  }, [getAccessToken]);
+
+  const loadProductsAndRequests = useCallback(
+    async (nextBranchId?: string) => {
+      const resolvedBranchId = nextBranchId || branchId;
+      if (!resolvedBranchId) {
+        setProducts([]);
+        setRequests([]);
         return;
       }
-      setBranches([]);
-      setError(getErrorMessage(caughtError));
-    }
-  }, [branchId, getAccessToken]);
 
-  const loadProductsAndRequests = useCallback(async () => {
-    if (!branchId) {
-      setProducts([]);
-      setRequests([]);
-      return;
-    }
+      setLoading(true);
+      setError("");
 
-    setLoading(true);
-    setError("");
+      try {
+        const accessToken = await getAccessToken();
+        const [productResponse, requestResponse] = await Promise.all([
+          getManagerProducts({
+            accessToken,
+            branchId: resolvedBranchId,
+          }),
+          getManagerBranchProductRequests({
+            accessToken,
+            branchId: resolvedBranchId,
+            limit: 50,
+          }),
+        ]);
 
-    try {
-      const accessToken = await getAccessToken();
-      const [productResponse, requestResponse] = await Promise.all([
-        getManagerProducts({
-          accessToken,
-          branchId,
-        }),
-        getManagerBranchProductRequests({
-          accessToken,
-          branchId,
-          limit: 50,
-        }),
-      ]);
-
-      setProducts(productResponse.products);
-      setRequests(requestResponse.records);
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
+        setProducts(productResponse.products);
+        setRequests(requestResponse.records);
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setProducts([]);
+        setRequests([]);
+        setError(getErrorMessage(caughtError));
+      } finally {
+        setLoading(false);
       }
-      setProducts([]);
-      setRequests([]);
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setLoading(false);
-    }
-  }, [branchId, getAccessToken]);
+    },
+    [branchId, getAccessToken],
+  );
 
   useEffect(() => {
-    void loadBranches();
+    const bootstrap = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        await loadBranches();
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setBranchOptions([]);
+        setProducts([]);
+        setRequests([]);
+        setError(getErrorMessage(caughtError));
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
   }, [loadBranches]);
 
   useEffect(() => {
-    void loadProductsAndRequests();
-  }, [loadProductsAndRequests]);
+    if (branchId) {
+      void loadProductsAndRequests(branchId);
+    }
+  }, [branchId, loadProductsAndRequests]);
 
-  const branchOptions = useMemo(
-    () =>
-      branches.map((branch) => ({
-        id: branch.id,
-        label: [branch.code, branch.name].filter(Boolean).join(" · ") || branch.id,
-      })),
-    [branches],
+  const selectedTargetingProduct = useMemo(
+    () => products.find((row) => row.id === targetingProductId) || null,
+    [products, targetingProductId],
   );
-
-  const selectedProduct = useMemo(
-    () => products.find((row) => row.id === selectedProductId) || null,
-    [products, selectedProductId],
-  );
-
-  const onConfigureProduct = (product: ManagerProductSummary) => {
-    setSelectedProductId(product.id);
-    setVisibility(
-      product.visibility === "PRIVATE" ||
-        product.visibility === "PUBLIC" ||
-        product.visibility === "TOP_SHELF" ||
-        product.visibility === "TARGETED"
-        ? product.visibility
-        : "TARGETED",
-    );
-    setMinCustomerTier("");
-    setTargetUserIds("");
-    setVisibilityNote("");
-  };
 
   const onSubmitTargeting = async () => {
-    if (!branchId || !selectedProductId) {
-      setError("Select branch and product before updating targeting.");
+    if (!branchId || !targetingProductId.trim()) {
+      setError("Branch and product ID are required before updating targeting.");
       return;
     }
 
@@ -172,23 +173,22 @@ export default function ManagerTargeting() {
     setError("");
     setNotice("");
 
+    const userIds = parseUserIds(targetUserIds);
+
     try {
       const accessToken = await getAccessToken();
       await updateManagerProductTargeting({
         accessToken,
-        productId: selectedProductId,
+        productId: targetingProductId.trim(),
         branchId,
         visibility,
         minCustomerTier: minCustomerTier || undefined,
-        userIds: targetUserIds
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter(Boolean),
+        userIds,
         visibilityNote: visibilityNote || undefined,
       });
 
       setNotice("Product targeting updated.");
-      await loadProductsAndRequests();
+      await loadProductsAndRequests(branchId);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -220,8 +220,8 @@ export default function ManagerTargeting() {
       ? Number(requestedCommissionRate)
       : undefined;
 
-    if (parsedRate !== undefined && Number.isNaN(parsedRate)) {
-      setError("Requested commission rate must be a valid number.");
+    if (parsedRate !== undefined && (Number.isNaN(parsedRate) || parsedRate < 0 || parsedRate > 100)) {
+      setError("Requested commission rate must be a number between 0 and 100.");
       return;
     }
 
@@ -241,7 +241,7 @@ export default function ManagerTargeting() {
       setRequestProductIds([]);
       setRequestedCommissionRate("");
       setRequestNote("");
-      await loadProductsAndRequests();
+      await loadProductsAndRequests(branchId);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -255,15 +255,15 @@ export default function ManagerTargeting() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Product Targeting"
-        description="Update product visibility targeting and submit branch product approval requests."
+        title="Products & Targeting"
+        description="Private product request workflow plus manual visibility targeting for branch-held products."
         action={
           <div className="flex items-center gap-2">
             <select
               value={branchId}
               onChange={(event) => {
                 setBranchId(event.target.value);
-                setSelectedProductId("");
+                setTargetingProductId("");
                 setRequestProductIds([]);
               }}
               className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
@@ -277,7 +277,10 @@ export default function ManagerTargeting() {
             </select>
             <button
               type="button"
-              onClick={() => void loadProductsAndRequests()}
+              onClick={() => {
+                void loadBranches();
+                void loadProductsAndRequests(branchId);
+              }}
               className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
             >
               Refresh
@@ -285,6 +288,24 @@ export default function ManagerTargeting() {
           </div>
         }
       />
+
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-5">
+        <div className="grid gap-3 lg:grid-cols-3 text-sm text-amber-900 dark:text-amber-100">
+          <p>
+            The current manager <span className="font-semibold">/products</span> route only lists
+            non-archived <span className="font-semibold">PRIVATE</span> products, not the requested
+            non-private manager catalog.
+          </p>
+          <p>
+            The manager API still does not provide a customer finder route, so explicit targeting is
+            updated with pasted customer user IDs instead of a customer picker.
+          </p>
+          <p>
+            Clearing the customer list now sends <span className="font-semibold">userIds: []</span>,
+            which is the backend-supported way to remove all explicit targeted users.
+          </p>
+        </div>
+      </div>
 
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
@@ -298,12 +319,15 @@ export default function ManagerTargeting() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_0.95fr] gap-5">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              Branch Products
+              Private Products Available For Branch Request
             </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              This list is intentionally limited to the current private-product route behavior.
+            </p>
           </div>
 
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -313,118 +337,145 @@ export default function ManagerTargeting() {
               </div>
             ) : products.length === 0 ? (
               <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">
-                No products found for selected branch.
+                No private products returned for the selected branch scope.
               </div>
             ) : (
-              products.map((product) => (
-                <div key={product.id} className="px-5 py-4 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {[product.sku, product.name].filter(Boolean).join(" · ") || product.id}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        Visibility: {product.visibility || "-"} · Tier: {product.tier || "-"} · Status:{" "}
-                        {product.status || "-"}
-                      </p>
+              products.map((product) => {
+                const requestDisabled = product.isSelectedForBranch;
+                return (
+                  <div key={product.id} className="px-5 py-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {[product.sku, product.name].filter(Boolean).join(" · ") || product.id}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Visibility: {product.visibility || "-"} · Tier: {product.tier || "-"} ·
+                          Status: {product.status || "-"}
+                        </p>
+                        {(product.saleRangeMin !== null || product.saleRangeMax !== null) && (
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Sale range: {product.saleRangeMin ?? "-"} - {product.saleRangeMax ?? "-"}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-[11px] rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-1 text-gray-600 dark:text-gray-300">
+                        {product.isSelectedForBranch ? "Already active in branch" : "Requestable"}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                         <input
                           type="checkbox"
                           checked={requestProductIds.includes(product.id)}
+                          disabled={requestDisabled}
                           onChange={() => onToggleRequestProduct(product.id)}
                           className="rounded border-gray-300 dark:border-gray-600"
                         />
-                        Request
+                        Add to branch request
                       </label>
                       <button
                         type="button"
-                        onClick={() => onConfigureProduct(product)}
+                        onClick={() => {
+                          setTargetingProductId(product.id);
+                          setVisibility(
+                            product.visibility === "PRIVATE" ||
+                              product.visibility === "PUBLIC" ||
+                              product.visibility === "TOP_SHELF" ||
+                              product.visibility === "TARGETED"
+                              ? product.visibility
+                              : "TARGETED",
+                          );
+                        }}
                         className="px-2.5 py-1.5 text-xs font-medium border border-emerald-200 dark:border-emerald-700/40 text-emerald-700 dark:text-emerald-300 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                       >
-                        Configure
+                        Use As Targeting Input
                       </button>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Targeting Configuration
+              Visibility & Targeting Update
             </h3>
-            {!selectedProduct ? (
+            <input
+              type="text"
+              value={targetingProductId}
+              onChange={(event) => setTargetingProductId(event.target.value)}
+              placeholder="Product ID held by this branch"
+              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+            />
+            {selectedTargetingProduct && (
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Pick a product from the list to configure targeting.
+                Quick-picked product:{" "}
+                {[selectedTargetingProduct.sku, selectedTargetingProduct.name]
+                  .filter(Boolean)
+                  .join(" · ") || selectedTargetingProduct.id}
               </p>
-            ) : (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {selectedProduct.name || selectedProduct.sku || selectedProduct.id}
-                </p>
-                <select
-                  value={visibility}
-                  onChange={(event) =>
-                    setVisibility(
-                      event.target.value as "PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED",
-                    )
-                  }
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                >
-                  <option value="TARGETED">TARGETED</option>
-                  <option value="PRIVATE">PRIVATE</option>
-                  <option value="PUBLIC">PUBLIC</option>
-                  <option value="TOP_SHELF">TOP_SHELF</option>
-                </select>
-                <select
-                  value={minCustomerTier}
-                  onChange={(event) =>
-                    setMinCustomerTier(event.target.value as "" | "REGULAR" | "VIP" | "ULTRA_VIP")
-                  }
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                >
-                  <option value="">No tier minimum</option>
-                  <option value="REGULAR">REGULAR</option>
-                  <option value="VIP">VIP</option>
-                  <option value="ULTRA_VIP">ULTRA_VIP</option>
-                </select>
-                <input
-                  type="text"
-                  value={targetUserIds}
-                  onChange={(event) => setTargetUserIds(event.target.value)}
-                  placeholder="userIds CSV (optional)"
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                />
-                <input
-                  type="text"
-                  value={visibilityNote}
-                  onChange={(event) => setVisibilityNote(event.target.value)}
-                  placeholder="Visibility note (optional)"
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                />
-                <button
-                  type="button"
-                  onClick={() => void onSubmitTargeting()}
-                  disabled={targetingSubmitting}
-                  className="w-full py-2 text-sm text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-                >
-                  {targetingSubmitting ? "Updating..." : "Update Targeting"}
-                </button>
-              </>
             )}
+            <select
+              value={visibility}
+              onChange={(event) =>
+                setVisibility(
+                  event.target.value as "PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED",
+                )
+              }
+              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+            >
+              <option value="TARGETED">TARGETED</option>
+              <option value="PRIVATE">PRIVATE</option>
+              <option value="PUBLIC">PUBLIC</option>
+              <option value="TOP_SHELF">TOP_SHELF</option>
+            </select>
+            <select
+              value={minCustomerTier}
+              onChange={(event) =>
+                setMinCustomerTier(event.target.value as "" | "REGULAR" | "VIP" | "ULTRA_VIP")
+              }
+              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+            >
+              <option value="">No tier minimum</option>
+              <option value="REGULAR">REGULAR</option>
+              <option value="VIP">VIP</option>
+              <option value="ULTRA_VIP">ULTRA_VIP</option>
+            </select>
+            <textarea
+              value={targetUserIds}
+              onChange={(event) => setTargetUserIds(event.target.value)}
+              placeholder="Customer user IDs, separated by commas or new lines"
+              rows={4}
+              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg resize-none"
+            />
+            <input
+              type="text"
+              value={visibilityNote}
+              onChange={(event) => setVisibilityNote(event.target.value)}
+              placeholder="Visibility note (optional)"
+              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+            />
+            <button
+              type="button"
+              onClick={() => void onSubmitTargeting()}
+              disabled={targetingSubmitting}
+              className="w-full py-2 text-sm text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {targetingSubmitting ? "Updating..." : "Update Targeting"}
+            </button>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Branch Product Request
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Selected products: {requestProductIds.length}
+              Selected private products: {requestProductIds.length}
             </p>
             <input
               type="number"
@@ -475,7 +526,7 @@ export default function ManagerTargeting() {
               {requests.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                    No branch product requests for selected scope.
+                    No branch product requests for the selected branch scope.
                   </td>
                 </tr>
               ) : (
@@ -500,7 +551,7 @@ export default function ManagerTargeting() {
                       {row.requestedProducts.length === 0
                         ? "-"
                         : row.requestedProducts
-                            .slice(0, 3)
+                            .slice(0, 4)
                             .map((entry) => entry.sku || entry.name || entry.id)
                             .join(", ")}
                     </td>

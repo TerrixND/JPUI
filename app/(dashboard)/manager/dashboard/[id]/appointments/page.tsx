@@ -7,12 +7,12 @@ import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   approveManagerAppointment,
   createManagerAppointmentPossession,
-  getManagerDashboardSalespersons,
+  filterManagerBranchStaff,
+  getManagerAnalyticsBranches,
+  getManagerBranchUsers,
   getManagerPendingAppointments,
-  getManagerProducts,
+  type ManagerBranchUser,
   type ManagerPendingAppointment,
-  type ManagerProductSummary,
-  type ManagerSalespersonListItem,
 } from "@/lib/managerApi";
 
 const getErrorMessage = (value: unknown) =>
@@ -35,9 +35,9 @@ const statusStyle = (status: string | null) => {
   switch (status) {
     case "REQUESTED":
     case "PENDING":
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
     case "CONFIRMED":
-      return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
     case "COMPLETED":
       return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300";
     case "CANCELLED":
@@ -58,12 +58,10 @@ export default function ManagerAppointments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [branchFilter, setBranchFilter] = useState("");
+  const [branchId, setBranchId] = useState("");
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [appointments, setAppointments] = useState<ManagerPendingAppointment[]>([]);
-  const [salespersons, setSalespersons] = useState<ManagerSalespersonListItem[]>([]);
-  const [productsByBranch, setProductsByBranch] = useState<
-    Record<string, ManagerProductSummary[]>
-  >({});
+  const [salespersons, setSalespersons] = useState<ManagerBranchUser[]>([]);
   const [expandedAppointmentId, setExpandedAppointmentId] = useState("");
   const [draftByAppointmentId, setDraftByAppointmentId] = useState<
     Record<string, PossessionDraft>
@@ -82,84 +80,118 @@ export default function ManagerAppointments() {
     return accessToken;
   }, []);
 
-  const loadAppointments = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadBranches = useCallback(async () => {
+    const accessToken = await getAccessToken();
+    const analytics = await getManagerAnalyticsBranches({ accessToken });
+    const options = analytics.branches
+      .map((row) => row.branch)
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .map((branch) => ({
+        id: branch.id,
+        label: [branch.code, branch.name].filter(Boolean).join(" · ") || branch.id,
+      }));
 
-    try {
-      const accessToken = await getAccessToken();
-      const [appointmentRows, salespersonRows] = await Promise.all([
-        getManagerPendingAppointments({
-          accessToken,
-          branchId: branchFilter || undefined,
-        }),
-        getManagerDashboardSalespersons({
-          accessToken,
-          branchId: branchFilter || undefined,
-          status: ["ACTIVE", "RESTRICTED"],
-        }),
-      ]);
+    setBranchOptions(options);
+    setBranchId((current) => current || options[0]?.id || "");
+  }, [getAccessToken]);
 
-      setAppointments(appointmentRows);
-      setSalespersons(salespersonRows.salespersons);
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
+  const loadAppointments = useCallback(
+    async (nextBranchId?: string) => {
+      const resolvedBranchId = nextBranchId || branchId;
+      if (!resolvedBranchId) {
+        setAppointments([]);
+        setSalespersons([]);
         return;
       }
-      setAppointments([]);
-      setSalespersons([]);
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setLoading(false);
-    }
-  }, [branchFilter, getAccessToken]);
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const accessToken = await getAccessToken();
+        const [appointmentRows, branchUsers] = await Promise.all([
+          getManagerPendingAppointments({
+            accessToken,
+            branchId: resolvedBranchId,
+          }),
+          getManagerBranchUsers({
+            accessToken,
+            branchId: resolvedBranchId,
+          }),
+        ]);
+
+        setAppointments(appointmentRows);
+        setSalespersons(filterManagerBranchStaff(branchUsers.users, ["SALES"]));
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setAppointments([]);
+        setSalespersons([]);
+        setError(getErrorMessage(caughtError));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [branchId, getAccessToken],
+  );
 
   useEffect(() => {
-    void loadAppointments();
-  }, [loadAppointments]);
-
-  const branchOptions = useMemo(() => {
-    const dedupe = new Map<string, string>();
-    for (const row of appointments) {
-      if (!row.branch?.id) continue;
-      const label =
-        [row.branch.code, row.branch.name].filter(Boolean).join(" · ") || row.branch.id;
-      dedupe.set(row.branch.id, label);
-    }
-    return Array.from(dedupe.entries()).map(([id, label]) => ({ id, label }));
-  }, [appointments]);
-
-  const salespersonsByBranch = useMemo(() => {
-    const bucket: Record<string, ManagerSalespersonListItem[]> = {};
-    for (const row of salespersons) {
-      if (!row.branchId) continue;
-      if (!bucket[row.branchId]) {
-        bucket[row.branchId] = [];
+    const bootstrap = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        await loadBranches();
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setBranchOptions([]);
+        setAppointments([]);
+        setSalespersons([]);
+        setError(getErrorMessage(caughtError));
+        setLoading(false);
       }
-      bucket[row.branchId].push(row);
+    };
+
+    void bootstrap();
+  }, [loadBranches]);
+
+  useEffect(() => {
+    if (branchId) {
+      void loadAppointments(branchId);
+    }
+  }, [branchId, loadAppointments]);
+
+  const salespersonsById = useMemo(() => {
+    const bucket = new Map<string, ManagerBranchUser>();
+    for (const row of salespersons) {
+      bucket.set(row.userId, row);
     }
     return bucket;
   }, [salespersons]);
 
-  const ensureProductsForBranch = useCallback(
-    async (branchId: string) => {
-      if (productsByBranch[branchId]) {
-        return;
-      }
+  const appointmentProductOptions = useMemo(() => {
+    const bucket: Record<string, Array<{ id: string; label: string }>> = {};
+    for (const appointment of appointments) {
+      bucket[appointment.id] = appointment.items
+        .map((item) => {
+          const productId = item.productId || item.product?.id;
+          if (!productId) {
+            return null;
+          }
 
-      const accessToken = await getAccessToken();
-      const result = await getManagerProducts({
-        accessToken,
-        branchId,
-      });
-
-      setProductsByBranch((current) => ({
-        ...current,
-        [branchId]: result.products,
-      }));
-    },
-    [getAccessToken, productsByBranch],
-  );
+          return {
+            id: productId,
+            label:
+              [item.product?.sku, item.product?.name].filter(Boolean).join(" · ") ||
+              productId,
+          };
+        })
+        .filter((row): row is { id: string; label: string } => Boolean(row));
+    }
+    return bucket;
+  }, [appointments]);
 
   const onApprove = async (
     appointmentId: string,
@@ -182,7 +214,7 @@ export default function ManagerAppointments() {
           ? "Appointment confirmed successfully."
           : "Appointment cancelled successfully.",
       );
-      await loadAppointments();
+      await loadAppointments(branchId);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -193,29 +225,10 @@ export default function ManagerAppointments() {
     }
   };
 
-  const onOpenPossession = async (appointment: ManagerPendingAppointment) => {
-    setNotice("");
-    setError("");
-    setExpandedAppointmentId((current) =>
-      current === appointment.id ? "" : appointment.id,
-    );
-
-    if (appointment.branchId) {
-      try {
-        await ensureProductsForBranch(appointment.branchId);
-      } catch (caughtError) {
-        if (handleAccountAccessDeniedError(caughtError)) {
-          return;
-        }
-        setError(getErrorMessage(caughtError));
-      }
-    }
-  };
-
   const onSubmitPossession = async (appointment: ManagerPendingAppointment) => {
     const draft = draftByAppointmentId[appointment.id];
     if (!draft?.productId || !draft?.salespersonUserId) {
-      setError("Select both product and salesperson for possession allocation.");
+      setError("Select both the appointment product and salesperson before checkout.");
       return;
     }
 
@@ -236,14 +249,14 @@ export default function ManagerAppointments() {
         note: draft.note || undefined,
       });
 
-      setNotice("Possession allocated successfully.");
+      setNotice("Possession checked out to salesperson.");
       setExpandedAppointmentId("");
       setDraftByAppointmentId((current) => {
         const next = { ...current };
         delete next[appointment.id];
         return next;
       });
-      await loadAppointments();
+      await loadAppointments(branchId);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -258,24 +271,27 @@ export default function ManagerAppointments() {
     <div className="space-y-6">
       <PageHeader
         title="Appointments"
-        description="Approve or cancel pending appointments, then allocate product possessions."
+        description="Approve branch appointments, then allocate possessions from the appointment product lines."
         action={
           <div className="flex items-center gap-2">
             <select
-              value={branchFilter}
-              onChange={(event) => setBranchFilter(event.target.value)}
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
               className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
             >
-              <option value="">All branches</option>
-              {branchOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
+              <option value="">Select branch</option>
+              {branchOptions.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.label}
                 </option>
               ))}
             </select>
             <button
               type="button"
-              onClick={() => void loadAppointments()}
+              onClick={() => {
+                void loadBranches();
+                void loadAppointments(branchId);
+              }}
               className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
             >
               Refresh
@@ -283,6 +299,12 @@ export default function ManagerAppointments() {
           </div>
         }
       />
+
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-4 text-sm text-amber-800 dark:text-amber-200">
+        The current manager API does not expose a linked salesperson-to-manager possession request
+        chain. The supported flow is: approve the appointment, request inventory if needed, then
+        create the possession checkout for the salesperson.
+      </div>
 
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
@@ -312,12 +334,6 @@ export default function ManagerAppointments() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {appointments.map((appointment) => {
-            const salespersonOptions = appointment.branchId
-              ? salespersonsByBranch[appointment.branchId] || []
-              : [];
-            const productOptions = appointment.branchId
-              ? productsByBranch[appointment.branchId] || []
-              : [];
             const draft = draftByAppointmentId[appointment.id] || {
               productId: "",
               salespersonUserId: "",
@@ -325,6 +341,7 @@ export default function ManagerAppointments() {
               note: "",
             };
             const isExpanded = expandedAppointmentId === appointment.id;
+            const productOptions = appointmentProductOptions[appointment.id] || [];
 
             return (
               <div
@@ -349,9 +366,6 @@ export default function ManagerAppointments() {
                     {appointment.customerName || "Walk-in customer"}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {appointment.branch?.name || appointment.branchId || "Unknown branch"}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {formatDateTime(appointment.appointmentDate)}
                   </p>
                 </div>
@@ -361,9 +375,11 @@ export default function ManagerAppointments() {
                     Appointment Items
                   </p>
                   {appointment.items.length === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">No items listed.</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      No items listed on this appointment.
+                    </p>
                   ) : (
-                    appointment.items.slice(0, 3).map((item) => (
+                    appointment.items.slice(0, 4).map((item) => (
                       <p key={item.id} className="text-xs text-gray-600 dark:text-gray-300">
                         {(item.product?.sku && `${item.product.sku} · `) || ""}
                         {item.product?.name || item.productId || item.id}
@@ -393,10 +409,14 @@ export default function ManagerAppointments() {
 
                 <button
                   type="button"
-                  onClick={() => void onOpenPossession(appointment)}
+                  onClick={() =>
+                    setExpandedAppointmentId((current) =>
+                      current === appointment.id ? "" : appointment.id,
+                    )
+                  }
                   className="w-full py-2 border border-emerald-200 dark:border-emerald-700/40 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                 >
-                  {isExpanded ? "Hide Possession Form" : "Allocate Possession"}
+                  {isExpanded ? "Hide Checkout Form" : "Allocate Possession"}
                 </button>
 
                 {isExpanded && (
@@ -415,10 +435,10 @@ export default function ManagerAppointments() {
                         }
                         className="px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
                       >
-                        <option value="">Select product</option>
+                        <option value="">Select appointment product</option>
                         {productOptions.map((product) => (
                           <option key={product.id} value={product.id}>
-                            {[product.sku, product.name].filter(Boolean).join(" · ") || product.id}
+                            {product.label}
                           </option>
                         ))}
                       </select>
@@ -436,7 +456,7 @@ export default function ManagerAppointments() {
                         className="px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
                       >
                         <option value="">Select salesperson</option>
-                        {salespersonOptions.map((salesperson) => (
+                        {salespersons.map((salesperson) => (
                           <option key={salesperson.userId} value={salesperson.userId}>
                             {salesperson.displayName ||
                               salesperson.email ||
@@ -445,6 +465,13 @@ export default function ManagerAppointments() {
                         ))}
                       </select>
                     </div>
+
+                    {draft.salespersonUserId && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Selected salesperson status:{" "}
+                        {salespersonsById.get(draft.salespersonUserId)?.status || "UNKNOWN"}
+                      </p>
+                    )}
 
                     <input
                       type="datetime-local"
@@ -463,7 +490,7 @@ export default function ManagerAppointments() {
 
                     <input
                       type="text"
-                      placeholder="Note (optional)"
+                      placeholder="Checkout note (optional)"
                       value={draft.note}
                       onChange={(event) =>
                         setDraftByAppointmentId((current) => ({

@@ -6,11 +6,10 @@ import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   createManagerInventoryRequest,
+  getManagerAnalyticsBranches,
   getManagerPendingAppointments,
-  getManagerProducts,
   type ManagerInventoryRequestRecord,
   type ManagerPendingAppointment,
-  type ManagerProductSummary,
 } from "@/lib/managerApi";
 
 const getErrorMessage = (value: unknown) =>
@@ -33,9 +32,9 @@ const statusStyle = (status: string | null) => {
   switch (status) {
     case "PENDING_MANAGER":
     case "PENDING_MAIN":
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
     case "APPROVED":
-      return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
     case "REJECTED":
       return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
     default:
@@ -47,19 +46,16 @@ export default function ManagerInventory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [branchId, setBranchId] = useState("");
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [appointments, setAppointments] = useState<ManagerPendingAppointment[]>([]);
-  const [productsByBranch, setProductsByBranch] = useState<
-    Record<string, ManagerProductSummary[]>
-  >({});
-  const [submittedRequests, setSubmittedRequests] = useState<ManagerInventoryRequestRecord[]>(
-    [],
-  );
+  const [submittedRequests, setSubmittedRequests] = useState<ManagerInventoryRequestRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const [branchId, setBranchId] = useState("");
   const [appointmentId, setAppointmentId] = useState("");
   const [appointmentItemId, setAppointmentItemId] = useState("");
   const [productId, setProductId] = useState("");
+  const [manualProductId, setManualProductId] = useState("");
   const [fromLocation, setFromLocation] = useState<"MAIN" | "BRANCH_POOL">("MAIN");
   const [managerNote, setManagerNote] = useState("");
 
@@ -74,43 +70,80 @@ export default function ManagerInventory() {
     return accessToken;
   }, []);
 
-  const loadPendingAppointments = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadBranches = useCallback(async () => {
+    const accessToken = await getAccessToken();
+    const analytics = await getManagerAnalyticsBranches({ accessToken });
+    const options = analytics.branches
+      .map((row) => row.branch)
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .map((branch) => ({
+        id: branch.id,
+        label: [branch.code, branch.name].filter(Boolean).join(" · ") || branch.id,
+      }));
 
-    try {
-      const accessToken = await getAccessToken();
-      const rows = await getManagerPendingAppointments({ accessToken });
-      setAppointments(rows);
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
-      }
-      setAppointments([]);
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setLoading(false);
-    }
+    setBranchOptions(options);
+    setBranchId((current) => current || options[0]?.id || "");
   }, [getAccessToken]);
 
-  useEffect(() => {
-    void loadPendingAppointments();
-  }, [loadPendingAppointments]);
+  const loadPendingAppointments = useCallback(
+    async (nextBranchId?: string) => {
+      const resolvedBranchId = nextBranchId || branchId;
+      if (!resolvedBranchId) {
+        setAppointments([]);
+        return;
+      }
 
-  const branchOptions = useMemo(() => {
-    const dedupe = new Map<string, string>();
-    for (const row of appointments) {
-      if (!row.branch?.id) continue;
-      dedupe.set(
-        row.branch.id,
-        [row.branch.code, row.branch.name].filter(Boolean).join(" · ") || row.branch.id,
-      );
+      setLoading(true);
+      setError("");
+
+      try {
+        const accessToken = await getAccessToken();
+        const rows = await getManagerPendingAppointments({
+          accessToken,
+          branchId: resolvedBranchId,
+        });
+        setAppointments(rows);
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setAppointments([]);
+        setError(getErrorMessage(caughtError));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [branchId, getAccessToken],
+  );
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        await loadBranches();
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setBranchOptions([]);
+        setAppointments([]);
+        setError(getErrorMessage(caughtError));
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
+  }, [loadBranches]);
+
+  useEffect(() => {
+    if (branchId) {
+      void loadPendingAppointments(branchId);
     }
-    return Array.from(dedupe.entries()).map(([id, label]) => ({ id, label }));
-  }, [appointments]);
+  }, [branchId, loadPendingAppointments]);
 
   const appointmentsForBranch = useMemo(
-    () => appointments.filter((row) => !branchId || row.branchId === branchId),
+    () => appointments.filter((row) => row.branchId === branchId),
     [appointments, branchId],
   );
 
@@ -119,53 +152,39 @@ export default function ManagerInventory() {
     [appointmentId, appointments],
   );
 
-  const selectedAppointmentItems = selectedAppointment?.items || [];
-
-  const ensureProductsForBranch = useCallback(
-    async (nextBranchId: string) => {
-      if (!nextBranchId || productsByBranch[nextBranchId]) {
-        return;
-      }
-
-      const accessToken = await getAccessToken();
-      const response = await getManagerProducts({
-        accessToken,
-        branchId: nextBranchId,
-      });
-
-      setProductsByBranch((current) => ({
-        ...current,
-        [nextBranchId]: response.products,
-      }));
-    },
-    [getAccessToken, productsByBranch],
+  const selectedAppointmentItems = useMemo(
+    () =>
+      (selectedAppointment?.items || [])
+        .map((item) => {
+          const resolvedProductId = item.productId || item.product?.id;
+          return {
+            id: item.id,
+            productId: resolvedProductId,
+            label:
+              [item.product?.sku, item.product?.name].filter(Boolean).join(" · ") ||
+              resolvedProductId ||
+              item.id,
+          };
+        }),
+    [selectedAppointment],
   );
 
   useEffect(() => {
-    if (branchId) {
-      void ensureProductsForBranch(branchId);
+    if (selectedAppointmentItems.length === 1) {
+      setAppointmentItemId(selectedAppointmentItems[0].id);
+      if (selectedAppointmentItems[0].productId) {
+        setProductId(selectedAppointmentItems[0].productId);
+      }
     }
-  }, [branchId, ensureProductsForBranch]);
-
-  useEffect(() => {
-    if (!selectedAppointment) {
-      return;
-    }
-
-    if (selectedAppointment.branchId && selectedAppointment.branchId !== branchId) {
-      setBranchId(selectedAppointment.branchId);
-    }
-
-    if (selectedAppointment.items.length === 1) {
-      setAppointmentItemId(selectedAppointment.items[0].id);
-    }
-  }, [branchId, selectedAppointment]);
+  }, [selectedAppointmentItems]);
 
   const onSubmitRequest = async () => {
     setError("");
     setNotice("");
 
-    if (!branchId || !appointmentId || !productId) {
+    const resolvedProductId = manualProductId.trim() || productId;
+
+    if (!branchId || !appointmentId || !resolvedProductId) {
       setError("Branch, appointment, and product are required.");
       return;
     }
@@ -178,7 +197,7 @@ export default function ManagerInventory() {
         accessToken,
         branchId,
         appointmentId,
-        productId,
+        productId: resolvedProductId,
         appointmentItemId: appointmentItemId || undefined,
         fromLocation,
         managerNote: managerNote || undefined,
@@ -188,10 +207,11 @@ export default function ManagerInventory() {
         setSubmittedRequests((current) => [request, ...current].slice(0, 30));
       }
 
-      setNotice("Inventory request submitted.");
+      setNotice("Inventory request submitted to the current main-admin stage.");
       setAppointmentItemId("");
-      setManagerNote("");
       setProductId("");
+      setManualProductId("");
+      setManagerNote("");
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -202,23 +222,50 @@ export default function ManagerInventory() {
     }
   };
 
-  const productOptions = branchId ? productsByBranch[branchId] || [] : [];
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Inventory Requests"
-        description="Create manager inventory pull requests from MAIN or BRANCH_POOL."
+        description="Create manager inventory pull requests for appointment fulfillment."
         action={
-          <button
-            type="button"
-            onClick={() => void loadPendingAppointments()}
-            className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <select
+              value={branchId}
+              onChange={(event) => {
+                setBranchId(event.target.value);
+                setAppointmentId("");
+                setAppointmentItemId("");
+                setProductId("");
+                setManualProductId("");
+              }}
+              className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+            >
+              <option value="">Select branch</option>
+              {branchOptions.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                void loadBranches();
+                void loadPendingAppointments(branchId);
+              }}
+              className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
         }
       />
+
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-4 text-sm text-amber-800 dark:text-amber-200">
+        The current backend creates this request directly at the main-admin stage. There is no
+        dedicated salesperson-originated request chain exposed in manager API yet, so this page
+        reflects the current direct manager request behavior.
+      </div>
 
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
@@ -243,6 +290,7 @@ export default function ManagerInventory() {
               setAppointmentId("");
               setAppointmentItemId("");
               setProductId("");
+              setManualProductId("");
             }}
             className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
           >
@@ -259,6 +307,8 @@ export default function ManagerInventory() {
             onChange={(event) => {
               setAppointmentId(event.target.value);
               setAppointmentItemId("");
+              setProductId("");
+              setManualProductId("");
             }}
             className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
           >
@@ -271,30 +321,30 @@ export default function ManagerInventory() {
           </select>
 
           <select
-            value={productId}
-            onChange={(event) => setProductId(event.target.value)}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          >
-            <option value="">Select product</option>
-            {productOptions.map((row) => (
-              <option key={row.id} value={row.id}>
-                {[row.sku, row.name].filter(Boolean).join(" · ") || row.id}
-              </option>
-            ))}
-          </select>
-
-          <select
             value={appointmentItemId}
-            onChange={(event) => setAppointmentItemId(event.target.value)}
+            onChange={(event) => {
+              const nextItemId = event.target.value;
+              setAppointmentItemId(nextItemId);
+              const nextItem = selectedAppointmentItems.find((row) => row.id === nextItemId);
+              setProductId(nextItem?.productId || "");
+            }}
             className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
           >
             <option value="">Appointment item (optional)</option>
             {selectedAppointmentItems.map((row) => (
               <option key={row.id} value={row.id}>
-                {[row.id, row.product?.name || row.productId].filter(Boolean).join(" · ")}
+                {row.label}
               </option>
             ))}
           </select>
+
+          <input
+            type="text"
+            value={manualProductId}
+            onChange={(event) => setManualProductId(event.target.value)}
+            placeholder={productId ? `Resolved product: ${productId}` : "Manual product ID override"}
+            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+          />
 
           <select
             value={fromLocation}
@@ -314,6 +364,11 @@ export default function ManagerInventory() {
           />
         </div>
 
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          If the appointment item already includes a product reference, it is resolved automatically.
+          Use the manual override only when the item payload does not include a usable product ID.
+        </p>
+
         <button
           type="button"
           onClick={() => void onSubmitRequest()}
@@ -329,6 +384,10 @@ export default function ManagerInventory() {
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Recent Submitted Requests (This Session)
           </h2>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            The manager usage contract documents request creation but not a manager-side read route
+            for historical inventory requests, so this table reflects the current session only.
+          </p>
         </div>
 
         <div className="overflow-x-auto">

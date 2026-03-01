@@ -5,18 +5,18 @@ import PageHeader from "@/components/ui/dashboard/PageHeader";
 import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
-  getManagerDashboardSalespersons,
+  filterManagerBranchStaff,
+  getManagerAnalyticsBranches,
+  getManagerBranchUsers,
   getManagerSalespersonPerformance,
   getManagerSalespersonPossessions,
-  updateManagerSalespersonStatus,
-  type ManagerDashboardSalespersonsResponse,
+  type ManagerBranchUser,
   type ManagerPossessionRecord,
-  type ManagerSalespersonListItem,
   type ManagerSalespersonPerformance,
 } from "@/lib/managerApi";
 
-const STATUS_OPTIONS = ["ALL", "ACTIVE", "RESTRICTED", "BANNED", "TERMINATED"] as const;
-type StatusFilter = (typeof STATUS_OPTIONS)[number];
+const STATUS_OPTIONS = ["ACTIVE", "RESTRICTED", "BANNED", "TERMINATED"] as const;
+type StatusFilter = "ALL" | (typeof STATUS_OPTIONS)[number];
 
 const getErrorMessage = (value: unknown) =>
   value instanceof Error ? value.message : "Unexpected error.";
@@ -43,11 +43,11 @@ const money = new Intl.NumberFormat("en-US", {
 const statusBadge = (status: string | null) => {
   switch (status) {
     case "ACTIVE":
-      return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
     case "RESTRICTED":
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
     case "BANNED":
-      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+      return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
     case "TERMINATED":
       return "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
     default:
@@ -55,31 +55,18 @@ const statusBadge = (status: string | null) => {
   }
 };
 
-const findSelectedSalesperson = (
-  rows: ManagerSalespersonListItem[],
-  userId: string,
-) => rows.find((entry) => entry.userId === userId) || null;
-
 export default function ManagerSalespersons() {
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [detailError, setDetailError] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [branchFilter, setBranchFilter] = useState("");
-  const [responseMeta, setResponseMeta] = useState<ManagerDashboardSalespersonsResponse | null>(
-    null,
-  );
-  const [rows, setRows] = useState<ManagerSalespersonListItem[]>([]);
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [rows, setRows] = useState<ManagerBranchUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [performance, setPerformance] = useState<ManagerSalespersonPerformance | null>(null);
   const [possessions, setPossessions] = useState<ManagerPossessionRecord[]>([]);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState("");
-  const [statusDraft, setStatusDraft] = useState<"ACTIVE" | "RESTRICTED" | "BANNED" | "TERMINATED">(
-    "ACTIVE",
-  );
-  const [statusReason, setStatusReason] = useState("");
-  const [statusSubmitting, setStatusSubmitting] = useState(false);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -92,69 +79,99 @@ export default function ManagerSalespersons() {
     return accessToken;
   }, []);
 
-  const loadSalespersons = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadBranches = useCallback(async () => {
+    const accessToken = await getAccessToken();
+    const analytics = await getManagerAnalyticsBranches({ accessToken });
+    const options = analytics.branches
+      .map((row) => row.branch)
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .map((branch) => ({
+        id: branch.id,
+        label: [branch.code, branch.name].filter(Boolean).join(" · ") || branch.id,
+      }));
+    setBranchOptions(options);
+    setBranchId((current) => current || options[0]?.id || "");
+    return options[0]?.id || "";
+  }, [getAccessToken]);
 
-    try {
-      const accessToken = await getAccessToken();
-      const response = await getManagerDashboardSalespersons({
-        accessToken,
-        branchId: branchFilter || undefined,
-        status: statusFilter === "ALL" ? undefined : statusFilter,
-      });
-
-      setResponseMeta(response);
-      setRows(response.salespersons);
-      setSelectedUserId((current) => {
-        if (current && response.salespersons.some((entry) => entry.userId === current)) {
-          return current;
-        }
-
-        return response.salespersons[0]?.userId || "";
-      });
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
+  const loadSalespersons = useCallback(
+    async (nextBranchId?: string) => {
+      const resolvedBranchId = nextBranchId || branchId;
+      if (!resolvedBranchId) {
+        setRows([]);
         return;
       }
 
-      setResponseMeta(null);
-      setRows([]);
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setLoading(false);
-    }
-  }, [branchFilter, getAccessToken, statusFilter]);
+      setLoading(true);
+      setError("");
 
-  useEffect(() => {
-    void loadSalespersons();
-  }, [loadSalespersons]);
+      try {
+        const accessToken = await getAccessToken();
+        const branchUsers = await getManagerBranchUsers({
+          accessToken,
+          branchId: resolvedBranchId,
+        });
+        const salesRows = filterManagerBranchStaff(branchUsers.users, ["SALES"]).filter(
+          (row) => (statusFilter === "ALL" ? true : row.status === statusFilter),
+        );
 
-  const selectedSalesperson = useMemo(
-    () => findSelectedSalesperson(rows, selectedUserId),
-    [rows, selectedUserId],
+        setRows(salesRows);
+        setSelectedUserId((current) => {
+          if (current && salesRows.some((row) => row.userId === current)) {
+            return current;
+          }
+          return salesRows[0]?.userId || "";
+        });
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setRows([]);
+        setError(getErrorMessage(caughtError));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [branchId, getAccessToken, statusFilter],
   );
 
   useEffect(() => {
-    if (!selectedSalesperson) {
+    const bootstrap = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const firstBranchId = await loadBranches();
+        await loadSalespersons(firstBranchId);
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
+        }
+        setBranchOptions([]);
+        setRows([]);
+        setError(getErrorMessage(caughtError));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
+  }, [loadBranches, loadSalespersons]);
+
+  useEffect(() => {
+    if (branchId) {
+      void loadSalespersons(branchId);
+    }
+  }, [branchId, loadSalespersons, statusFilter]);
+
+  const selectedSalesperson = useMemo(
+    () => rows.find((row) => row.userId === selectedUserId) || null,
+    [rows, selectedUserId],
+  );
+
+  const loadDetail = useCallback(async () => {
+    if (!selectedSalesperson || !branchId) {
       setPerformance(null);
       setPossessions([]);
-      setStatusReason("");
-      return;
-    }
-
-    setStatusDraft(
-      selectedSalesperson.status === "ACTIVE" ||
-        selectedSalesperson.status === "RESTRICTED" ||
-        selectedSalesperson.status === "BANNED" ||
-        selectedSalesperson.status === "TERMINATED"
-        ? selectedSalesperson.status
-        : "ACTIVE",
-    );
-  }, [selectedSalesperson]);
-
-  const loadSalespersonDetail = useCallback(async () => {
-    if (!selectedSalesperson) {
       return;
     }
 
@@ -163,21 +180,21 @@ export default function ManagerSalespersons() {
 
     try {
       const accessToken = await getAccessToken();
-      const [performanceRow, possessionRows] = await Promise.all([
+      const [nextPerformance, nextPossessions] = await Promise.all([
         getManagerSalespersonPerformance({
           accessToken,
           salespersonUserId: selectedSalesperson.userId,
-          branchId: selectedSalesperson.branchId || undefined,
+          branchId,
         }),
         getManagerSalespersonPossessions({
           accessToken,
           salespersonUserId: selectedSalesperson.userId,
-          branchId: selectedSalesperson.branchId || undefined,
+          branchId,
         }),
       ]);
 
-      setPerformance(performanceRow);
-      setPossessions(possessionRows);
+      setPerformance(nextPerformance);
+      setPossessions(nextPossessions);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -188,77 +205,33 @@ export default function ManagerSalespersons() {
     } finally {
       setDetailLoading(false);
     }
-  }, [getAccessToken, selectedSalesperson]);
+  }, [branchId, getAccessToken, selectedSalesperson]);
 
   useEffect(() => {
-    void loadSalespersonDetail();
-  }, [loadSalespersonDetail]);
+    void loadDetail();
+  }, [loadDetail]);
 
-  const branchOptions = useMemo(() => {
-    const dedupe = new Map<string, string>();
-    for (const row of rows) {
-      if (!row.branch?.id) continue;
-      dedupe.set(
-        row.branch.id,
-        [row.branch.code, row.branch.name].filter(Boolean).join(" · ") || row.branch.id,
-      );
+  const counts = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const option of STATUS_OPTIONS) {
+      next[option] = rows.filter((row) => row.status === option).length;
     }
-    return Array.from(dedupe.entries()).map(([id, label]) => ({ id, label }));
+    return next;
   }, [rows]);
-
-  const onUpdateStatus = async () => {
-    if (!selectedSalesperson) {
-      return;
-    }
-
-    setStatusSubmitting(true);
-    setError("");
-    setDetailError("");
-    setNotice("");
-
-    try {
-      const accessToken = await getAccessToken();
-      const result = await updateManagerSalespersonStatus({
-        accessToken,
-        salespersonUserId: selectedSalesperson.userId,
-        status: statusDraft,
-        reason: statusReason || undefined,
-        branchId: selectedSalesperson.branchId || undefined,
-      });
-
-      setNotice(
-        result.message ||
-          (result.statusCode === 202
-            ? "Status action submitted for approval."
-            : "Salesperson status updated."),
-      );
-      setStatusReason("");
-      await loadSalespersons();
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
-      }
-      setDetailError(getErrorMessage(caughtError));
-    } finally {
-      setStatusSubmitting(false);
-    }
-  };
-
-  const counts = responseMeta?.counts || {};
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Salesperson Management"
-        description="Live roster, status controls, performance, and possession history."
+        title="Sales Team"
+        description="Branch salesperson roster, commission context, performance, and possession history."
         action={
           <div className="flex items-center gap-2">
             <select
-              value={branchFilter}
-              onChange={(event) => setBranchFilter(event.target.value)}
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
               className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
             >
-              <option value="">All branches</option>
+              <option value="">Select branch</option>
               {branchOptions.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.label}
@@ -270,6 +243,7 @@ export default function ManagerSalespersons() {
               onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
               className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
             >
+              <option value="ALL">ALL</option>
               {STATUS_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -278,7 +252,10 @@ export default function ManagerSalespersons() {
             </select>
             <button
               type="button"
-              onClick={() => void loadSalespersons()}
+              onClick={() => {
+                void loadBranches();
+                void loadSalespersons(branchId);
+              }}
               className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
             >
               Refresh
@@ -287,11 +264,11 @@ export default function ManagerSalespersons() {
         }
       />
 
-      {notice && (
-        <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
-          {notice}
-        </div>
-      )}
+      <div className="rounded-2xl border border-blue-200 dark:border-blue-700/50 bg-blue-50/70 dark:bg-blue-900/15 p-4 text-sm text-blue-800 dark:text-blue-200">
+        This page stays read-focused because salesperson status changes are not part of the
+        current documented manager API. The roster, performance, and possession data are
+        wired directly to supported manager routes.
+      </div>
 
       {error && (
         <div className="px-4 py-3 rounded-lg border border-red-200 dark:border-red-700/40 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
@@ -300,7 +277,7 @@ export default function ManagerSalespersons() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {STATUS_OPTIONS.filter((option) => option !== "ALL").map((option) => (
+        {STATUS_OPTIONS.map((option) => (
           <div
             key={option}
             className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4"
@@ -308,23 +285,23 @@ export default function ManagerSalespersons() {
             <p className="text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500">
               {option}
             </p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+            <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {counts[option] ?? 0}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-5">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
                   <th className="px-5 py-3 font-medium">Salesperson</th>
-                  <th className="px-5 py-3 font-medium">Branch</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Assigned</th>
+                  <th className="px-5 py-3 font-medium">Commission Policies</th>
                   <th className="px-5 py-3 font-medium text-right">Details</th>
                 </tr>
               </thead>
@@ -332,22 +309,22 @@ export default function ManagerSalespersons() {
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-                      Loading salespersons...
+                      Loading branch sales roster...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                      No salespersons found in scope.
+                      No sales memberships found in the selected branch scope.
                     </td>
                   </tr>
                 ) : (
                   rows.map((salesperson) => (
                     <tr
                       key={salesperson.membershipId}
-                      className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                      className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${
                         salesperson.userId === selectedUserId
-                          ? "bg-emerald-50/60 dark:bg-emerald-900/10"
+                          ? "bg-emerald-50/50 dark:bg-emerald-900/10"
                           : ""
                       }`}
                     >
@@ -359,12 +336,9 @@ export default function ManagerSalespersons() {
                           {salesperson.email || salesperson.userId}
                         </p>
                       </td>
-                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                        {salesperson.branch?.name || salesperson.branchId || "-"}
-                      </td>
                       <td className="px-5 py-3">
                         <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadge(
                             salesperson.status,
                           )}`}
                         >
@@ -373,6 +347,12 @@ export default function ManagerSalespersons() {
                       </td>
                       <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
                         {formatDateTime(salesperson.assignedAt)}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {salesperson.commissionSummary.activeSalespersonPolicyCount}
+                        <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">
+                          active
+                        </span>
                       </td>
                       <td className="px-5 py-3 text-right">
                         <button
@@ -392,61 +372,44 @@ export default function ManagerSalespersons() {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Status Action</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Membership Summary
+            </h3>
             {!selectedSalesperson ? (
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Select a salesperson to manage status and view detail.
+                Select a salesperson to load branch membership details.
               </p>
             ) : (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="space-y-2 text-sm">
+                <p className="font-medium text-gray-900 dark:text-gray-100">
                   {selectedSalesperson.displayName ||
                     selectedSalesperson.email ||
                     selectedSalesperson.userId}
                 </p>
-                <select
-                  value={statusDraft}
-                  onChange={(event) =>
-                    setStatusDraft(
-                      event.target.value as
-                        | "ACTIVE"
-                        | "RESTRICTED"
-                        | "BANNED"
-                        | "TERMINATED",
-                    )
-                  }
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="RESTRICTED">RESTRICTED</option>
-                  <option value="BANNED">BANNED</option>
-                  <option value="TERMINATED">TERMINATED</option>
-                </select>
-                <input
-                  type="text"
-                  value={statusReason}
-                  onChange={(event) => setStatusReason(event.target.value)}
-                  placeholder="Reason (optional)"
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-                />
-                <button
-                  type="button"
-                  onClick={() => void onUpdateStatus()}
-                  disabled={statusSubmitting}
-                  className="w-full py-2 text-sm text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-                >
-                  {statusSubmitting ? "Submitting..." : "Apply Status Action"}
-                </button>
-              </>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Restrictions: {selectedSalesperson.accessRestrictionCount}
+                </p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Salesperson policies:{" "}
+                  {selectedSalesperson.commissionSummary.salespersonPolicyCount}
+                </p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Product allocations:{" "}
+                  {selectedSalesperson.commissionSummary.productAllocationCount}
+                </p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Highest active rate:{" "}
+                  {selectedSalesperson.commissionSummary.highestActivePolicyRate ?? "-"}%
+                </p>
+              </div>
             )}
-
             {detailError && (
               <p className="text-xs text-red-600 dark:text-red-400">{detailError}</p>
             )}
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Performance
@@ -454,43 +417,50 @@ export default function ManagerSalespersons() {
               {selectedSalesperson && (
                 <button
                   type="button"
-                  onClick={() => void loadSalespersonDetail()}
+                  onClick={() => void loadDetail()}
                   className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200"
                 >
                   Refresh
                 </button>
               )}
             </div>
-
             {detailLoading ? (
-              <p className="text-xs text-gray-500 dark:text-gray-400">Loading details...</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Loading detail...</p>
             ) : !performance ? (
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                No performance record loaded.
+                No performance record loaded for the selected salesperson.
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                  <p className="text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sales Count</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3">
+                  <p className="uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Sales count
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
                     {performance.salesTotalCount}
                   </p>
                 </div>
-                <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                  <p className="text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sales Amount</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3">
+                  <p className="uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Sales amount
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
                     {money.format(performance.salesTotalAmount)}
                   </p>
                 </div>
-                <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                  <p className="text-gray-400 dark:text-gray-500 uppercase tracking-wider">Commission Count</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3">
+                  <p className="uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Commission count
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
                     {performance.commissionsTotalCount}
                   </p>
                 </div>
-                <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                  <p className="text-gray-400 dark:text-gray-500 uppercase tracking-wider">Commission Amount</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3">
+                  <p className="uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Commission amount
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
                     {money.format(performance.commissionsTotalAmount)}
                   </p>
                 </div>
@@ -498,26 +468,28 @@ export default function ManagerSalespersons() {
             )}
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Possessions</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Possessions
+            </h3>
             {detailLoading ? (
               <p className="text-xs text-gray-500 dark:text-gray-400">Loading possessions...</p>
             ) : possessions.length === 0 ? (
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                No possession history in scope.
+                No possession records found in the selected branch scope.
               </p>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-72 overflow-y-auto">
                 {possessions.slice(0, 12).map((row) => (
                   <div
                     key={row.id}
-                    className="border border-gray-200 dark:border-gray-700/60 rounded-lg p-2 bg-gray-50 dark:bg-gray-800/40"
+                    className="rounded-xl border border-gray-200 dark:border-gray-700/60 p-3 bg-gray-50 dark:bg-gray-800/40"
                   >
-                    <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {row.product?.name || row.product?.sku || row.id}
                     </p>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      {row.status || "-"} · {formatDateTime(row.checkedOutAt)}
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      {row.status || "-"} · checked out {formatDateTime(row.checkedOutAt)}
                     </p>
                   </div>
                 ))}

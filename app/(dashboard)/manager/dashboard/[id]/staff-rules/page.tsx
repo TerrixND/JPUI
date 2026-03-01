@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
+import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   createManagerStaffRule,
   getManagerStaffRules,
@@ -14,6 +15,7 @@ import {
   type StaffRuleManagerType,
   type StaffRuleVisibilityRole,
 } from "@/lib/apiClient";
+import { getManagerAnalyticsBranches } from "@/lib/managerApi";
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
@@ -295,6 +297,9 @@ export default function ManagerStaffRules() {
       });
       setRules(data);
     } catch (caughtError) {
+      if (handleAccountAccessDeniedError(caughtError)) {
+        return;
+      }
       setRules([]);
       setError(getErrorMessage(caughtError));
     } finally {
@@ -306,26 +311,28 @@ export default function ManagerStaffRules() {
     void loadRules();
   }, [loadRules]);
 
-  /* -------- Load branches from rules + try analytics -------- */
+  /* -------- Load branches from analytics -------- */
   useEffect(() => {
     const loadBranches = async () => {
       setBranchesLoading(true);
       try {
         const accessToken = await getAccessToken();
-        /* Try manager analytics endpoint (may not exist on all backends) */
-        const response = await fetch("/api/v1/manager/analytics/branches", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: "no-store",
-        });
-        if (response.ok) {
-          const payload = await response.json().catch(() => null);
-          const branchRows = Array.isArray(payload?.branches) ? payload.branches : [];
-          setBranches(branchRows);
-        } else {
-          setBranches([]);
+        const response = await getManagerAnalyticsBranches({ accessToken });
+        const branchRows = response.branches
+          .map((row) => row.branch)
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+          .map((branch) => ({
+            id: branch.id,
+            code: branch.code || "",
+            name: branch.name || "Unknown",
+            city: branch.city,
+            status: branch.status || "ACTIVE",
+          }));
+        setBranches(branchRows);
+      } catch (caughtError) {
+        if (handleAccountAccessDeniedError(caughtError)) {
+          return;
         }
-      } catch {
         setBranches([]);
       } finally {
         setBranchesLoading(false);
@@ -459,6 +466,9 @@ export default function ManagerStaffRules() {
       setFormOpen(false);
       await loadRules();
     } catch (caughtError) {
+      if (handleAccountAccessDeniedError(caughtError)) {
+        return;
+      }
       setCreateError(getErrorMessage(caughtError));
     } finally {
       setCreating(false);
@@ -474,6 +484,9 @@ export default function ManagerStaffRules() {
       await revokeManagerStaffRule({ accessToken, ruleId });
       await loadRules();
     } catch (caughtError) {
+      if (handleAccountAccessDeniedError(caughtError)) {
+        return;
+      }
       setRevokeError(getErrorMessage(caughtError));
     } finally {
       setRevokingId(null);
