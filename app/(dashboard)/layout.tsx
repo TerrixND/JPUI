@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/ui/dashboard/Sidebar";
 import Navbar from "@/components/ui/dashboard/Navbar";
@@ -273,6 +273,13 @@ export default function DashboardLayout({
     createEmptyAdminCapabilityState(),
   );
   const [adminRestrictionNotice, setAdminRestrictionNotice] = useState("");
+  const hasResolvedInitialAccessRef = useRef(false);
+  const lastResolvedAccessTokenRef = useRef("");
+  const latestAccessRequestIdRef = useRef(0);
+  const accessLoadRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
 
   const resolveAccessToken = useCallback(async (accessTokenFromSession?: string) => {
     let accessToken = accessTokenFromSession || "";
@@ -302,10 +309,9 @@ export default function DashboardLayout({
       accessToken: string;
       role: Role;
       userId: string;
-    }) => {
+    }): Promise<AdminCapabilityState> => {
       if (role !== "admin" || !userId) {
-        setAdminCapabilities(createEmptyAdminCapabilityState());
-        return;
+        return createEmptyAdminCapabilityState();
       }
 
       try {
@@ -314,9 +320,9 @@ export default function DashboardLayout({
           userId,
         });
 
-        setAdminCapabilities(buildAdminCapabilityState(detail.activeAccessControls));
+        return buildAdminCapabilityState(detail.activeAccessControls);
       } catch {
-        setAdminCapabilities(createEmptyAdminCapabilityState());
+        return createEmptyAdminCapabilityState();
       }
     },
     [],
@@ -335,111 +341,185 @@ export default function DashboardLayout({
         return;
       }
 
-      await loadAdminCapabilities({
+      const nextCapabilities = await loadAdminCapabilities({
         accessToken,
         role: authState.role,
         userId: authState.userId,
       });
+
+      setAdminCapabilities(nextCapabilities);
     } catch {
       setAdminCapabilities(createEmptyAdminCapabilityState());
     }
   }, [authState.role, authState.userId, loadAdminCapabilities, resolveAccessToken]);
 
   const loadDashboardAccess = useCallback(
-    async (accessTokenFromSession?: string) => {
-      setAuthState((current) => ({ ...current, loading: true, error: "" }));
+    async ({
+      accessTokenFromSession,
+      forceBlocking = false,
+    }: {
+      accessTokenFromSession?: string;
+      forceBlocking?: boolean;
+    } = {}) => {
+      const loadKey = accessTokenFromSession || "__SESSION__";
+      if (accessLoadRef.current?.key === loadKey) {
+        return accessLoadRef.current.promise;
+      }
 
-      try {
-        if (!isSupabaseConfigured) {
-          throw new Error(
-            "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_PROJECT_URL and NEXT_PUBLIC_SUPABASE_PUB_KEY.",
-          );
+      const requestId = ++latestAccessRequestIdRef.current;
+      const shouldBlock = forceBlocking || !hasResolvedInitialAccessRef.current;
+
+      const task = (async () => {
+        if (shouldBlock) {
+          setAuthState((current) => ({ ...current, loading: true, error: "" }));
+        } else {
+          setAuthState((current) => ({ ...current, error: "" }));
         }
 
-        const accessToken = await resolveAccessToken(accessTokenFromSession);
+        try {
+          if (!isSupabaseConfigured) {
+            throw new Error(
+              "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_PROJECT_URL and NEXT_PUBLIC_SUPABASE_PUB_KEY.",
+            );
+          }
 
-        if (!accessToken) {
-          setAuthState(initialAuthState);
-          setAdminCapabilities(createEmptyAdminCapabilityState());
-          router.replace("/404");
-          return;
-        }
+          const accessToken = await resolveAccessToken(accessTokenFromSession);
 
-        const me = await getUserMe({
-          accessToken,
-        });
+          if (requestId !== latestAccessRequestIdRef.current) {
+            return;
+          }
 
-        const dashboardRole = mapBackendRoleToDashboardRole(me.role);
-        const userId = me.id || "";
-        const isSetup = me.isSetup;
+          if (!accessToken) {
+            lastResolvedAccessTokenRef.current = "";
+            hasResolvedInitialAccessRef.current = true;
+            setAuthState(initialAuthState);
+            setAdminCapabilities(createEmptyAdminCapabilityState());
+            router.replace("/404");
+            return;
+          }
 
-        if (!dashboardRole || !userId || !isSetup) {
-          setAuthState(initialAuthState);
-          setAdminCapabilities(createEmptyAdminCapabilityState());
-          router.replace("/404");
-          return;
-        }
-
-        if (me.accountAccess?.canAccessRoleRoutes !== false) {
-          await loadAdminCapabilities({
+          const me = await getUserMe({
             accessToken,
+          });
+
+          if (requestId !== latestAccessRequestIdRef.current) {
+            return;
+          }
+
+          const dashboardRole = mapBackendRoleToDashboardRole(me.role);
+          const userId = me.id || "";
+          const isSetup = me.isSetup;
+
+          if (!dashboardRole || !userId || !isSetup) {
+            lastResolvedAccessTokenRef.current = "";
+            hasResolvedInitialAccessRef.current = true;
+            setAuthState(initialAuthState);
+            setAdminCapabilities(createEmptyAdminCapabilityState());
+            router.replace("/404");
+            return;
+          }
+
+          const nextAdminCapabilities =
+            me.accountAccess?.canAccessRoleRoutes !== false
+              ? await loadAdminCapabilities({
+                  accessToken,
+                  role: dashboardRole,
+                  userId,
+                })
+              : createEmptyAdminCapabilityState();
+
+          if (requestId !== latestAccessRequestIdRef.current) {
+            return;
+          }
+
+          lastResolvedAccessTokenRef.current = accessToken;
+          hasResolvedInitialAccessRef.current = true;
+          setAdminCapabilities(nextAdminCapabilities);
+          setAuthState({
+            loading: false,
             role: dashboardRole,
             userId,
+            status: me.status || null,
+            isMainAdmin: me.isMainAdmin,
+            accountAccess: me.accountAccess,
+            error: "",
           });
-        } else {
+        } catch (error) {
+          if (requestId !== latestAccessRequestIdRef.current) {
+            return;
+          }
+
+          hasResolvedInitialAccessRef.current = true;
+
+          if (error instanceof ApiClientError && error.status === 401) {
+            lastResolvedAccessTokenRef.current = "";
+            setAuthState(initialAuthState);
+            setAdminCapabilities(createEmptyAdminCapabilityState());
+            router.replace("/404");
+            return;
+          }
+
+          setAuthState({
+            loading: false,
+            role: null,
+            userId: null,
+            status: null,
+            isMainAdmin: false,
+            accountAccess: null,
+            error: getErrorMessage(error),
+          });
           setAdminCapabilities(createEmptyAdminCapabilityState());
         }
+      })();
 
-        setAuthState({
-          loading: false,
-          role: dashboardRole,
-          userId,
-          status: me.status || null,
-          isMainAdmin: me.isMainAdmin,
-          accountAccess: me.accountAccess,
-          error: "",
-        });
-      } catch (error) {
-        if (error instanceof ApiClientError && error.status === 401) {
-          setAuthState(initialAuthState);
-          setAdminCapabilities(createEmptyAdminCapabilityState());
-          router.replace("/404");
-          return;
+      const wrappedTask = task.finally(() => {
+        if (accessLoadRef.current?.promise === wrappedTask) {
+          accessLoadRef.current = null;
         }
+      });
 
-        setAuthState({
-          loading: false,
-          role: null,
-          userId: null,
-          status: null,
-          isMainAdmin: false,
-          accountAccess: null,
-          error: getErrorMessage(error),
-        });
-        setAdminCapabilities(createEmptyAdminCapabilityState());
-      }
+      accessLoadRef.current = {
+        key: loadKey,
+        promise: wrappedTask,
+      };
+
+      return accessLoadRef.current.promise;
     },
     [loadAdminCapabilities, resolveAccessToken, router],
   );
 
   useEffect(() => {
-    void loadDashboardAccess();
+    void loadDashboardAccess({
+      forceBlocking: true,
+    });
   }, [loadDashboardAccess]);
 
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION") {
+        return;
+      }
+
       const accessToken = session?.access_token;
 
       if (!accessToken) {
+        lastResolvedAccessTokenRef.current = "";
+        hasResolvedInitialAccessRef.current = true;
         setAuthState(initialAuthState);
         setAdminCapabilities(createEmptyAdminCapabilityState());
         router.replace("/404");
         return;
       }
 
-      void loadDashboardAccess(accessToken);
+      if (accessToken === lastResolvedAccessTokenRef.current) {
+        return;
+      }
+
+      void loadDashboardAccess({
+        accessTokenFromSession: accessToken,
+      });
     });
 
     return () => {

@@ -7,13 +7,21 @@ export default function useAuth() {
     const [user, setUser] = useState(null);
 
     useEffect(() => {
+        const applyUser = (nextUser) => {
+            setUser((currentUser) => {
+                const currentId = currentUser?.id ?? null;
+                const nextId = nextUser?.id ?? null;
+                return currentId === nextId ? currentUser : nextUser;
+            });
+        };
+
         supabase.auth.getSession().then(({ data }) => {
-            setUser(data.session?.user ?? null);
+            applyUser(data.session?.user ?? null);
         });
 
         const { data: listener } = supabase.auth.onAuthStateChange(
             (_, session) => {
-                setUser(session?.user ?? null);
+                applyUser(session?.user ?? null);
             }
         );
         return () => listener.subscription.unsubscribe();

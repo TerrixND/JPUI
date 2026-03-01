@@ -19,6 +19,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
+  const authUserId = user?.id || null;
 
   const whiteRoutes = [
     "/products",
@@ -65,7 +66,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     let isDisposed = false;
 
     const loadDashboardLink = async () => {
-      if (!user) {
+      if (!authUserId) {
         if (!isDisposed) {
           setDashboardHref(null);
         }
@@ -116,7 +117,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     return () => {
       isDisposed = true;
     };
-  }, [user]);
+  }, [authUserId]);
 
   return (
     <div

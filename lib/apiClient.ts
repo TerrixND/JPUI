@@ -989,6 +989,29 @@ type FetchJsonResponse = {
   payload: unknown;
 };
 
+const inFlightRequestMap = new Map<string, Promise<unknown>>();
+
+const runWithInFlightDeduplication = <T>(
+  key: string,
+  factory: () => Promise<T>,
+): Promise<T> => {
+  const existing = inFlightRequestMap.get(key) as Promise<T> | undefined;
+
+  if (existing) {
+    return existing;
+  }
+
+  const nextPromise = factory().finally(() => {
+    if (inFlightRequestMap.get(key) === nextPromise) {
+      inFlightRequestMap.delete(key);
+    }
+  });
+
+  inFlightRequestMap.set(key, nextPromise as Promise<unknown>);
+
+  return nextPromise;
+};
+
 const fetchJsonResponse = async ({
   path,
   method = "GET",
@@ -3222,29 +3245,31 @@ export const getUserMe = async ({
 }: {
   accessToken: string;
 }): Promise<UserMeResponse> => {
-  const payload = await fetchJson({
-    path: `${API_BASE_PATH}/user/me`,
-    method: "GET",
-    accessToken,
-    fallbackErrorMessage: "Failed to load account profile.",
+  return runWithInFlightDeduplication(`getUserMe:${accessToken}`, async () => {
+    const payload = await fetchJson({
+      path: `${API_BASE_PATH}/user/me`,
+      method: "GET",
+      accessToken,
+      fallbackErrorMessage: "Failed to load account profile.",
+    });
+
+    const root = asRecord(payload) ?? {};
+
+    return {
+      id: asNullableString(root.id),
+      supabaseUserId: asNullableString(root.supabaseUserId),
+      email: asNullableString(root.email),
+      role: asNullableString(root.role),
+      status: asNullableString(root.status),
+      isSetup: root.isSetup === true,
+      isMainAdmin: root.isMainAdmin === true,
+      accountAccess:
+        normalizeAccountAccess(root.accountAccess) ??
+        normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
+        null,
+      raw: payload,
+    };
   });
-
-  const root = asRecord(payload) ?? {};
-
-  return {
-    id: asNullableString(root.id),
-    supabaseUserId: asNullableString(root.supabaseUserId),
-    email: asNullableString(root.email),
-    role: asNullableString(root.role),
-    status: asNullableString(root.status),
-    isSetup: root.isSetup === true,
-    isMainAdmin: root.isMainAdmin === true,
-    accountAccess:
-      normalizeAccountAccess(root.accountAccess) ??
-      normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
-      null,
-    raw: payload,
-  };
 };
 
 export const getAdminUserDetail = async ({
@@ -3254,23 +3279,28 @@ export const getAdminUserDetail = async ({
   accessToken: string;
   userId: string;
 }): Promise<AdminUserDetail> => {
-  const payload = await fetchJson({
-    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}`,
-    method: "GET",
-    accessToken,
-    fallbackErrorMessage: "Failed to load user details.",
-  });
+  return runWithInFlightDeduplication(
+    `getAdminUserDetail:${userId}:${accessToken}`,
+    async () => {
+      const payload = await fetchJson({
+        path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}`,
+        method: "GET",
+        accessToken,
+        fallbackErrorMessage: "Failed to load user details.",
+      });
 
-  const detail = normalizeAdminUserDetail(payload);
-  if (!detail) {
-    throw new ApiClientError({
-      message: "Invalid user detail response.",
-      status: 500,
-      payload,
-    });
-  }
+      const detail = normalizeAdminUserDetail(payload);
+      if (!detail) {
+        throw new ApiClientError({
+          message: "Invalid user detail response.",
+          status: 500,
+          payload,
+        });
+      }
 
-  return detail;
+      return detail;
+    },
+  );
 };
 
 export const updateAdminUserPermissions = async ({
