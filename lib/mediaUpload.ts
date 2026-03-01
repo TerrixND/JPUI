@@ -7,6 +7,7 @@ import {
   type MediaRole,
   type MediaRecord,
   type MediaSection,
+  type MediaSlot,
   type MediaVisibilityPreset,
 } from "@/lib/apiClient";
 
@@ -56,6 +57,9 @@ export const uploadSingleMediaFile = async ({
   file,
   accessToken,
   productId,
+  consignmentAgreementId,
+  slot,
+  displayOrder,
   visibilitySections,
   audience,
   visibilityPreset,
@@ -66,6 +70,9 @@ export const uploadSingleMediaFile = async ({
   file: File;
   accessToken: string;
   productId?: string;
+  consignmentAgreementId?: string;
+  slot?: MediaSlot;
+  displayOrder?: number;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
   visibilityPreset?: MediaVisibilityPreset;
@@ -80,14 +87,21 @@ export const uploadSingleMediaFile = async ({
 
   const mimeType = file.type;
   const sizeBytes = file.size;
+  const mediaType = resolveMediaType(mimeType);
+
+  if (!mediaType) {
+    throw new Error(`"${file.name}" has an unsupported file type.`);
+  }
 
   let presignResult: Awaited<ReturnType<typeof createMediaPresign>>;
   try {
     presignResult = await createMediaPresign({
       accessToken,
+      fileName: file.name,
       contentType: mimeType,
       sizeBytes,
       productId,
+      consignmentAgreementId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown network error.";
@@ -100,6 +114,8 @@ export const uploadSingleMediaFile = async ({
       uploadUrl: presignResult.uploadUrl,
       file,
       contentType: mimeType,
+      method: presignResult.uploadMethod,
+      headers: presignResult.uploadHeaders,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown network error.";
@@ -114,6 +130,9 @@ export const uploadSingleMediaFile = async ({
       mimeType,
       sizeBytes,
       productId,
+      consignmentAgreementId,
+      slot,
+      displayOrder,
       visibilitySections,
       audience,
       visibilityPreset,
@@ -132,6 +151,8 @@ export const uploadMediaFiles = async ({
   files,
   accessToken,
   productId,
+  consignmentAgreementId,
+  slot,
   visibilitySections,
   audience,
   visibilityPreset,
@@ -142,6 +163,8 @@ export const uploadMediaFiles = async ({
   files: File[];
   accessToken: string;
   productId?: string;
+  consignmentAgreementId?: string;
+  slot?: MediaSlot;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
   visibilityPreset?: MediaVisibilityPreset;
@@ -156,6 +179,9 @@ export const uploadMediaFiles = async ({
       file,
       accessToken,
       productId,
+      consignmentAgreementId,
+      slot,
+      displayOrder: uploaded.length,
       visibilitySections,
       audience,
       visibilityPreset,

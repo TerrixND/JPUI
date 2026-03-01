@@ -3,20 +3,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import AdminCustomerPicker from "@/components/ui/dashboard/AdminCustomerPicker";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
-import { getAdminMediaUrl } from "@/lib/apiClient";
+import {
+  ApiClientError,
+  deleteAdminProduct,
+  getAdminInventoryProfitAnalytics,
+  getAdminMediaUrl,
+  getAdminProducts,
+  updateAdminProductQuickVisibility,
+  type AdminProductRecord,
+} from "@/lib/apiClient";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
+import { consumeAdminProductsFlash, type DashboardFlashMessage } from "@/lib/dashboardFlash";
 import {
   deriveQuickVisibilityChoices,
   toVisibilityLabel,
 } from "@/lib/adminUiConfig";
-
-type ApiErrorPayload = {
-  message?: string;
-  code?: string;
-  reason?: string;
-};
 
 type InventoryAnalyticsResponse = {
   includeSold: boolean;
@@ -56,32 +60,6 @@ type InventoryProduct = {
   };
 };
 
-type AdminProductMediaRef = {
-  id?: string | null;
-  type?: string | null;
-  url?: string | null;
-  mimeType?: string | null;
-  sizeBytes?: number | null;
-};
-
-type AdminProductListItem = {
-  id: string;
-  sku?: string | null;
-  name?: string | null;
-  visibility?: string | null;
-  tier?: string | null;
-  minCustomerTier?: string | null;
-  visibilityNote?: string | null;
-  targetUserIds?: string[] | null;
-  media?: AdminProductMediaRef[] | null;
-};
-
-type AdminProductsListResponse = {
-  includeSold?: boolean;
-  count?: number;
-  items?: AdminProductListItem[] | null;
-};
-
 type ProductImageRef = {
   mediaId: string | null;
   url: string;
@@ -100,13 +78,6 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
   maximumFractionDigits: 2,
 });
-
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = payload?.message || fallback;
-  const code = payload?.code ? ` (code: ${payload.code})` : "";
-  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
-  return `${message}${code}${reason}`;
-};
 
 const toMoney = (value: number | null | undefined) => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -141,14 +112,20 @@ const statusBadge = (status: string) => {
 
 const normalizeMediaType = (value: unknown) => String(value || "").trim().toUpperCase();
 
-const hasMediaReference = (product: AdminProductListItem) =>
+const parseTargetUserIds = (value: string) =>
+  value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const hasMediaReference = (product: AdminProductRecord) =>
   (Array.isArray(product.media) ? product.media : []).some((mediaRef) => {
     const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id.trim() : "";
     const mediaUrl = typeof mediaRef?.url === "string" ? mediaRef.url.trim() : "";
     return Boolean(mediaId || mediaUrl);
   });
 
-const toProductImageRef = (product: AdminProductListItem): ProductImageRef | null => {
+const toProductImageRef = (product: AdminProductRecord): ProductImageRef | null => {
   const mediaRows = Array.isArray(product.media) ? product.media : [];
 
   for (const mediaRef of mediaRows) {
@@ -232,14 +209,17 @@ export default function AdminProducts() {
   const { dashboardBasePath, isAdminActionBlocked } = useRole();
   const productCreateBlocked = isAdminActionBlocked("PRODUCT_CREATE");
   const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
+  const productVisibilityBlocked = isAdminActionBlocked("PRODUCT_VISIBILITY_MANAGE");
   const productDeleteBlocked = isAdminActionBlocked("PRODUCT_DELETE");
   const productCreateTooltip = getAdminActionRestrictionTooltip("PRODUCT_CREATE");
   const productEditTooltip = getAdminActionRestrictionTooltip("PRODUCT_EDIT");
+  const productVisibilityTooltip = getAdminActionRestrictionTooltip("PRODUCT_VISIBILITY_MANAGE");
   const productDeleteTooltip = getAdminActionRestrictionTooltip("PRODUCT_DELETE");
 
   const [includeSold, setIncludeSold] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [productsNotice, setProductsNotice] = useState<DashboardFlashMessage | null>(null);
   const [mediaHint, setMediaHint] = useState("");
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
@@ -249,8 +229,15 @@ export default function AdminProducts() {
   const [quickVisibilityChoice, setQuickVisibilityChoice] = useState("");
   const [quickVisibilityTargetTier, setQuickVisibilityTargetTier] = useState("");
   const [quickVisibilityTargetUsers, setQuickVisibilityTargetUsers] = useState("");
+  const [quickVisibilityNote, setQuickVisibilityNote] = useState("");
+  const [quickVisibilityReason, setQuickVisibilityReason] = useState("");
   const [quickVisibilityMessage, setQuickVisibilityMessage] = useState("");
+  const [savingQuickVisibility, setSavingQuickVisibility] = useState(false);
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    setProductsNotice(consumeAdminProductsFlash());
+  }, []);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -341,46 +328,18 @@ export default function AdminProducts() {
 
     try {
       const accessToken = await getAccessToken();
-      const query = includeSold ? "?includeSold=true" : "";
-
-      const [analyticsResponse, productsResponse] = await Promise.all([
-        fetch(`/api/v1/admin/analytics/inventory-profit${query}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
+      const [analyticsPayload, productsResponse] = await Promise.all([
+        getAdminInventoryProfitAnalytics({
+          accessToken,
+          includeSold,
         }),
-        fetch(`/api/v1/admin/products${query}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
+        getAdminProducts({
+          accessToken,
+          includeSold,
         }),
       ]);
-
-      const [analyticsPayload, productsPayload] = await Promise.all([
-        analyticsResponse.json().catch(() => null),
-        productsResponse.json().catch(() => null),
-      ]);
-
-      if (!analyticsResponse.ok) {
-        throw new Error(
-          toErrorMessage(analyticsPayload as ApiErrorPayload | null, "Failed to load product analytics."),
-        );
-      }
-
-      if (!productsResponse.ok) {
-        throw new Error(
-          toErrorMessage(productsPayload as ApiErrorPayload | null, "Failed to load admin products."),
-        );
-      }
-
       const analyticsData = analyticsPayload as InventoryAnalyticsResponse;
-      const productRows = Array.isArray((productsPayload as AdminProductsListResponse)?.items)
-        ? ((productsPayload as AdminProductsListResponse).items as AdminProductListItem[])
-        : [];
+      const productRows = productsResponse.items;
 
       const hasMediaReferences = productRows.some(hasMediaReference);
 
@@ -482,6 +441,8 @@ export default function AdminProducts() {
       setQuickVisibilityChoice("");
       setQuickVisibilityTargetTier("");
       setQuickVisibilityTargetUsers("");
+      setQuickVisibilityNote("");
+      setQuickVisibilityReason("");
       return;
     }
 
@@ -489,6 +450,8 @@ export default function AdminProducts() {
     setQuickVisibilityChoice(firstChoice);
     setQuickVisibilityTargetTier(selectedQuickMeta?.minCustomerTier || "");
     setQuickVisibilityTargetUsers((selectedQuickMeta?.targetUserIds || []).join(", "));
+    setQuickVisibilityNote(selectedQuickMeta?.visibilityNote || "");
+    setQuickVisibilityReason("");
   }, [quickVisibilityChoices, selectedQuickMeta, selectedQuickProduct]);
 
   const handleDeleteProduct = useCallback(
@@ -512,20 +475,11 @@ export default function AdminProducts() {
 
       try {
         const accessToken = await getAccessToken();
-        const response = await fetch(`/api/v1/admin/products/${encodeURIComponent(product.id)}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(reason ? { reason } : {}),
-          cache: "no-store",
+        await deleteAdminProduct({
+          accessToken,
+          productId: product.id,
+          reason,
         });
-
-        const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
-        if (!response.ok) {
-          throw new Error(toErrorMessage(payload, "Failed to delete product."));
-        }
 
         await loadData();
       } catch (caughtError) {
@@ -539,24 +493,86 @@ export default function AdminProducts() {
     [getAccessToken, loadData, productDeleteBlocked, productDeleteTooltip],
   );
 
-  const stageQuickVisibility = useCallback(() => {
+  const stageQuickVisibility = useCallback(async () => {
     if (!selectedQuickProduct) {
       return;
     }
 
-    const label = selectedQuickProduct.name || selectedQuickProduct.sku || selectedQuickProduct.id;
-    const extra =
-      quickVisibilityChoice === "TARGETED_USER"
-        ? ` Targets: ${quickVisibilityTargetUsers || "pending selection"}.`
-        : quickVisibilityChoice === "USER_TIER"
-          ? ` Tier: ${quickVisibilityTargetTier || "pending tier"}.`
-          : "";
+    if (productVisibilityBlocked) {
+      setQuickVisibilityMessage(productVisibilityTooltip);
+      return;
+    }
 
-    setQuickVisibilityMessage(
-      `Quick visibility flow staged for ${label}: ${quickVisibilityChoice || "no selection"}.${extra} API mapping pending.`,
-    );
+    if (!quickVisibilityChoice) {
+      setQuickVisibilityMessage("Select a quick visibility option.");
+      return;
+    }
+
+    if (quickVisibilityChoice === "USER_TIER" && !quickVisibilityTargetTier) {
+      setQuickVisibilityMessage("Select the customer tier for USER_TIER visibility.");
+      return;
+    }
+
+    const parsedTargetUserIds =
+      quickVisibilityChoice === "TARGETED_USER"
+        ? parseTargetUserIds(quickVisibilityTargetUsers)
+        : [];
+
+    if (quickVisibilityChoice === "TARGETED_USER" && parsedTargetUserIds.length === 0) {
+      setQuickVisibilityMessage("Enter at least one target user id.");
+      return;
+    }
+
+    setSavingQuickVisibility(true);
+    setQuickVisibilityMessage("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await updateAdminProductQuickVisibility({
+        accessToken,
+        productId: selectedQuickProduct.id,
+        visibility: quickVisibilityChoice,
+        minCustomerTier:
+          quickVisibilityChoice === "USER_TIER" ? quickVisibilityTargetTier : undefined,
+        targetUserIds:
+          quickVisibilityChoice === "TARGETED_USER" ? parsedTargetUserIds : undefined,
+        visibilityNote: quickVisibilityNote.trim() || undefined,
+        reason: quickVisibilityReason.trim() || undefined,
+      });
+
+      setQuickVisibilityMessage(
+        response.statusCode === 202
+          ? response.message || "Quick visibility submitted for main admin approval."
+          : response.message || "Quick visibility updated successfully.",
+      );
+      await loadData();
+    } catch (caughtError) {
+      if (
+        caughtError instanceof ApiClientError &&
+        caughtError.code === "QUICK_VISIBILITY_NOT_ALLOWED"
+      ) {
+        setQuickVisibilityMessage(
+          `Quick visibility is not allowed for this product state. Use the full edit page instead: ${dashboardBasePath}/products/${selectedQuickProduct.id}`,
+        );
+      } else {
+        setQuickVisibilityMessage(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to update quick visibility.",
+        );
+      }
+    } finally {
+      setSavingQuickVisibility(false);
+    }
   }, [
+    dashboardBasePath,
+    getAccessToken,
+    loadData,
+    productVisibilityBlocked,
+    productVisibilityTooltip,
     quickVisibilityChoice,
+    quickVisibilityNote,
+    quickVisibilityReason,
     quickVisibilityTargetTier,
     quickVisibilityTargetUsers,
     selectedQuickProduct,
@@ -591,6 +607,20 @@ export default function AdminProducts() {
           )
         }
       />
+
+      {productsNotice && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            productsNotice.tone === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300"
+              : productsNotice.tone === "info"
+                ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300"
+          }`}
+        >
+          {productsNotice.message}
+        </div>
+      )}
 
       {(productCreateBlocked || productEditBlocked || productDeleteBlocked) && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
@@ -690,8 +720,8 @@ export default function AdminProducts() {
           )}
 
           <div className="rounded-xl border border-blue-200 dark:border-blue-700/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
-            Quick visibility is now part of the products page flow. The panel stages the UI
-            interaction for the new endpoint contract without changing backend behavior yet.
+            Quick visibility now calls the dedicated admin route directly. A `202` response is
+            treated as a successful submission pending main admin approval.
           </div>
 
           {selectedQuickProduct && (
@@ -795,19 +825,40 @@ export default function AdminProducts() {
                   ) : null}
 
                   {quickVisibilityChoice === "TARGETED_USER" ? (
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                        Target Users
-                      </label>
-                      <textarea
-                        value={quickVisibilityTargetUsers}
-                        onChange={(event) => setQuickVisibilityTargetUsers(event.target.value)}
-                        rows={3}
-                        placeholder="Enter target user ids separated by commas"
-                        className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
-                      />
-                    </div>
+                    <AdminCustomerPicker
+                      selectedIds={parseTargetUserIds(quickVisibilityTargetUsers)}
+                      onChange={(nextIds) => setQuickVisibilityTargetUsers(nextIds.join(", "))}
+                      getAccessToken={getAccessToken}
+                      disabled={productVisibilityBlocked || savingQuickVisibility}
+                      label="Target Users"
+                      helperText="Select the customers who should see this product in the quick visibility flow."
+                    />
                   ) : null}
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Visibility Note
+                    </label>
+                    <input
+                      value={quickVisibilityNote}
+                      onChange={(event) => setQuickVisibilityNote(event.target.value)}
+                      placeholder="Optional visibility note"
+                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Approval Reason
+                    </label>
+                    <textarea
+                      value={quickVisibilityReason}
+                      onChange={(event) => setQuickVisibilityReason(event.target.value)}
+                      rows={3}
+                      placeholder="Optional reason for the approval trail"
+                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 p-4">
@@ -815,18 +866,31 @@ export default function AdminProducts() {
                     Approval Flow
                   </h3>
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    This quick action mirrors the spec: some visibility changes remain subject to
-                    main admin approval or auto-approval rules.
+                    This quick action mirrors the spec: some visibility changes apply immediately,
+                    some return `202`, and invalid transitions respond with `QUICK_VISIBILITY_NOT_ALLOWED`.
                   </p>
                   <button
                     type="button"
-                    onClick={stageQuickVisibility}
-                    className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                    onClick={() => {
+                      void stageQuickVisibility();
+                    }}
+                    disabled={savingQuickVisibility || productVisibilityBlocked}
+                    title={productVisibilityBlocked ? productVisibilityTooltip : undefined}
+                    className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Stage Quick Visibility
+                    {savingQuickVisibility ? "Saving..." : "Apply Quick Visibility"}
                   </button>
                   {quickVisibilityMessage ? (
-                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    <p
+                      className={`mt-3 rounded-xl border px-3 py-3 text-sm ${
+                        quickVisibilityMessage.toLowerCase().includes("failed") ||
+                        quickVisibilityMessage.toLowerCase().includes("select") ||
+                        quickVisibilityMessage.toLowerCase().includes("not allowed") ||
+                        quickVisibilityMessage.toLowerCase().includes("enter at least one")
+                          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300"
+                      }`}
+                    >
                       {quickVisibilityMessage}
                     </p>
                   ) : null}

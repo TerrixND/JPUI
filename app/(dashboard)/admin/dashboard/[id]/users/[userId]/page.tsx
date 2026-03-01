@@ -5,10 +5,17 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
+import { ADMIN_ACTION_BLOCKS } from "@/lib/adminAccessControl";
 import supabase from "@/lib/supabase";
 import {
+  createAdminUserBan,
+  createAdminUserRestriction,
   getAdminUserDetail,
   handleAccountAccessDeniedError,
+  resolveAdminUserAction,
+  updateAdminUserPermissions,
+  updateAdminUserStatus,
+  type AdminActionBlock,
   type AdminUserDetail,
   type StaffRuleVisibilityRole,
 } from "@/lib/apiClient";
@@ -38,6 +45,36 @@ type PermissionDraft = {
 };
 
 type ActionType = (typeof PRODUCT_ACTION_TYPE_OPTIONS)[number];
+
+const ACTION_BLOCK_COPY: Record<AdminActionBlock, string> = {
+  PRODUCT_CREATE: "Product Create",
+  PRODUCT_EDIT: "Product Edit",
+  PRODUCT_VISIBILITY_MANAGE: "Product Visibility",
+  PRODUCT_DELETE: "Product Delete",
+  INVENTORY_REQUEST_DECIDE: "Inventory Requests",
+  USER_ACCESS_MANAGE: "User Access",
+  APPROVAL_REVIEW: "Approval Review",
+  STAFF_RULE_MANAGE: "Staff Rules",
+  LOG_DELETE: "Log Delete",
+};
+
+const formatActionMessage = (
+  label: string,
+  response: { statusCode: number; message: string | null },
+) => {
+  if (response.statusCode === 202) {
+    return response.message || `${label} submitted for main admin approval.`;
+  }
+
+  return response.message || `${label} applied successfully.`;
+};
+
+const DURATION_PRESET_HOURS: Record<string, number> = {
+  "1h": 1,
+  "4h": 4,
+  "12h": 12,
+  "24h": 24,
+};
 
 const emptyCapabilities = () =>
   Object.fromEntries(
@@ -220,6 +257,14 @@ export default function AdminUserDetailPage() {
   const [actionNote, setActionNote] = useState("");
   const [actionPreset, setActionPreset] = useState("24h");
   const [actionUntil, setActionUntil] = useState("");
+  const [restrictionMode, setRestrictionMode] = useState<"ACCOUNT" | "ADMIN_ACTIONS">(
+    "ACCOUNT",
+  );
+  const [actionBlocks, setActionBlocks] = useState<AdminActionBlock[]>([]);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [savingAction, setSavingAction] = useState(false);
+  const [resolvingId, setResolvingId] = useState("");
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -300,22 +345,200 @@ export default function AdminUserDetailPage() {
     });
   };
 
-  const onSavePermissions = () => {
-    setUiMessage(
-      "Permissions UI updated locally. Final save wiring will use the upcoming user-permission endpoint.",
+  const toggleActionBlock = (block: AdminActionBlock) => {
+    setActionBlocks((current) =>
+      current.includes(block)
+        ? current.filter((value) => value !== block)
+        : [...current, block],
     );
   };
 
-  const onStageAction = () => {
-    setActionMessage(
-      `${actionType} staged for ${displayName}. Duration: ${actionUntil || actionPreset}.`,
-    );
+  const resolveTimeWindow = () => {
+    const startsAt = new Date();
+
+    if (actionPreset === "custom") {
+      if (!actionUntil) {
+        throw new Error("Select the custom end date.");
+      }
+
+      const endsAt = new Date(actionUntil);
+      if (Number.isNaN(endsAt.getTime()) || endsAt.getTime() <= startsAt.getTime()) {
+        throw new Error("The end date must be in the future.");
+      }
+
+      return {
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+      };
+    }
+
+    const durationHours = DURATION_PRESET_HOURS[actionPreset];
+    if (!durationHours) {
+      throw new Error("Select a valid duration.");
+    }
+
+    return {
+      startsAt: startsAt.toISOString(),
+      endsAt: new Date(startsAt.getTime() + durationHours * 60 * 60 * 1000).toISOString(),
+    };
   };
 
-  const onResolveAction = () => {
-    setActionMessage(
-      "Resolve flow staged in UI. Final resolve action will bind to the upcoming admin-action endpoint.",
-    );
+  const onSavePermissions = async () => {
+    if (!detail) {
+      return;
+    }
+
+    setSavingPermissions(true);
+    setUiMessage("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await updateAdminUserPermissions({
+        accessToken,
+        userId: detail.id,
+        permissions: {
+          visibilityRole: permissionDraft.visibilityRole,
+          capabilities: permissionDraft.capabilities,
+          autoApprove: permissionDraft.autoApprove,
+        },
+      });
+
+      setUiMessage(formatActionMessage("Permissions update", response));
+      await loadDetail();
+    } catch (caughtError) {
+      setUiMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to update permissions.",
+      );
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
+  const onSaveStatus = async () => {
+    if (!detail) {
+      return;
+    }
+
+    setSavingStatus(true);
+    setUiMessage("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await updateAdminUserStatus({
+        accessToken,
+        userId: detail.id,
+        status: selectedStatus,
+      });
+
+      setUiMessage(formatActionMessage("Status update", response));
+      await loadDetail();
+    } catch (caughtError) {
+      setUiMessage(
+        caughtError instanceof Error ? caughtError.message : "Failed to update status.",
+      );
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const onStageAction = async () => {
+    if (!detail) {
+      return;
+    }
+
+    if (!actionReason.trim()) {
+      setActionMessage("Reason is required.");
+      return;
+    }
+
+    setSavingAction(true);
+    setActionMessage("");
+
+    try {
+      const accessToken = await getAccessToken();
+
+      if (actionType === "TERMINATION") {
+        const response = await updateAdminUserStatus({
+          accessToken,
+          userId: detail.id,
+          status: "TERMINATED",
+          reason: actionReason.trim(),
+        });
+
+        setActionMessage(formatActionMessage("Termination", response));
+      } else {
+        const { startsAt, endsAt } = resolveTimeWindow();
+
+        if (actionType === "RESTRICTION") {
+          if (restrictionMode === "ADMIN_ACTIONS" && actionBlocks.length === 0) {
+            throw new Error("Select at least one admin action block.");
+          }
+
+          const response = await createAdminUserRestriction({
+            accessToken,
+            userId: detail.id,
+            reason: actionReason.trim(),
+            note: actionNote.trim() || null,
+            startsAt,
+            endsAt,
+            restrictionMode,
+            adminActionBlocks:
+              restrictionMode === "ADMIN_ACTIONS" ? actionBlocks : undefined,
+          });
+
+          setActionMessage(formatActionMessage("Restriction", response));
+        } else {
+          const response = await createAdminUserBan({
+            accessToken,
+            userId: detail.id,
+            reason: actionReason.trim(),
+            note: actionNote.trim() || null,
+            startsAt,
+            endsAt,
+          });
+
+          setActionMessage(formatActionMessage("Ban", response));
+        }
+      }
+
+      await loadDetail();
+    } catch (caughtError) {
+      setActionMessage(
+        caughtError instanceof Error ? caughtError.message : "Failed to save the action.",
+      );
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const onResolveAction = async (actionTypeValue: ActionType, controlId?: string) => {
+    if (!detail) {
+      return;
+    }
+
+    setResolvingId(controlId || actionTypeValue);
+    setActionMessage("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await resolveAdminUserAction({
+        accessToken,
+        userId: detail.id,
+        actionType: actionTypeValue,
+        controlId,
+      });
+
+      setActionMessage(formatActionMessage("Resolve action", response));
+      await loadDetail();
+    } catch (caughtError) {
+      setActionMessage(
+        caughtError instanceof Error ? caughtError.message : "Failed to resolve action.",
+      );
+    } finally {
+      setResolvingId("");
+    }
   };
 
   if (!isMainAdmin) {
@@ -358,8 +581,8 @@ export default function AdminUserDetailPage() {
       />
 
       <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
-        Save and resolve actions on this page are intentionally staged UI flows. Final endpoint
-        usage will be added after the updated API contract is provided.
+        This screen now saves permissions, direct status changes, timed restrictions, bans,
+        termination, and resolve actions through the updated admin user-management routes.
       </div>
 
       {error ? (
@@ -442,7 +665,7 @@ export default function AdminUserDetailPage() {
 
       <SectionCard
         title="Permissions"
-        description="Container 3: edit the stored permission profile and save to apply once the endpoint is wired."
+        description="Container 3: edit the stored permission profile and save it to the dedicated permissions route."
       >
         {!detail ? null : canEditPermissions ? (
           <div className="space-y-4">
@@ -469,8 +692,8 @@ export default function AdminUserDetailPage() {
                 </select>
 
                 <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
-                  This panel keeps the new permission flow visible now. Save wiring is queued for
-                  the upcoming API update.
+                  Auto-approve flags are sent together with the capability profile so the backend
+                  can keep future approval behavior aligned with this user.
                 </div>
               </div>
 
@@ -555,10 +778,23 @@ export default function AdminUserDetailPage() {
                 </select>
                 <button
                   type="button"
-                  onClick={onSavePermissions}
+                  onClick={() => {
+                    void onSavePermissions();
+                  }}
+                  disabled={savingPermissions || savingStatus}
                   className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
-                  Save Permissions
+                  {savingPermissions ? "Saving..." : "Save Permissions"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onSaveStatus();
+                  }}
+                  disabled={savingPermissions || savingStatus}
+                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                >
+                  {savingStatus ? "Saving..." : "Apply Status"}
                 </button>
               </div>
             </div>
@@ -619,6 +855,50 @@ export default function AdminUserDetailPage() {
               </div>
             </div>
 
+            {actionType === "RESTRICTION" ? (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                    Restriction Mode
+                  </label>
+                  <select
+                    value={restrictionMode}
+                    onChange={(event) =>
+                      setRestrictionMode(event.target.value as "ACCOUNT" | "ADMIN_ACTIONS")
+                    }
+                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                  >
+                    <option value="ACCOUNT">ACCOUNT</option>
+                    <option value="ADMIN_ACTIONS">ADMIN_ACTIONS</option>
+                  </select>
+                </div>
+
+                {restrictionMode === "ADMIN_ACTIONS" ? (
+                  <div className="mt-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Admin Action Blocks
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {ADMIN_ACTION_BLOCKS.map((block) => (
+                        <label
+                          key={block}
+                          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={actionBlocks.includes(block)}
+                            onChange={() => toggleActionBlock(block)}
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          {ACTION_BLOCK_COPY[block]}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {actionPreset === "custom" ? (
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
@@ -661,18 +941,24 @@ export default function AdminUserDetailPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={onStageAction}
+                onClick={() => {
+                  void onStageAction();
+                }}
+                disabled={savingAction}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
               >
-                Save Action
+                {savingAction ? "Saving..." : "Save Action"}
               </button>
-              {detail?.activeAccessControls.length ? (
+              {detail?.status === "TERMINATED" ? (
                 <button
                   type="button"
-                  onClick={onResolveAction}
+                  onClick={() => {
+                    void onResolveAction("TERMINATION");
+                  }}
+                  disabled={resolvingId === "TERMINATION"}
                   className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
-                  Resolve Active Action
+                  {resolvingId === "TERMINATION" ? "Resolving..." : "Resolve Termination"}
                 </button>
               ) : null}
             </div>
@@ -710,11 +996,26 @@ export default function AdminUserDetailPage() {
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {formatDate(control.startsAt)} to {formatDate(control.endsAt)}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void onResolveAction(
+                            control.type === "BAN" ? "BAN" : "RESTRICTION",
+                            control.id,
+                          );
+                        }}
+                        disabled={resolvingId === control.id}
+                        className="mt-3 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        {resolvingId === control.id ? "Resolving..." : "Resolve"}
+                      </button>
                     </div>
                   ))
                 ) : (
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    No active restrictions, bans, or termination flags.
+                    {detail?.status === "TERMINATED"
+                      ? "No timed controls are active. Use the termination resolve button to restore access."
+                      : "No active restrictions or bans."}
                   </p>
                 )}
               </div>

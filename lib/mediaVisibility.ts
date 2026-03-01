@@ -91,6 +91,10 @@ export const deriveVisibilityPresetFromMedia = ({
     return null;
   }
 
+  if (normalizedAudience === "ADMIN_ONLY") {
+    return "ADMIN";
+  }
+
   if (normalizedAudience === "PRIVATE") {
     return "PRIVATE";
   }

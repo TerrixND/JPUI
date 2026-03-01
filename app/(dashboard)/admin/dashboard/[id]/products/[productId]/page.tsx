@@ -4,11 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import AdminCustomerPicker from "@/components/ui/dashboard/AdminCustomerPicker";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
 import {
+  ApiClientError,
+  deleteAdminMedia,
+  getAdminBranchMembers,
+  getAdminBranchesWithManagers,
+  updateAdminProduct,
+  getAdminProductDetail,
+  type AdminProductRecord,
   type CustomerTier,
   getAdminMediaUrl,
   type AdminMediaUrlResponse,
@@ -24,12 +32,11 @@ import {
   parseTargetUserIdsInput,
 } from "@/lib/mediaVisibility";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
-
-type ApiErrorPayload = {
-  message?: string;
-  code?: string;
-  reason?: string;
-};
+import { setAdminProductsFlash } from "@/lib/dashboardFlash";
+import {
+  caratsToGrams,
+  gramsToCarats,
+} from "@/lib/adminUiConfig";
 
 type BranchOption = {
   id: string;
@@ -37,28 +44,6 @@ type BranchOption = {
   name: string;
   city: string | null;
   status: string;
-};
-
-type BranchAnalyticsResponse = {
-  branches?: BranchOption[];
-};
-
-type BranchMember = {
-  memberRole?: string;
-  user?: {
-    id?: string;
-    email?: string | null;
-    status?: string | null;
-    managerProfile?: {
-      displayName?: string | null;
-    } | null;
-    salespersonProfile?: {
-      displayName?: string | null;
-    } | null;
-    customerProfile?: {
-      displayName?: string | null;
-    } | null;
-  } | null;
 };
 
 type ManagerOption = {
@@ -189,7 +174,25 @@ type ProductMedia = {
 type EditForm = {
   sku: string;
   name: string;
+  color: string;
+  origin: string;
+  description: string;
+  weight: string;
+  length: string;
+  depth: string;
+  height: string;
+  importDate: string;
+  importId: string;
+  fromCompanyId: string;
+  visibility: string;
+  visibilityNote: string;
+  tier: string;
   status: string;
+  minCustomerTier: string;
+  targetUserIdsInput: string;
+  sourceType: string;
+  consignmentAgreementId: string;
+  consignmentCommissionRate: string;
   buyPrice: string;
   saleMinPrice: string;
   saleMaxPrice: string;
@@ -209,7 +212,25 @@ type AllocationRow = {
 const initialForm: EditForm = {
   sku: "",
   name: "",
-  status: "",
+  color: "",
+  origin: "",
+  description: "",
+  weight: "",
+  length: "",
+  depth: "",
+  height: "",
+  importDate: "",
+  importId: "",
+  fromCompanyId: "",
+  visibility: "PRIVATE",
+  visibilityNote: "",
+  tier: "STANDARD",
+  status: "AVAILABLE",
+  minCustomerTier: "",
+  targetUserIdsInput: "",
+  sourceType: "OWNED",
+  consignmentAgreementId: "",
+  consignmentCommissionRate: "",
   buyPrice: "",
   saleMinPrice: "",
   saleMaxPrice: "",
@@ -220,20 +241,20 @@ type PublicMediaVisibilityPreset = Extract<
 >;
 type RoleMediaVisibilityPreset = Extract<MediaVisibilityPreset, "ADMIN" | "MANAGER" | "SALES">;
 
+const VISIBILITY_OPTIONS = [
+  "PRIVATE",
+  "STAFF",
+  "PUBLIC",
+  "TOP_SHELF",
+  "USER_TIER",
+  "TARGETED_USER",
+] as const;
+const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"] as const;
+const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"] as const;
+const PRODUCT_CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"] as const;
+const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNED"] as const;
+
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = payload?.message || fallback;
-  const code = payload?.code ? ` (code: ${payload.code})` : "";
-  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
-
-  return `${message}${code}${reason}`;
-};
-
-const mediaDeleteEndpoints = (mediaId: string) => [
-  `/api/v1/admin/media/${encodeURIComponent(mediaId)}`,
-  `/api/v1/media/${encodeURIComponent(mediaId)}`,
-];
 
 const formatBranchLabel = (branch: BranchOption) => {
   const code = branch.code ? `${branch.code} - ` : "";
@@ -279,6 +300,19 @@ const toDisplayMoney = (value: number | null | undefined) => {
   return String(value);
 };
 
+const toInputDateValue = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
 
 const normalizeMediaType = (value: unknown): ProductMedia["type"] | null => {
   const normalized = String(value || "").trim().toUpperCase();
@@ -309,6 +343,8 @@ const extractTargetUserIds = (targetUsers: Array<{ userId?: string | null }> | n
       .map((row) => String(row?.userId || "").trim())
       .filter(Boolean),
   )];
+
+const toMediaIdentifier = (media: ProductMedia) => media.mediaId || media.id;
 
 const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | null => {
   const id = typeof payload?.id === "string" ? payload.id.trim() : "";
@@ -634,6 +670,7 @@ export default function ProductEditPage() {
   const productsPath = `${dashboardBasePath}/products`;
 
   const [form, setForm] = useState<EditForm>(initialForm);
+  const [weightUnit, setWeightUnit] = useState<"g" | "ct">("g");
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [existingMedia, setExistingMedia] = useState<ProductMedia[]>([]);
   const [publicVisibilityPreset, setPublicVisibilityPreset] = useState<PublicMediaVisibilityPreset>("PUBLIC");
@@ -645,7 +682,8 @@ export default function ProductEditPage() {
   const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
-  const [product, setProduct] = useState<InventoryProduct | null>(null);
+  const [consignmentContractFiles, setConsignmentContractFiles] = useState<MediaFile[]>([]);
+  const [productRecord, setProductRecord] = useState<AdminProductRecord | null>(null);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [managersByBranch, setManagersByBranch] = useState<Record<string, ManagerOption[]>>({});
@@ -673,6 +711,23 @@ export default function ProductEditPage() {
       return sum + rate;
     }, 0);
   }, [allocations]);
+  const convertedWeight = useMemo(() => {
+    const rawWeight = Number(form.weight);
+    if (!Number.isFinite(rawWeight) || rawWeight <= 0) {
+      return "";
+    }
+
+    return weightUnit === "g"
+      ? `${gramsToCarats(rawWeight).toFixed(2)} ct`
+      : `${caratsToGrams(rawWeight).toFixed(2)} g`;
+  }, [form.weight, weightUnit]);
+  const roleVisibilityOptions = useMemo(
+    () =>
+      form.visibility === "PRIVATE"
+        ? (["ADMIN"] as RoleMediaVisibilityPreset[])
+        : ROLE_MEDIA_VISIBILITY_PRESETS,
+    [form.visibility],
+  );
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -810,50 +865,26 @@ export default function ProductEditPage() {
 
       try {
         const accessToken = await getAccessToken();
-
-        const response = await fetch(`/api/v1/admin/branches/${branchId}/members`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
+        const rows = await getAdminBranchMembers({
+          accessToken,
+          branchId,
         });
-
-        const payload = (await response.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchMember[]
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branch managers."),
-          );
-        }
-
-        const rows = Array.isArray(payload) ? payload : [];
 
         const dedupe = new Set<string>();
         const managers: ManagerOption[] = [];
 
         for (const row of rows) {
-          const isManager = String(row?.memberRole || "").toUpperCase() === "MANAGER";
-          const userId = row?.user?.id || "";
-          const userStatus = String(row?.user?.status || "").toUpperCase();
+          const isManager = String(row.memberRole || "").toUpperCase() === "MANAGER";
+          const userId = row.user?.id || "";
+          const userStatus = String(row.user?.status || "").toUpperCase();
 
           if (!isManager || !userId || userStatus !== "ACTIVE" || dedupe.has(userId)) {
             continue;
           }
 
-          const label =
-            row?.user?.managerProfile?.displayName ||
-            row?.user?.salespersonProfile?.displayName ||
-            row?.user?.customerProfile?.displayName ||
-            row?.user?.email ||
-            userId;
-
           managers.push({
             id: userId,
-            label,
+            label: row.user.displayName || row.user.email || userId,
           });
 
           dedupe.add(userId);
@@ -890,71 +921,52 @@ export default function ProductEditPage() {
 
       try {
         const accessToken = await getAccessToken();
-
-        const [productResponse, branchResponse] = await Promise.all([
-          fetch(`/api/v1/admin/products/${encodeURIComponent(productId)}`, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-            cache: "no-store",
+        const [productDetail, branchResponse] = await Promise.all([
+          getAdminProductDetail({
+            accessToken,
+            productId,
           }),
-          fetch("/api/v1/admin/analytics/branches", {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-            cache: "no-store",
+          getAdminBranchesWithManagers({
+            accessToken,
+            limit: 200,
+            includeInactive: true,
           }),
         ]);
+        const targetProduct = toInventoryProduct(productDetail as unknown as AdminProductDetail);
 
-        const productPayload = (await productResponse.json().catch(() => null)) as
-          | ApiErrorPayload
-          | AdminProductDetail
-          | null;
-        const branchPayload = (await branchResponse.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchAnalyticsResponse
-          | null;
-
-        if (productResponse.status === 404) {
-          setNotFound(true);
-          setProduct(null);
-          setExistingMedia([]);
-          return;
-        }
-
-        if (!productResponse.ok) {
-          throw new Error(
-            toErrorMessage(
-              productPayload as ApiErrorPayload | null,
-              "Failed to load product details.",
-            ),
-          );
-        }
-
-        if (!branchResponse.ok) {
-          throw new Error(
-            toErrorMessage(branchPayload as ApiErrorPayload | null, "Failed to load branches."),
-          );
-        }
-
-        const productDetail = productPayload as AdminProductDetail;
-        if (!productDetail?.id || !productDetail?.sku) {
-          throw new Error("Invalid product payload received from admin endpoint.");
-        }
-        const targetProduct = toInventoryProduct(productDetail);
-
-        const branchRows = Array.isArray((branchPayload as BranchAnalyticsResponse)?.branches)
-          ? ((branchPayload as BranchAnalyticsResponse).branches as BranchOption[])
-          : [];
+        const branchRows = branchResponse.items.map((branch) => ({
+          id: branch.id,
+          code: branch.code || "",
+          name: branch.name || "Unnamed Branch",
+          city: branch.city,
+          status: branch.status || "ACTIVE",
+        }));
 
         setBranches(branchRows);
-        setProduct(targetProduct);
+        setProductRecord(productDetail);
+        setWeightUnit("g");
         setForm({
           sku: targetProduct.sku,
           name: targetProduct.name || "",
+          color: productDetail.color || "",
+          origin: productDetail.origin || "",
+          description: productDetail.description || "",
+          weight: toDisplayMoney(productDetail.weight),
+          length: toDisplayMoney(productDetail.length),
+          depth: toDisplayMoney(productDetail.depth),
+          height: toDisplayMoney(productDetail.height),
+          importDate: toInputDateValue(productDetail.importDate),
+          importId: productDetail.importId || "",
+          fromCompanyId: productDetail.fromCompanyId || "",
+          visibility: productDetail.visibility || "PRIVATE",
+          visibilityNote: productDetail.visibilityNote || "",
+          tier: productDetail.tier || "STANDARD",
           status: targetProduct.status,
+          minCustomerTier: productDetail.minCustomerTier || "",
+          targetUserIdsInput: (productDetail.targetUserIds || []).join(", "),
+          sourceType: productDetail.sourceType || "OWNED",
+          consignmentAgreementId: productDetail.consignmentAgreementId || "",
+          consignmentCommissionRate: toDisplayMoney(productDetail.consignmentRate),
           buyPrice: toDisplayMoney(targetProduct.pricing.buyPrice),
           saleMinPrice: toDisplayMoney(targetProduct.pricing.saleMinPrice),
           saleMaxPrice: toDisplayMoney(targetProduct.pricing.saleMaxPrice),
@@ -980,11 +992,22 @@ export default function ProductEditPage() {
         setPublicVideoFiles([]);
         setPublicGalleryFiles([]);
         setPublicCertificateFiles([]);
-        setPublicVisibilityPreset("PUBLIC");
-        setPublicMinCustomerTier("");
-        setPublicTargetUserIdsInput("");
+        setPublicVisibilityPreset(
+          productDetail.visibility === "TOP_SHELF"
+            ? "TOP_SHELF"
+            : productDetail.visibility === "USER_TIER"
+              ? "USER_TIER"
+              : productDetail.visibility === "TARGETED_USER"
+                ? "TARGETED_USER"
+                : productDetail.visibility === "PRIVATE"
+                  ? "PRIVATE"
+                  : "PUBLIC",
+        );
+        setPublicMinCustomerTier(productDetail.minCustomerTier || "");
+        setPublicTargetUserIdsInput((productDetail.targetUserIds || []).join(", "));
         setRoleMediaFiles([]);
         setRoleVisibilityPreset("ADMIN");
+        setConsignmentContractFiles([]);
 
         const mediaResult = await resolveExistingMediaFromAdmin(accessToken, targetProduct);
         setExistingMedia(mediaResult.media);
@@ -997,11 +1020,19 @@ export default function ProductEditPage() {
           setMediaHint("Existing media references were found, but no media URLs could be resolved.");
         }
       } catch (caughtError) {
+        if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+          setNotFound(true);
+          setProductRecord(null);
+          setExistingMedia([]);
+          return;
+        }
+
         const message =
           caughtError instanceof Error
             ? caughtError.message
             : "Failed to load product data.";
 
+        setProductRecord(null);
         setError(message);
       } finally {
         setLoading(false);
@@ -1034,6 +1065,44 @@ export default function ProductEditPage() {
       window.clearInterval(interval);
     };
   }, [existingMedia, refreshSingleMediaUrl]);
+
+  useEffect(() => {
+    if (!roleVisibilityOptions.includes(roleVisibilityPreset)) {
+      setRoleVisibilityPreset(roleVisibilityOptions[0]);
+    }
+  }, [roleVisibilityOptions, roleVisibilityPreset]);
+
+  useEffect(() => {
+    if (form.visibility === "PUBLIC") {
+      setPublicVisibilityPreset("PUBLIC");
+      return;
+    }
+
+    if (form.visibility === "TOP_SHELF") {
+      setPublicVisibilityPreset("TOP_SHELF");
+      return;
+    }
+
+    if (form.visibility === "USER_TIER") {
+      setPublicVisibilityPreset("USER_TIER");
+      if (
+        form.minCustomerTier === "REGULAR"
+        || form.minCustomerTier === "VIP"
+        || form.minCustomerTier === "ULTRA_VIP"
+      ) {
+        setPublicMinCustomerTier(form.minCustomerTier);
+      }
+      return;
+    }
+
+    if (form.visibility === "TARGETED_USER") {
+      setPublicVisibilityPreset("TARGETED_USER");
+      setPublicTargetUserIdsInput(form.targetUserIdsInput);
+      return;
+    }
+
+    setPublicVisibilityPreset("PRIVATE");
+  }, [form.minCustomerTier, form.targetUserIdsInput, form.visibility]);
 
   const updateField = (field: keyof EditForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -1099,46 +1168,10 @@ export default function ProductEditPage() {
 
     try {
       const accessToken = await getAccessToken();
-      let deleted = false;
-      let endpointUnsupported = false;
-
-      for (const endpoint of mediaDeleteEndpoints(mediaId)) {
-        const response = await fetch(endpoint, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            reason: "Deleted from product edit page",
-          }),
-          cache: "no-store",
-        });
-
-        const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
-
-        if (response.ok) {
-          deleted = true;
-          break;
-        }
-
-        if (response.status === 404 || response.status === 405) {
-          endpointUnsupported = true;
-          continue;
-        }
-
-        throw new Error(toErrorMessage(payload, "Failed to delete media."));
-      }
-
-      if (!deleted) {
-        if (endpointUnsupported) {
-          throw new Error(
-            "Media delete endpoint is not available in the API yet. Add DELETE /api/v1/admin/media/:mediaId or DELETE /api/v1/media/:mediaId.",
-          );
-        }
-
-        throw new Error("Failed to delete media.");
-      }
+      await deleteAdminMedia({
+        accessToken,
+        mediaId,
+      });
 
       setExistingMedia((prev) =>
         prev.filter((row) => (row.mediaId || row.id) !== mediaId),
@@ -1190,7 +1223,7 @@ export default function ProductEditPage() {
       return;
     }
 
-    if (!product) {
+    if (!productRecord) {
       setError("Product data is not loaded yet.");
       return;
     }
@@ -1199,9 +1232,39 @@ export default function ProductEditPage() {
       const buyPrice = parseOptionalMoney(form.buyPrice, "Buy price");
       const saleMinPrice = parseOptionalMoney(form.saleMinPrice, "Minimum sale price");
       const saleMaxPrice = parseOptionalMoney(form.saleMaxPrice, "Maximum sale price");
+      const normalizedWeight = parseOptionalMoney(form.weight, "Weight");
+      const normalizedLength = parseOptionalMoney(form.length, "Length");
+      const normalizedDepth = parseOptionalMoney(form.depth, "Depth");
+      const normalizedHeight = parseOptionalMoney(form.height, "Height");
+      const consignmentRate = parseOptionalMoney(
+        form.consignmentCommissionRate,
+        "Consignment commission rate",
+      );
+      const productTargetUserIds = parseTargetUserIdsInput(form.targetUserIdsInput);
 
       if (saleMinPrice !== null && saleMaxPrice !== null && saleMaxPrice < saleMinPrice) {
         throw new Error("Maximum sale price must be greater than or equal to minimum sale price.");
+      }
+      if (
+        form.visibility === "USER_TIER"
+        && !(
+          form.minCustomerTier === "REGULAR"
+          || form.minCustomerTier === "VIP"
+          || form.minCustomerTier === "ULTRA_VIP"
+        )
+      ) {
+        throw new Error("Select a customer tier for USER_TIER visibility.");
+      }
+      if (form.visibility === "TARGETED_USER" && productTargetUserIds.length === 0) {
+        throw new Error("Provide at least one target user id for TARGETED_USER visibility.");
+      }
+      if (form.sourceType === "CONSIGNED") {
+        if (consignmentRate === null) {
+          throw new Error("Consigned products require a consignment commission rate.");
+        }
+        if (consignmentRate > 100) {
+          throw new Error("Consignment commission rate must be between 0 and 100.");
+        }
       }
 
       const normalizedAllocations = allocations.map((row, index) => {
@@ -1218,7 +1281,7 @@ export default function ProductEditPage() {
 
           return {
             targetType: "BRANCH" as const,
-            branchId: row.branchId,
+            beneficiaryBranchId: row.branchId,
             rate,
             note: row.note.trim() || undefined,
           };
@@ -1230,7 +1293,7 @@ export default function ProductEditPage() {
 
         return {
           targetType: "USER" as const,
-          userId: row.userId,
+          beneficiaryUserId: row.userId,
           rate,
           note: row.note.trim() || undefined,
         };
@@ -1242,66 +1305,186 @@ export default function ProductEditPage() {
       }
 
       ensureMediaUploadMetadata();
+      if (
+        form.sourceType === "CONSIGNED"
+        && consignmentContractFiles.length > 0
+        && !form.consignmentAgreementId.trim()
+      ) {
+        throw new Error("Provide the consignment agreement id before uploading a contract PDF.");
+      }
       setSaving(true);
 
       const accessToken = await getAccessToken();
+      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
+      const publicUploadOptions = {
+        accessToken,
+        visibilityPreset: publicVisibilityPreset,
+        ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
+          ? { minCustomerTier: publicMinCustomerTier }
+          : {}),
+        ...(publicVisibilityPreset === "TARGETED_USER"
+          ? { targetUserIds: publicTargetUserIds }
+          : {}),
+      };
 
-      const response = await fetch(`/api/v1/admin/products/${product.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const uploadedThumbnailMedia =
+        hasAnyPublicMediaUpload && publicThumbnailFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicThumbnailFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_THUMBNAIL",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedFeatureVideoMedia =
+        hasAnyPublicMediaUpload && publicVideoFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicVideoFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_FEATURE_VIDEO",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedGalleryMedia =
+        hasAnyPublicMediaUpload && publicGalleryFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicGalleryFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_GALLERY",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedCertificateMedia =
+        hasAnyPublicMediaUpload && publicCertificateFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicCertificateFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_CERTIFICATE",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedRoleMedia =
+        roleMediaFiles.length > 0
+          ? await uploadMediaFiles({
+              files: roleMediaFiles.map((mediaFile) => mediaFile.file),
+              accessToken,
+              slot: "ROLE_REFERENCE",
+              visibilityPreset: roleVisibilityPreset,
+              allowedRoles: [roleVisibilityPreset],
+            })
+          : [];
+      const uploadedConsignmentContract =
+        form.sourceType === "CONSIGNED" && consignmentContractFiles.length > 0
+          ? await uploadMediaFiles({
+              files: consignmentContractFiles.map((mediaFile) => mediaFile.file),
+              accessToken,
+              consignmentAgreementId: form.consignmentAgreementId.trim(),
+              slot: "CONSIGNMENT_CONTRACT",
+              visibilityPreset: "ADMIN",
+            })
+          : [];
+
+      const existingRoleMediaByPreset = existingRoleMedia.reduce<Record<string, string[]>>(
+        (accumulator, media) => {
+          const preset =
+            media.visibilityPreset === "ADMIN"
+            || media.visibilityPreset === "MANAGER"
+            || media.visibilityPreset === "SALES"
+              ? media.visibilityPreset
+              : null;
+          const mediaId = toMediaIdentifier(media);
+
+          if (!preset || !mediaId) {
+            return accumulator;
+          }
+
+          const nextIds = accumulator[preset] ? [...accumulator[preset], mediaId] : [mediaId];
+          accumulator[preset] = [...new Set(nextIds)];
+          return accumulator;
         },
-        body: JSON.stringify({
+        {},
+      );
+
+      if (uploadedRoleMedia.length > 0) {
+        const nextIds = [
+          ...(existingRoleMediaByPreset[roleVisibilityPreset] || []),
+          ...uploadedRoleMedia.map((media) => media.id),
+        ];
+        existingRoleMediaByPreset[roleVisibilityPreset] = [...new Set(nextIds)];
+      }
+
+      const response = await updateAdminProduct({
+        accessToken,
+        productId: productRecord.id,
+        product: {
           sku: form.sku.trim(),
           name: form.name.trim() || null,
-          buyPrice,
+          color: form.color.trim() || null,
+          origin: form.origin.trim() || null,
+          description: form.description.trim() || null,
+          buyPrice: form.sourceType === "CONSIGNED" ? null : buyPrice,
           saleMinPrice,
           saleMaxPrice,
+          weight:
+            normalizedWeight === null
+              ? null
+              : weightUnit === "g"
+                ? normalizedWeight
+                : caratsToGrams(normalizedWeight),
+          weightUnit: normalizedWeight === null ? null : "GRAM",
+          length: normalizedLength,
+          depth: normalizedDepth,
+          height: normalizedHeight,
+          importDate:
+            form.importDate
+              ? new Date(`${form.importDate}T00:00:00.000Z`).toISOString()
+              : null,
+          importId: form.importId.trim() || null,
+          fromCompanyId: form.fromCompanyId.trim() || null,
+          visibility: form.visibility,
+          tier: form.tier,
+          status: form.status,
+          minCustomerTier: form.minCustomerTier || null,
+          visibilityNote: form.visibilityNote.trim() || null,
+          sourceType: form.sourceType,
+          consignmentRate: form.sourceType === "CONSIGNED" ? consignmentRate : null,
+          consignmentAgreementId:
+            form.sourceType === "CONSIGNED"
+              ? form.consignmentAgreementId.trim() || null
+              : null,
+          consignmentContractMediaId:
+            form.sourceType === "CONSIGNED" ? uploadedConsignmentContract[0]?.id || null : null,
           commissionAllocations: normalizedAllocations,
-        }),
-        cache: "no-store",
+          ...(form.visibility === "TARGETED_USER" ? { targetUserIds: productTargetUserIds } : {}),
+          ...(hasAnyPublicMediaUpload
+            ? {
+                publicMedia: {
+                  thumbnailMediaId: uploadedThumbnailMedia[0]?.id || null,
+                  featureVideoMediaId: uploadedFeatureVideoMedia[0]?.id || null,
+                  galleryMediaIds: uploadedGalleryMedia.map((media) => media.id),
+                  certificateMediaId: uploadedCertificateMedia[0]?.id || null,
+                },
+              }
+            : {}),
+          ...(Object.keys(existingRoleMediaByPreset).length > 0
+            ? {
+                roleBasedMedia: Object.entries(existingRoleMediaByPreset).flatMap(
+                  ([roleVisibility, mediaIds]) =>
+                    mediaIds.map((mediaId, index) => ({
+                      mediaId,
+                      allowedRoles: [roleVisibility],
+                      displayOrder: index,
+                    })),
+                ),
+              }
+            : {}),
+        },
       });
 
-      const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
-
-      if (!response.ok) {
-        throw new Error(toErrorMessage(payload, "Failed to update product."));
-      }
-
-      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
-
-      if (hasAnyPublicMediaUpload) {
-        const publicFiles = [
-          ...publicThumbnailFiles,
-          ...publicVideoFiles,
-          ...publicGalleryFiles,
-          ...publicCertificateFiles,
-        ].map((mediaFile) => mediaFile.file);
-
-        await uploadMediaFiles({
-          files: publicFiles,
-          accessToken,
-          productId: product.id,
-          visibilityPreset: publicVisibilityPreset,
-          ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
-            ? { minCustomerTier: publicMinCustomerTier }
-            : {}),
-          ...(publicVisibilityPreset === "TARGETED_USER"
-            ? { targetUserIds: publicTargetUserIds }
-            : {}),
-        });
-      }
-
-      if (roleMediaFiles.length > 0) {
-        await uploadMediaFiles({
-          files: roleMediaFiles.map((mediaFile) => mediaFile.file),
-          accessToken,
-          productId: product.id,
-          visibilityPreset: roleVisibilityPreset,
-        });
-      }
-
+      setAdminProductsFlash({
+        tone: response.statusCode === 202 ? "info" : "success",
+        message:
+          response.message
+          || (response.statusCode === 202
+            ? "Product update submitted for main admin approval."
+            : "Product updated."),
+      });
       router.push(productsPath);
     } catch (caughtError) {
       const message =
@@ -1395,14 +1578,19 @@ export default function ProductEditPage() {
         )}
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
-          <SectionHeading>Product Summary</SectionHeading>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionHeading>Core Details</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">SKU</label>
-              <input type="text" value={form.sku} readOnly className={`${inputCls} text-gray-500 dark:text-gray-400`} />
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">SKU</label>
+              <input
+                type="text"
+                value={form.sku}
+                onChange={(e) => updateField("sku", e.target.value)}
+                className={inputCls}
+              />
             </div>
             <div>
-              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">Name</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -1411,32 +1599,337 @@ export default function ProductEditPage() {
               />
             </div>
             <div>
-              <label className="block text-[12px] text-gray-500 dark:text-gray-400 mb-1">Status</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Color</label>
               <input
                 type="text"
-                value={form.status}
-                readOnly
-                className={`${inputCls} text-gray-500 dark:text-gray-400`}
+                value={form.color}
+                onChange={(e) => updateField("color", e.target.value)}
+                placeholder="Green"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Origin</label>
+              <input
+                type="text"
+                value={form.origin}
+                onChange={(e) => updateField("origin", e.target.value)}
+                placeholder="Myanmar"
+                className={inputCls}
+              />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => updateField("description", e.target.value)}
+                rows={4}
+                placeholder="Detailed product notes"
+                className={inputCls}
               />
             </div>
           </div>
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
-          <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionHeading>Dimensions &amp; Weight</SectionHeading>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                Weight ({weightUnit})
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.weight}
+                  onChange={(e) => updateField("weight", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls}
+                />
+                <select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value as "g" | "ct")}
+                  className={`${inputCls} max-w-[96px]`}
+                >
+                  <option value="g">g</option>
+                  <option value="ct">ct</option>
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {convertedWeight ? `Equivalent: ${convertedWeight}` : "Supports grams and carats."}
+              </p>
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Length (mm)</label>
               <input
                 type="number"
-                min="0"
                 step="0.01"
-                value={form.buyPrice}
-                onChange={(e) => updateField("buyPrice", e.target.value)}
-                placeholder="1000"
+                value={form.length}
+                onChange={(e) => updateField("length", e.target.value)}
+                placeholder="0.00"
                 className={inputCls}
               />
             </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Depth (mm)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.depth}
+                onChange={(e) => updateField("depth", e.target.value)}
+                placeholder="0.00"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Height (mm)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.height}
+                onChange={(e) => updateField("height", e.target.value)}
+                placeholder="0.00"
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+          <SectionHeading>Import Details</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Import Date</label>
+              <input
+                type="date"
+                value={form.importDate}
+                onChange={(e) => updateField("importDate", e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Import ID</label>
+              <input
+                type="text"
+                value={form.importId}
+                onChange={(e) => updateField("importId", e.target.value)}
+                placeholder="IMP-2026-001"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">From Company ID</label>
+              <input
+                type="text"
+                value={form.fromCompanyId}
+                onChange={(e) => updateField("fromCompanyId", e.target.value)}
+                placeholder="COMP-01"
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+          <SectionHeading>Classification &amp; Visibility</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility</label>
+              <select
+                value={form.visibility}
+                onChange={(e) => {
+                  const nextVisibility = e.target.value;
+                  updateField("visibility", nextVisibility);
+
+                  if (nextVisibility === "PUBLIC" || nextVisibility === "TOP_SHELF") {
+                    updateField("minCustomerTier", "");
+                    updateField("targetUserIdsInput", "");
+                  }
+
+                  if (nextVisibility === "TARGETED_USER") {
+                    updateField("minCustomerTier", "");
+                  }
+                }}
+                className={inputCls}
+              >
+                {VISIBILITY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Tier</label>
+              <select
+                value={form.tier}
+                onChange={(e) => updateField("tier", e.target.value)}
+                className={inputCls}
+              >
+                {TIER_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
+              <select
+                value={form.status}
+                onChange={(e) => updateField("status", e.target.value)}
+                className={inputCls}
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(form.visibility === "PRIVATE" || form.visibility === "STAFF" || form.visibility === "USER_TIER") ? (
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Customer Tier
+                </label>
+                <select
+                  value={form.minCustomerTier}
+                  onChange={(e) => updateField("minCustomerTier", e.target.value)}
+                  className={inputCls}
+                >
+                  {PRODUCT_CUSTOMER_TIER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option || "None"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {form.visibility === "TARGETED_USER" ? (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <AdminCustomerPicker
+                  selectedIds={parseTargetUserIdsInput(form.targetUserIdsInput)}
+                  onChange={(nextIds) => updateField("targetUserIdsInput", nextIds.join(", "))}
+                  getAccessToken={getAccessToken}
+                  disabled={saving || productEditBlocked}
+                  label="Target Users"
+                  helperText="Pick the customer accounts that should be able to view this product."
+                />
+              </div>
+            ) : null}
+
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Visibility Note</label>
+              <input
+                type="text"
+                value={form.visibilityNote}
+                onChange={(e) => updateField("visibilityNote", e.target.value)}
+                placeholder="Optional note about visibility restrictions"
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+          <SectionHeading>Sourcing</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Source Type</label>
+              <select
+                value={form.sourceType}
+                onChange={(e) => updateField("sourceType", e.target.value)}
+                className={inputCls}
+              >
+                {SOURCE_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {form.sourceType === "CONSIGNED" ? (
+              <>
+                <div>
+                  <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                    Consignment Agreement ID
+                  </label>
+                  <input
+                    type="text"
+                    value={form.consignmentAgreementId}
+                    onChange={(e) => updateField("consignmentAgreementId", e.target.value)}
+                    placeholder="UUID of the consignment agreement"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                    Consignment Commission Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={form.consignmentCommissionRate}
+                    onChange={(e) => updateField("consignmentCommissionRate", e.target.value)}
+                    placeholder="15"
+                    className={inputCls}
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          {form.sourceType === "CONSIGNED" ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 p-4">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Replacement Consignment Contract
+                </p>
+                <MediaUploader
+                  files={consignmentContractFiles}
+                  onChange={setConsignmentContractFiles}
+                  maxFiles={1}
+                  maxSizeMB={50}
+                  maxVideoSizeMB={500}
+                  allowedTypes={["PDF"]}
+                  helperText="Upload a replacement signed contract PDF. This keeps the agreement id separate and sends the uploaded file as `consignmentContractMediaId`."
+                />
+              </div>
+
+              <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-4 text-sm text-amber-800 dark:text-amber-200">
+                Existing consignment-related PDFs remain visible in the media area below until you
+                replace or delete them.
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+          <SectionHeading>Pricing &amp; Profit Inputs</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {form.sourceType === "OWNED" ? (
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Buy Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.buyPrice}
+                  onChange={(e) => updateField("buyPrice", e.target.value)}
+                  placeholder="1000"
+                  className={inputCls}
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                Consigned products hide buy price and rely on the stored consignment rate.
+              </div>
+            )}
             <div>
               <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">Sale Min Price</label>
               <input
@@ -1695,15 +2188,13 @@ export default function ProductEditPage() {
 
             {publicVisibilityPreset === "TARGETED_USER" && (
               <div className="md:col-span-2">
-                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Target User IDs
-                </label>
-                <textarea
-                  value={publicTargetUserIdsInput}
-                  onChange={(e) => setPublicTargetUserIdsInput(e.target.value)}
-                  rows={3}
-                  placeholder="Enter user IDs separated by commas or new lines"
-                  className={inputCls}
+                <AdminCustomerPicker
+                  selectedIds={parseTargetUserIdsInput(publicTargetUserIdsInput)}
+                  onChange={(nextIds) => setPublicTargetUserIdsInput(nextIds.join(", "))}
+                  getAccessToken={getAccessToken}
+                  disabled={saving || productEditBlocked}
+                  label="Target User IDs"
+                  helperText="Choose the customers allowed to view the uploaded public media."
                 />
               </div>
             )}
@@ -1825,7 +2316,7 @@ export default function ProductEditPage() {
               onChange={(e) => setRoleVisibilityPreset(e.target.value as RoleMediaVisibilityPreset)}
               className={inputCls}
             >
-              {ROLE_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+              {roleVisibilityOptions.map((preset) => (
                 <option key={preset} value={preset}>
                   {preset}
                 </option>

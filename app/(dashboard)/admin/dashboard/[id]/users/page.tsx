@@ -4,20 +4,21 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import supabase from "@/lib/supabase";
+import { ADMIN_ACTION_BLOCKS } from "@/lib/adminAccessControl";
 import {
+  createAdminUserBan,
+  createAdminUserRestriction,
+  decideAdminApprovalRequest,
   getAdminApprovalRequests,
   getAdminUsers,
   handleAccountAccessDeniedError,
   type AdminAccountStatus,
+  type AdminActionBlock,
   type AdminApprovalRequest,
+  type AdminRestrictionMode,
   type AdminUserListItem,
   type AdminUserRole,
 } from "@/lib/apiClient";
-import {
-  ADMIN_CAPABILITY_DEFINITIONS,
-  type AdminCapabilityKey,
-} from "@/lib/adminUiConfig";
 import {
   accountStatusBadge,
   approvalStatusBadge,
@@ -26,9 +27,19 @@ import {
   getUserDisplayName,
   roleBadge,
 } from "@/lib/adminUiHelpers";
+import supabase from "@/lib/supabase";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 const ALL_FILTER = "__ALL__";
+const DURATION_PRESETS = [
+  { value: "1h", label: "1 hour", hours: 1 },
+  { value: "4h", label: "4 hours", hours: 4 },
+  { value: "12h", label: "12 hours", hours: 12 },
+  { value: "24h", label: "24 hours", hours: 24 },
+  { value: "3d", label: "3 days", hours: 72 },
+  { value: "7d", label: "7 days", hours: 168 },
+  { value: "custom", label: "Custom", hours: null },
+] as const;
 
 type Filters = {
   role: AdminUserRole | typeof ALL_FILTER;
@@ -36,15 +47,22 @@ type Filters = {
   search: string;
 };
 
-type RequestActionType = "ADMIN_CAPABILITIES" | "RESTRICTION" | "BAN";
+type InlineActionType = "RESTRICTION" | "BAN";
+type DurationPreset = (typeof DURATION_PRESETS)[number]["value"];
 
-type RequestDraft = {
-  actionType: RequestActionType;
-  capabilities: AdminCapabilityKey[];
+type InlineRequestDraft = {
+  actionType: InlineActionType;
+  durationPreset: DurationPreset;
+  untilDate: string;
   reason: string;
   note: string;
-  durationPreset: string;
-  untilDate: string;
+  restrictionMode: AdminRestrictionMode;
+  adminActionBlocks: AdminActionBlock[];
+};
+
+type ApprovalDecisionDraft = {
+  decisionNote: string;
+  enableAutoApproveForFuture: boolean;
 };
 
 const initialFilters: Filters = {
@@ -53,14 +71,82 @@ const initialFilters: Filters = {
   search: "",
 };
 
-const createDraft = (): RequestDraft => ({
+const createInlineDraft = (): InlineRequestDraft => ({
   actionType: "RESTRICTION",
-  capabilities: [],
-  reason: "",
-  note: "",
   durationPreset: "24h",
   untilDate: "",
+  reason: "",
+  note: "",
+  restrictionMode: "ACCOUNT",
+  adminActionBlocks: [],
 });
+
+const createDecisionDraft = (): ApprovalDecisionDraft => ({
+  decisionNote: "",
+  enableAutoApproveForFuture: false,
+});
+
+const ACTION_BLOCK_COPY: Record<AdminActionBlock, string> = {
+  PRODUCT_CREATE: "Product Create",
+  PRODUCT_EDIT: "Product Edit",
+  PRODUCT_VISIBILITY_MANAGE: "Product Visibility",
+  PRODUCT_DELETE: "Product Delete",
+  INVENTORY_REQUEST_DECIDE: "Inventory Requests",
+  USER_ACCESS_MANAGE: "User Access",
+  APPROVAL_REVIEW: "Approval Review",
+  STAFF_RULE_MANAGE: "Staff Rules",
+  LOG_DELETE: "Log Delete",
+};
+
+const formatActionMessage = (
+  label: string,
+  response: { statusCode: number; message: string | null },
+) => {
+  if (response.statusCode === 202) {
+    return response.message || `${label} submitted for main admin approval.`;
+  }
+
+  return response.message || `${label} applied successfully.`;
+};
+
+const toLocalIsoString = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Enter a valid date and time.");
+  }
+
+  return parsed.toISOString();
+};
+
+const resolveTimeWindow = (draft: InlineRequestDraft) => {
+  const startsAt = new Date();
+  const preset = DURATION_PRESETS.find((item) => item.value === draft.durationPreset);
+
+  if (!preset) {
+    throw new Error("Select a valid duration.");
+  }
+
+  if (preset.value === "custom") {
+    if (!draft.untilDate) {
+      throw new Error("Select the custom end date.");
+    }
+
+    const endsAt = toLocalIsoString(draft.untilDate);
+    if (new Date(endsAt).getTime() <= startsAt.getTime()) {
+      throw new Error("The end date must be in the future.");
+    }
+
+    return {
+      startsAt: startsAt.toISOString(),
+      endsAt,
+    };
+  }
+
+  return {
+    startsAt: startsAt.toISOString(),
+    endsAt: new Date(startsAt.getTime() + (preset.hours || 0) * 60 * 60 * 1000).toISOString(),
+  };
+};
 
 export default function AdminUsersPage() {
   const { dashboardBasePath, isMainAdmin, userId } = useRole();
@@ -77,12 +163,16 @@ export default function AdminUsersPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [expandedUserId, setExpandedUserId] = useState("");
-  const [requestDrafts, setRequestDrafts] = useState<Record<string, RequestDraft>>({});
-  const [requestMessages, setRequestMessages] = useState<Record<string, string>>({});
+  const [inlineDrafts, setInlineDrafts] = useState<Record<string, InlineRequestDraft>>({});
+  const [inlineMessages, setInlineMessages] = useState<Record<string, string>>({});
+  const [inlineBusyByUserId, setInlineBusyByUserId] = useState<Record<string, boolean>>({});
 
   const [approvalRows, setApprovalRows] = useState<AdminApprovalRequest[]>([]);
   const [approvalLoading, setApprovalLoading] = useState(true);
   const [approvalError, setApprovalError] = useState("");
+  const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDecisionDraft>>({});
+  const [approvalBusyId, setApprovalBusyId] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState("");
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -112,8 +202,8 @@ export default function AdminUsersPage() {
         accessToken,
         page,
         limit,
+        status: appliedFilters.status !== ALL_FILTER ? appliedFilters.status : undefined,
         role: appliedFilters.role !== ALL_FILTER ? appliedFilters.role : undefined,
-        accountStatus: appliedFilters.status !== ALL_FILTER ? appliedFilters.status : undefined,
         search: appliedFilters.search.trim() || undefined,
       });
 
@@ -146,6 +236,7 @@ export default function AdminUsersPage() {
         requestedByUserId: isMainAdmin ? undefined : userId,
         limit: 20,
       });
+
       setApprovalRows(response.items);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
@@ -154,7 +245,7 @@ export default function AdminUsersPage() {
 
       setApprovalRows([]);
       setApprovalError(
-        caughtError instanceof Error ? caughtError.message : "Failed to load approval queue.",
+        caughtError instanceof Error ? caughtError.message : "Failed to load approval requests.",
       );
     } finally {
       setApprovalLoading(false);
@@ -196,41 +287,158 @@ export default function AdminUsersPage() {
     setPage(1);
   };
 
-  const updateDraft = (targetUserId: string, patch: Partial<RequestDraft>) => {
-    setRequestDrafts((current) => ({
+  const getInlineDraft = useCallback(
+    (targetUserId: string) => inlineDrafts[targetUserId] || createInlineDraft(),
+    [inlineDrafts],
+  );
+  const getApprovalDraft = useCallback(
+    (requestId: string) => approvalDrafts[requestId] || createDecisionDraft(),
+    [approvalDrafts],
+  );
+
+  const updateInlineDraft = (targetUserId: string, patch: Partial<InlineRequestDraft>) => {
+    setInlineDrafts((current) => ({
       ...current,
       [targetUserId]: {
-        ...(current[targetUserId] || createDraft()),
+        ...(current[targetUserId] || createInlineDraft()),
         ...patch,
       },
     }));
   };
 
-  const getDraftForUser = (targetUserId: string) => requestDrafts[targetUserId] || createDraft();
+  const updateApprovalDraft = (requestId: string, patch: Partial<ApprovalDecisionDraft>) => {
+    setApprovalDrafts((current) => ({
+      ...current,
+      [requestId]: {
+        ...(current[requestId] || createDecisionDraft()),
+        ...patch,
+      },
+    }));
+  };
 
-  const toggleCapability = (targetUserId: string, capability: AdminCapabilityKey) => {
-    const currentDraft = getDraftForUser(targetUserId);
-    const nextCapabilities = currentDraft.capabilities.includes(capability)
-      ? currentDraft.capabilities.filter((entry) => entry !== capability)
-      : [...currentDraft.capabilities, capability];
+  const toggleAdminActionBlock = (targetUserId: string, block: AdminActionBlock) => {
+    const draft = getInlineDraft(targetUserId);
+    const next = draft.adminActionBlocks.includes(block)
+      ? draft.adminActionBlocks.filter((value) => value !== block)
+      : [...draft.adminActionBlocks, block];
 
-    updateDraft(targetUserId, {
-      capabilities: nextCapabilities,
+    updateInlineDraft(targetUserId, {
+      adminActionBlocks: next,
     });
   };
 
-  const stageRequest = (row: AdminUserListItem) => {
-    const draft = getDraftForUser(row.id);
-    const restrictionDetails =
-      draft.actionType === "ADMIN_CAPABILITIES" && draft.capabilities.length
-        ? ` Limited: ${draft.capabilities.join(", ")}.`
-        : "";
+  const submitInlineRequest = useCallback(
+    async (row: AdminUserListItem) => {
+      const draft = getInlineDraft(row.id);
+      setInlineMessages((current) => ({
+        ...current,
+        [row.id]: "",
+      }));
+      setInlineBusyByUserId((current) => ({
+        ...current,
+        [row.id]: true,
+      }));
 
-    setRequestMessages((current) => ({
-      ...current,
-      [row.id]: `${draft.actionType} request staged for ${getUserDisplayName(row)}.${restrictionDetails} Endpoint wiring pending.`,
-    }));
-  };
+      try {
+        const accessToken = await getAccessToken();
+        const { startsAt, endsAt } = resolveTimeWindow(draft);
+
+        if (!draft.reason.trim()) {
+          throw new Error("Reason is required.");
+        }
+
+        if (draft.actionType === "RESTRICTION") {
+          if (
+            draft.restrictionMode === "ADMIN_ACTIONS" &&
+            draft.adminActionBlocks.length === 0
+          ) {
+            throw new Error("Select at least one admin action block.");
+          }
+
+          const response = await createAdminUserRestriction({
+            accessToken,
+            userId: row.id,
+            reason: draft.reason.trim(),
+            note: draft.note.trim() || null,
+            startsAt,
+            endsAt,
+            restrictionMode: draft.restrictionMode,
+            adminActionBlocks:
+              draft.restrictionMode === "ADMIN_ACTIONS" ? draft.adminActionBlocks : undefined,
+          });
+
+          setInlineMessages((current) => ({
+            ...current,
+            [row.id]: formatActionMessage("Restriction", response),
+          }));
+        } else {
+          const response = await createAdminUserBan({
+            accessToken,
+            userId: row.id,
+            reason: draft.reason.trim(),
+            note: draft.note.trim() || null,
+            startsAt,
+            endsAt,
+          });
+
+          setInlineMessages((current) => ({
+            ...current,
+            [row.id]: formatActionMessage("Ban", response),
+          }));
+        }
+
+        await Promise.all([loadUsers(), loadApprovalQueue()]);
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to submit the request.";
+
+        setInlineMessages((current) => ({
+          ...current,
+          [row.id]: message,
+        }));
+      } finally {
+        setInlineBusyByUserId((current) => ({
+          ...current,
+          [row.id]: false,
+        }));
+      }
+    },
+    [getAccessToken, getInlineDraft, loadApprovalQueue, loadUsers],
+  );
+
+  const decideRequest = useCallback(
+    async (request: AdminApprovalRequest, decision: "APPROVE" | "REJECT") => {
+      const draft = getApprovalDraft(request.id);
+      setApprovalBusyId(request.id);
+      setApprovalMessage("");
+
+      try {
+        const accessToken = await getAccessToken();
+        const response = await decideAdminApprovalRequest({
+          accessToken,
+          requestId: request.id,
+          decision,
+          decisionNote: draft.decisionNote.trim() || undefined,
+          enableAutoApproveForFuture:
+            decision === "APPROVE" ? draft.enableAutoApproveForFuture : undefined,
+        });
+
+        setApprovalMessage(formatActionMessage(`Request ${decision.toLowerCase()}`, response));
+        await Promise.all([loadUsers(), loadApprovalQueue()]);
+      } catch (caughtError) {
+        setApprovalMessage(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to decide the approval request.",
+        );
+      } finally {
+        setApprovalBusyId("");
+      }
+    },
+    [getAccessToken, getApprovalDraft, loadApprovalQueue, loadUsers],
+  );
 
   const totalStart = total === 0 ? 0 : (page - 1) * limit + 1;
   const totalEnd = Math.min(total, page * limit);
@@ -241,15 +449,10 @@ export default function AdminUsersPage() {
         title="Users"
         description={
           isMainAdmin
-            ? "Main admin flow routes into full User Settings."
-            : "Admin flow stays on the users page with inline request forms only."
+            ? "Main admin opens full user settings and reviews pending approvals."
+            : "Admin accounts use inline restriction and ban request flows from the user list."
         }
       />
-
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
-        This page now separates the two admin experiences: Main Admin opens full user settings,
-        while Admin accounts stay in an inline snapshot and request flow.
-      </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
         <div className="grid gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))_180px]">
@@ -345,38 +548,44 @@ export default function AdminUsersPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Active On Page
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{counts.active}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {counts.active}
+          </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Admins
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{counts.admins}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {counts.admins}
+          </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Managers
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{counts.managers}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {counts.managers}
+          </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Sales
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{counts.sales}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {counts.sales}
+          </p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              {isMainAdmin ? "User Settings Entry" : "User Snapshot Request Flow"}
-            </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {totalStart}-{totalEnd} of {total}
-            </p>
-          </div>
+        <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            {isMainAdmin ? "User Settings Entry" : "Inline Access Controls"}
+          </h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {totalStart}-{totalEnd} of {total}
+          </p>
         </div>
 
         {loading ? (
@@ -398,8 +607,9 @@ export default function AdminUsersPage() {
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {rows.map((row) => {
               const isExpanded = expandedUserId === row.id;
-              const draft = getDraftForUser(row.id);
+              const draft = getInlineDraft(row.id);
               const isProtectedTarget = row.isMainAdmin && !isMainAdmin;
+              const inlineMessage = inlineMessages[row.id];
 
               return (
                 <div key={row.id} className="px-5 py-4">
@@ -438,10 +648,12 @@ export default function AdminUsersPage() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => setExpandedUserId((current) => (current === row.id ? "" : row.id))}
+                        onClick={() =>
+                          setExpandedUserId((current) => (current === row.id ? "" : row.id))
+                        }
                         className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                       >
-                        {isExpanded ? "Hide Snapshot" : "Extend Snapshot"}
+                        {isExpanded ? "Hide Controls" : "Open Controls"}
                       </button>
                     )}
                   </div>
@@ -477,10 +689,10 @@ export default function AdminUsersPage() {
 
                       {isProtectedTarget ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200">
-                          Main Admin accounts are protected from inline admin requests.
+                          Main admin accounts are protected from inline access-control requests.
                         </div>
                       ) : (
-                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                           <div className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
@@ -490,13 +702,12 @@ export default function AdminUsersPage() {
                                 <select
                                   value={draft.actionType}
                                   onChange={(event) =>
-                                    updateDraft(row.id, {
-                                      actionType: event.target.value as RequestActionType,
+                                    updateInlineDraft(row.id, {
+                                      actionType: event.target.value as InlineActionType,
                                     })
                                   }
                                   className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
                                 >
-                                  <option value="ADMIN_CAPABILITIES">Admin Capabilities</option>
                                   <option value="RESTRICTION">Restriction</option>
                                   <option value="BAN">Ban</option>
                                 </select>
@@ -509,17 +720,17 @@ export default function AdminUsersPage() {
                                 <select
                                   value={draft.durationPreset}
                                   onChange={(event) =>
-                                    updateDraft(row.id, {
-                                      durationPreset: event.target.value,
+                                    updateInlineDraft(row.id, {
+                                      durationPreset: event.target.value as DurationPreset,
                                     })
                                   }
                                   className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
                                 >
-                                  <option value="1h">1 hour</option>
-                                  <option value="4h">4 hours</option>
-                                  <option value="12h">12 hours</option>
-                                  <option value="24h">24 hours</option>
-                                  <option value="custom">Custom date</option>
+                                  {DURATION_PRESETS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
                                 </select>
                               </div>
                             </div>
@@ -527,13 +738,13 @@ export default function AdminUsersPage() {
                             {draft.durationPreset === "custom" ? (
                               <div>
                                 <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                                  Until Date
+                                  Ends At
                                 </label>
                                 <input
                                   type="datetime-local"
                                   value={draft.untilDate}
                                   onChange={(event) =>
-                                    updateDraft(row.id, {
+                                    updateInlineDraft(row.id, {
                                       untilDate: event.target.value,
                                     })
                                   }
@@ -542,32 +753,49 @@ export default function AdminUsersPage() {
                               </div>
                             ) : null}
 
-                            {draft.actionType === "ADMIN_CAPABILITIES" ? (
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                                  Capabilities To Restrict
-                                </p>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                  {ADMIN_CAPABILITY_DEFINITIONS.map((capability) => (
-                                    <label
-                                      key={capability.key}
-                                      className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={draft.capabilities.includes(capability.key)}
-                                        onChange={() => toggleCapability(row.id, capability.key)}
-                                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                                      />
-                                      <span>
-                                        <span className="block font-semibold">{capability.label}</span>
-                                        <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                                          {capability.helper}
-                                        </span>
-                                      </span>
-                                    </label>
-                                  ))}
+                            {draft.actionType === "RESTRICTION" ? (
+                              <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
+                                <div>
+                                  <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                                    Restriction Mode
+                                  </label>
+                                  <select
+                                    value={draft.restrictionMode}
+                                    onChange={(event) =>
+                                      updateInlineDraft(row.id, {
+                                        restrictionMode: event.target.value as AdminRestrictionMode,
+                                      })
+                                    }
+                                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                                  >
+                                    <option value="ACCOUNT">ACCOUNT</option>
+                                    <option value="ADMIN_ACTIONS">ADMIN_ACTIONS</option>
+                                  </select>
                                 </div>
+
+                                {draft.restrictionMode === "ADMIN_ACTIONS" ? (
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                                      Blocked Admin Actions
+                                    </p>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                      {ADMIN_ACTION_BLOCKS.map((block) => (
+                                        <label
+                                          key={block}
+                                          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={draft.adminActionBlocks.includes(block)}
+                                            onChange={() => toggleAdminActionBlock(row.id, block)}
+                                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                          />
+                                          {ACTION_BLOCK_COPY[block]}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
 
@@ -578,11 +806,11 @@ export default function AdminUsersPage() {
                               <input
                                 value={draft.reason}
                                 onChange={(event) =>
-                                  updateDraft(row.id, {
+                                  updateInlineDraft(row.id, {
                                     reason: event.target.value,
                                   })
                                 }
-                                placeholder="Reason for the request"
+                                placeholder="Reason for review"
                                 className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
                               />
                             </div>
@@ -594,12 +822,12 @@ export default function AdminUsersPage() {
                               <textarea
                                 value={draft.note}
                                 onChange={(event) =>
-                                  updateDraft(row.id, {
+                                  updateInlineDraft(row.id, {
                                     note: event.target.value,
                                   })
                                 }
                                 rows={3}
-                                placeholder="Explain the context for main admin review"
+                                placeholder="Internal note for the approval trail"
                                 className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
                               />
                             </div>
@@ -610,19 +838,32 @@ export default function AdminUsersPage() {
                               Submit Request
                             </h3>
                             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                              This panel mirrors the admin POV from your spec: snapshot only,
-                              then restriction or ban request from the users page.
+                              Restriction and ban requests now post directly to the updated user
+                              management routes. A `202` response is treated as a submitted request.
                             </p>
                             <button
                               type="button"
-                              onClick={() => stageRequest(row)}
-                              className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                              onClick={() => {
+                                void submitInlineRequest(row);
+                              }}
+                              disabled={inlineBusyByUserId[row.id] === true}
+                              className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Stage Request Flow
+                              {inlineBusyByUserId[row.id] === true
+                                ? "Submitting..."
+                                : `Submit ${draft.actionType.toLowerCase()}`}
                             </button>
-                            {requestMessages[row.id] ? (
-                              <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-                                {requestMessages[row.id]}
+                            {inlineMessage ? (
+                              <p
+                                className={`mt-3 rounded-xl border px-3 py-3 text-sm ${
+                                  inlineMessage.toLowerCase().includes("failed") ||
+                                  inlineMessage.toLowerCase().includes("required") ||
+                                  inlineMessage.toLowerCase().includes("valid")
+                                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300"
+                                }`}
+                              >
+                                {inlineMessage}
                               </p>
                             ) : null}
                           </div>
@@ -660,10 +901,27 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {isMainAdmin ? "Approval Queue" : "My Requests"}
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              {isMainAdmin ? "Approval Queue" : "My Submitted Requests"}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {isMainAdmin
+                ? "Approve or reject pending requests. Product-related requests can still be inspected in their detail flows."
+                : "Recent approval requests submitted by your admin account."}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              void loadApprovalQueue();
+            }}
+            className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Refresh Queue
+          </button>
         </div>
 
         {approvalLoading ? (
@@ -682,48 +940,104 @@ export default function AdminUsersPage() {
             No approval requests found.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-400">
-                  <th className="px-5 py-3 font-medium">Created</th>
-                  <th className="px-5 py-3 font-medium">Action</th>
-                  <th className="px-5 py-3 font-medium">Target</th>
-                  <th className="px-5 py-3 font-medium">Requester</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvalRows.map((request) => (
-                  <tr
-                    key={request.id}
-                    className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                  >
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
-                      {formatDateTime(request.createdAt)}
-                    </td>
-                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">
-                      {request.actionType}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {request.targetUser?.email || request.targetUserId}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {request.requestedByUser?.email || request.requestedByUserId || "-"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${approvalStatusBadge(request.status)}`}
-                      >
-                        {request.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {approvalRows.map((request) => {
+              const draft = getApprovalDraft(request.id);
+              const isPending = request.status === "PENDING";
+
+              return (
+                <div key={request.id} className="px-5 py-4">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {request.actionType}
+                        </p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${approvalStatusBadge(request.status)}`}
+                        >
+                          {request.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        Target: {request.targetUser?.email || request.targetUserId}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Requester: {request.requestedByUser?.email || request.requestedByUserId || "-"}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Reason: {request.requestReason || "-"}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                        Created {formatDateTime(request.createdAt)}
+                      </p>
+                    </div>
+
+                    {isMainAdmin && isPending ? (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                        <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                          Decision Note
+                        </label>
+                        <textarea
+                          value={draft.decisionNote}
+                          onChange={(event) =>
+                            updateApprovalDraft(request.id, {
+                              decisionNote: event.target.value,
+                            })
+                          }
+                          rows={3}
+                          placeholder="Optional note for the decision trail"
+                          className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                        />
+                        <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={draft.enableAutoApproveForFuture}
+                            onChange={(event) =>
+                              updateApprovalDraft(request.id, {
+                                enableAutoApproveForFuture: event.target.checked,
+                              })
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          Enable auto-approve for future requests
+                        </label>
+                        <div className="mt-4 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void decideRequest(request, "APPROVE");
+                            }}
+                            disabled={approvalBusyId === request.id}
+                            className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {approvalBusyId === request.id ? "Saving..." : "Approve"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void decideRequest(request, "REJECT");
+                            }}
+                            disabled={approvalBusyId === request.id}
+                            className="flex-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {approvalBusyId === request.id ? "Saving..." : "Reject"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+
+        {approvalMessage ? (
+          <div className="border-t border-gray-200 px-5 py-4 text-sm text-emerald-700 dark:border-gray-700/60 dark:text-emerald-300">
+            {approvalMessage}
+          </div>
+        ) : null}
       </div>
     </div>
   );

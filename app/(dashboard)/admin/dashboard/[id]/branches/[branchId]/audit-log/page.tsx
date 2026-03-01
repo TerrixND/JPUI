@@ -5,14 +5,16 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import supabase from "@/lib/supabase";
 import {
-  getAdminAuditLogs,
-  getAdminBranchesWithManagers,
+  getAdminBranchAuditLogs,
+  getAdminBranchDetail,
   handleAccountAccessDeniedError,
   type AdminAuditLogRow,
 } from "@/lib/apiClient";
 import { formatDateTime } from "@/lib/adminUiHelpers";
+import supabase from "@/lib/supabase";
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 export default function AdminBranchAuditLogPage() {
   const params = useParams();
@@ -23,6 +25,10 @@ export default function AdminBranchAuditLogPage() {
   const [rows, setRows] = useState<AdminAuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(25);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -48,44 +54,52 @@ export default function AdminBranchAuditLogPage() {
 
     try {
       const accessToken = await getAccessToken();
-      const [branchResponse, auditResponse] = await Promise.all([
-        getAdminBranchesWithManagers({
-          accessToken,
-          page: 1,
-          limit: 200,
-          includeInactive: true,
-        }),
-        getAdminAuditLogs({
+      const [detail, auditResponse] = await Promise.all([
+        getAdminBranchDetail({ accessToken, branchId }),
+        getAdminBranchAuditLogs({
           accessToken,
           branchId,
-          limit: 200,
+          page,
+          limit,
         }),
       ]);
 
-      const branch = branchResponse.items.find((item) => item.id === branchId);
-      setBranchName(branch?.name || "Branch");
+      setBranchName(detail.branch?.name || "Branch");
       setRows(auditResponse.items);
+      setTotal(auditResponse.total);
+      setTotalPages(Math.max(1, auditResponse.totalPages));
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
       }
 
       setRows([]);
+      setTotal(0);
+      setTotalPages(1);
       setError(caughtError instanceof Error ? caughtError.message : "Failed to load branch audit log.");
     } finally {
       setLoading(false);
     }
-  }, [branchId, getAccessToken]);
+  }, [branchId, getAccessToken, limit, page]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const totalStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const totalEnd = Math.min(total, page * limit);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${branchName} Audit Log`}
-        description="Dedicated audit page for the branch detail flow."
+        description="Dedicated audit history from the updated `/admin/branches/:branchId/audit-logs` route."
         action={
           <Link
             href={`${dashboardBasePath}/branches/${branchId}`}
@@ -95,6 +109,29 @@ export default function AdminBranchAuditLogPage() {
           </Link>
         }
       />
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="grid gap-3 md:grid-cols-[160px_1fr]">
+          <select
+            value={limit}
+            onChange={(event) => {
+              setPage(1);
+              setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
+            }}
+            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} rows
+              </option>
+            ))}
+          </select>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-400">
+            {totalStart}-{totalEnd} of {total}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
         <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
@@ -140,6 +177,28 @@ export default function AdminBranchAuditLogPage() {
             </table>
           </div>
         )}
+
+        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700/60">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page === 1}
+            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Prev
+          </button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Page {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

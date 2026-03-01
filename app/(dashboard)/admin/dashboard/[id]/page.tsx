@@ -7,36 +7,22 @@ import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
   getAdminAuditLogs,
-  getAdminBranchesWithManagers,
-  getAdminInventoryRequests,
+  getAdminApprovalRequests,
+  getAdminBranchAnalytics,
+  getAdminInventoryProfitAnalytics,
   getAdminUsers,
   type AdminAuditLogRow,
-  type AdminBranchWithManagersRecord,
+  type AdminBranchNetworkRecord,
 } from "@/lib/apiClient";
-
-type ApiErrorPayload = {
-  message?: string;
-  code?: string;
-  reason?: string;
-};
-
-type InventoryProfitSnapshot = {
-  totals: {
-    productCount: number;
-    pricedProductCount: number;
-    unpricedProductCount: number;
-    projectedRevenueMin: number;
-    projectedRevenueMax: number;
-    projectedNetProfitMin: number;
-    projectedNetProfitMax: number;
-  };
-};
 
 type DashboardCounts = {
   activeUsers: number;
   branches: number;
   pendingRequests: number;
 };
+
+const BRANCH_PREVIEW_LIMIT = 6;
+const BRANCH_ANALYTICS_REQUEST_ROWS = 10;
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -47,13 +33,6 @@ const money = new Intl.NumberFormat("en-US", {
 const moneyRange = (min: number, max: number) => {
   if (min === max) return money.format(min);
   return `${money.format(min)} – ${money.format(max)}`;
-};
-
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = payload?.message || fallback;
-  const code = payload?.code ? ` (code: ${payload.code})` : "";
-  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
-  return `${message}${code}${reason}`;
 };
 
 const getErrorMessage = (value: unknown, fallback: string) => {
@@ -102,7 +81,7 @@ const getBranchStatusBadge = (status: string | null) => {
   return "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400";
 };
 
-const getPrimaryManagerLabel = (branch: AdminBranchWithManagersRecord) => {
+const getPrimaryManagerLabel = (branch: AdminBranchNetworkRecord) => {
   const manager =
     branch.primaryManager ||
     branch.managers.find((entry) => entry.isPrimaryMembership) ||
@@ -139,7 +118,9 @@ function BranchRowSkeleton() {
 export default function AdminDashboard() {
   const { dashboardBasePath } = useRole();
 
-  const [profitSnapshot, setProfitSnapshot] = useState<InventoryProfitSnapshot | null>(null);
+  const [profitSnapshot, setProfitSnapshot] = useState<Awaited<
+    ReturnType<typeof getAdminInventoryProfitAnalytics>
+  > | null>(null);
   const [profitError, setProfitError] = useState("");
   const [profitLoading, setProfitLoading] = useState(true);
 
@@ -151,7 +132,7 @@ export default function AdminDashboard() {
   const [countsLoading, setCountsLoading] = useState(true);
   const [countsError, setCountsError] = useState("");
 
-  const [branchRows, setBranchRows] = useState<AdminBranchWithManagersRecord[]>([]);
+  const [branchRows, setBranchRows] = useState<AdminBranchNetworkRecord[]>([]);
   const [branchLoading, setBranchLoading] = useState(true);
   const [branchError, setBranchError] = useState("");
 
@@ -178,25 +159,12 @@ export default function AdminDashboard() {
 
     try {
       const accessToken = await getAccessToken();
-
-      const response = await fetch("/api/v1/admin/analytics/inventory-profit?includeSold=true", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: "no-store",
+      const payload = await getAdminInventoryProfitAnalytics({
+        accessToken,
+        includeSold: true,
       });
 
-      const payload = (await response.json().catch(() => null)) as
-        | ApiErrorPayload
-        | InventoryProfitSnapshot
-        | null;
-
-      if (!response.ok) {
-        throw new Error(
-          toErrorMessage(payload as ApiErrorPayload | null, "Failed to load projected inventory profit."),
-        );
-      }
-
-      setProfitSnapshot(payload as InventoryProfitSnapshot);
+      setProfitSnapshot(payload);
     } catch (caughtError) {
       setProfitSnapshot(null);
       setProfitError(
@@ -219,12 +187,16 @@ export default function AdminDashboard() {
       const accessToken = await getAccessToken();
       const [usersResult, branchesResult, pendingResult] = await Promise.allSettled([
         getAdminUsers({ accessToken, page: 1, limit: 1, accountStatus: "ACTIVE" }),
-        getAdminBranchesWithManagers({ accessToken, page: 1, limit: 6, includeInactive: true }),
-        getAdminInventoryRequests({
+        getAdminBranchAnalytics({
+          accessToken,
+          includeInactiveBranches: true,
+          rows: BRANCH_ANALYTICS_REQUEST_ROWS,
+        }),
+        getAdminApprovalRequests({
           accessToken,
           page: 1,
           limit: 1,
-          status: ["PENDING_MANAGER", "PENDING_MAIN"],
+          status: "PENDING",
         }),
       ]);
 
@@ -239,7 +211,7 @@ export default function AdminDashboard() {
 
       if (branchesResult.status === "fulfilled") {
         nextCounts.branches = branchesResult.value.total;
-        setBranchRows(branchesResult.value.items);
+        setBranchRows(branchesResult.value.items.slice(0, BRANCH_PREVIEW_LIMIT));
       } else {
         setBranchRows([]);
         const message = getErrorMessage(branchesResult.reason, "Failed to load branch network.");
@@ -329,11 +301,11 @@ export default function AdminDashboard() {
         ),
       },
       {
-        label: "Pending Requests",
+        label: "Pending Approvals",
         value: countsLoading ? null : counts.pendingRequests.toLocaleString(),
         accent: "bg-amber-50 text-amber-600 border-amber-100",
         bar: "bg-amber-500",
-        href: `${dashboardBasePath}/inventory`,
+        href: `${dashboardBasePath}/users`,
         icon: (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />

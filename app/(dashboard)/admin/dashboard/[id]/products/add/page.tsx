@@ -4,17 +4,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import AdminCustomerPicker from "@/components/ui/dashboard/AdminCustomerPicker";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUploader";
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
-import { type CustomerTier, type MediaVisibilityPreset } from "@/lib/apiClient";
+import {
+  createAdminProduct,
+  getAdminBranchMembers,
+  getAdminBranchesWithManagers,
+  type CustomerTier,
+  type MediaVisibilityPreset,
+} from "@/lib/apiClient";
 import {
   CUSTOMER_TIER_OPTIONS as MEDIA_CUSTOMER_TIER_OPTIONS,
   PUBLIC_MEDIA_VISIBILITY_PRESETS,
   parseTargetUserIdsInput,
 } from "@/lib/mediaVisibility";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
+import { setAdminProductsFlash } from "@/lib/dashboardFlash";
 import {
   caratsToGrams,
   deriveQuickVisibilityChoices,
@@ -60,42 +68,12 @@ type AllocationRow = {
   note: string;
 };
 
-type ApiErrorPayload = {
-  message?: string;
-  code?: string;
-  reason?: string;
-};
-
-type BranchAnalyticsResponse = {
-  branches?: BranchOption[];
-  message?: string;
-};
-
 type BranchOption = {
   id: string;
   code: string;
   name: string;
   city: string | null;
   status: string;
-};
-
-type BranchMember = {
-  memberRole?: string;
-  user?: {
-    id?: string;
-    email?: string | null;
-    status?: string | null;
-    role?: string | null;
-    managerProfile?: {
-      displayName?: string | null;
-    } | null;
-    salespersonProfile?: {
-      displayName?: string | null;
-    } | null;
-    customerProfile?: {
-      displayName?: string | null;
-    } | null;
-  } | null;
 };
 
 type ManagerOption = {
@@ -158,13 +136,6 @@ const createAllocationRow = (): AllocationRow => ({
   note: "",
 });
 
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = payload?.message || fallback;
-  const code = payload?.code ? ` (code: ${payload.code})` : "";
-  const reason = payload?.reason ? ` (reason: ${payload.reason})` : "";
-  return `${message}${code}${reason}`;
-};
-
 const formatBranchLabel = (branch: BranchOption) => {
   const code = branch.code ? `${branch.code} - ` : "";
   const city = branch.city ? ` (${branch.city})` : "";
@@ -212,7 +183,7 @@ export default function AddProductPage() {
   const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
-  const [consignmentAgreementFiles, setConsignmentAgreementFiles] = useState<MediaFile[]>([]);
+  const [consignmentContractFiles, setConsignmentContractFiles] = useState<MediaFile[]>([]);
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -300,34 +271,17 @@ export default function AddProductPage() {
 
       try {
         const accessToken = await getAccessToken();
-
-        const response = await fetch(`/api/v1/admin/branches/${branchId}/members`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
+        const members = await getAdminBranchMembers({
+          accessToken,
+          branchId,
         });
-
-        const payload = (await response.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchMember[]
-          | null;
-
-        if (!response.ok) {
-          throw new Error(
-            toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branch managers."),
-          );
-        }
-
-        const members = Array.isArray(payload) ? payload : [];
 
         const dedupe = new Set<string>();
         const managers: ManagerOption[] = [];
 
         for (const member of members) {
-          const isManagerRow = String(member?.memberRole || "").toUpperCase() === "MANAGER";
-          const user = member?.user;
+          const isManagerRow = String(member.memberRole || "").toUpperCase() === "MANAGER";
+          const user = member.user;
           const userId = user?.id || "";
           const userStatus = String(user?.status || "").toUpperCase();
 
@@ -335,16 +289,9 @@ export default function AddProductPage() {
             continue;
           }
 
-          const displayName =
-            user?.managerProfile?.displayName ||
-            user?.salespersonProfile?.displayName ||
-            user?.customerProfile?.displayName ||
-            user?.email ||
-            userId;
-
           managers.push({
             id: userId,
-            label: displayName,
+            label: user.displayName || user.email || userId,
           });
 
           dedupe.add(userId);
@@ -376,27 +323,18 @@ export default function AddProductPage() {
 
       try {
         const accessToken = await getAccessToken();
-
-        const response = await fetch("/api/v1/admin/analytics/branches", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
+        const response = await getAdminBranchesWithManagers({
+          accessToken,
+          limit: 200,
+          includeInactive: true,
         });
-
-        const payload = (await response.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchAnalyticsResponse
-          | null;
-
-        if (!response.ok) {
-          throw new Error(toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branches."));
-        }
-
-        const branchRows = Array.isArray((payload as BranchAnalyticsResponse)?.branches)
-          ? ((payload as BranchAnalyticsResponse).branches as BranchOption[])
-          : [];
+        const branchRows = response.items.map((branch) => ({
+          id: branch.id,
+          code: branch.code || "",
+          name: branch.name || "Unnamed Branch",
+          city: branch.city,
+          status: branch.status || "ACTIVE",
+        }));
 
         setBranches(branchRows);
       } catch (caughtError) {
@@ -521,19 +459,39 @@ export default function AddProductPage() {
       const saleMinPrice = parseOptionalNumber(form.saleMinPrice, "Minimum sale price");
       const saleMaxPrice = parseOptionalNumber(form.saleMaxPrice, "Maximum sale price");
       const normalizedWeight = parseOptionalNumber(form.weight, "Weight");
-
-      if (
-        form.visibility === "STAFF"
-        || form.visibility === "USER_TIER"
-        || form.visibility === "TARGETED_USER"
-      ) {
-        throw new Error(
-          "This updated visibility option is staged in the UI and will be connected once the new product endpoint is provided.",
-        );
-      }
+      const normalizedLength = parseOptionalNumber(form.length, "Length");
+      const normalizedDepth = parseOptionalNumber(form.depth, "Depth");
+      const normalizedHeight = parseOptionalNumber(form.height, "Height");
+      const consignmentRate = parseOptionalNumber(
+        form.consignmentCommissionRate,
+        "Consignment commission rate",
+      );
+      const productTargetUserIds = parseTargetUserIdsInput(form.targetUserIdsInput);
+      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
 
       if (saleMinPrice !== null && saleMaxPrice !== null && saleMaxPrice < saleMinPrice) {
         throw new Error("Maximum sale price must be greater than or equal to minimum sale price.");
+      }
+      if (
+        form.visibility === "USER_TIER"
+        && !(
+          form.minCustomerTier === "REGULAR"
+          || form.minCustomerTier === "VIP"
+          || form.minCustomerTier === "ULTRA_VIP"
+        )
+      ) {
+        throw new Error("Select a customer tier for USER_TIER visibility.");
+      }
+      if (form.visibility === "TARGETED_USER" && productTargetUserIds.length === 0) {
+        throw new Error("Provide at least one target user id for TARGETED_USER visibility.");
+      }
+      if (form.sourceType === "CONSIGNED") {
+        if (consignmentRate === null) {
+          throw new Error("Consigned products require a consignment commission rate.");
+        }
+        if (consignmentRate > 100) {
+          throw new Error("Consignment commission rate must be between 0 and 100.");
+        }
       }
 
       const normalizedAllocations = allocations.map((row, index) => {
@@ -550,9 +508,9 @@ export default function AddProductPage() {
 
           return {
             targetType: "BRANCH" as const,
-            branchId: row.branchId,
+            beneficiaryBranchId: row.branchId,
             rate,
-            note: row.note.trim() || undefined,
+            note: row.note.trim() || null,
           };
         }
 
@@ -562,9 +520,9 @@ export default function AddProductPage() {
 
         return {
           targetType: "USER" as const,
-          userId: row.userId,
+          beneficiaryUserId: row.userId,
           rate,
-          note: row.note.trim() || undefined,
+          note: row.note.trim() || null,
         };
       });
 
@@ -574,97 +532,149 @@ export default function AddProductPage() {
       }
 
       ensureMediaUploadMetadata();
+      if (
+        form.sourceType === "CONSIGNED"
+        && consignmentContractFiles.length > 0
+        && !form.consignmentAgreementId.trim()
+      ) {
+        throw new Error("Provide the consignment agreement id before uploading a contract PDF.");
+      }
       setLoading(true);
 
       const accessToken = await getAccessToken();
-
-      const payload = {
-        sku: form.sku.trim(),
-        name: form.name.trim() || null,
-        color: form.color.trim() || null,
-        weight:
-          normalizedWeight === null
-            ? null
-            : weightUnit === "g"
-              ? normalizedWeight
-              : caratsToGrams(normalizedWeight),
-        length: form.length ? parseFloat(form.length) : null,
-        depth: form.depth ? parseFloat(form.depth) : null,
-        height: form.height ? parseFloat(form.height) : null,
-        importDate: form.importDate || null,
-        importId: form.importId.trim() || null,
-        fromCompanyId: form.fromCompanyId.trim() || null,
-        visibility: form.visibility,
-        visibilityNote: form.visibilityNote.trim() || null,
-        tier: form.tier,
-        status: form.status,
-        minCustomerTier: form.minCustomerTier || null,
-        sourceType: form.sourceType,
-        consignmentAgreementId:
-          form.sourceType === "CONSIGNED" && form.consignmentAgreementId.trim()
-            ? form.consignmentAgreementId.trim()
-            : null,
-        buyPrice,
-        saleMinPrice,
-        saleMaxPrice,
-        commissionAllocations: normalizedAllocations,
+      const publicUploadOptions = {
+        accessToken,
+        visibilityPreset: publicVisibilityPreset,
+        ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
+          ? { minCustomerTier: publicMinCustomerTier }
+          : {}),
+        ...(publicVisibilityPreset === "TARGETED_USER"
+          ? { targetUserIds: publicTargetUserIds }
+          : {}),
       };
 
-      const mediaIds: string[] = [];
-      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
+      const uploadedThumbnailMedia =
+        publicThumbnailFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicThumbnailFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_THUMBNAIL",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedFeatureVideoMedia =
+        publicVideoFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicVideoFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_FEATURE_VIDEO",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedGalleryMedia =
+        publicGalleryFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicGalleryFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_GALLERY",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedCertificateMedia =
+        publicCertificateFiles.length > 0
+          ? await uploadMediaFiles({
+              files: publicCertificateFiles.map((mediaFile) => mediaFile.file),
+              slot: "PUBLIC_CERTIFICATE",
+              ...publicUploadOptions,
+            })
+          : [];
+      const uploadedRoleMedia =
+        roleMediaFiles.length > 0
+          ? await uploadMediaFiles({
+              files: roleMediaFiles.map((mediaFile) => mediaFile.file),
+              accessToken,
+              slot: "ROLE_REFERENCE",
+              visibilityPreset: roleVisibilityPreset,
+              allowedRoles: [roleVisibilityPreset],
+            })
+          : [];
+      const uploadedConsignmentContract =
+        form.sourceType === "CONSIGNED" && consignmentContractFiles.length > 0
+          ? await uploadMediaFiles({
+              files: consignmentContractFiles.map((mediaFile) => mediaFile.file),
+              accessToken,
+              consignmentAgreementId: form.consignmentAgreementId.trim(),
+              slot: "CONSIGNMENT_CONTRACT",
+              visibilityPreset: "ADMIN",
+            })
+          : [];
 
-      if (hasAnyPublicMedia) {
-        const publicFiles = [
-          ...publicThumbnailFiles,
-          ...publicVideoFiles,
-          ...publicGalleryFiles,
-          ...publicCertificateFiles,
-        ].map((mediaFile) => mediaFile.file);
-
-        const uploadedPublicMedia = await uploadMediaFiles({
-          files: publicFiles,
-          accessToken,
-          visibilityPreset: publicVisibilityPreset,
-          ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
-            ? { minCustomerTier: publicMinCustomerTier }
+      const createResponse = await createAdminProduct({
+        accessToken,
+        product: {
+          sku: form.sku.trim(),
+          name: form.name.trim() || null,
+          color: form.color.trim() || null,
+          origin: form.origin.trim() || null,
+          description: form.description.trim() || null,
+          buyPrice: form.sourceType === "CONSIGNED" ? null : buyPrice,
+          saleMinPrice,
+          saleMaxPrice,
+          weight:
+            normalizedWeight === null
+              ? null
+              : weightUnit === "g"
+                ? normalizedWeight
+                : caratsToGrams(normalizedWeight),
+          weightUnit: normalizedWeight === null ? null : "GRAM",
+          length: normalizedLength,
+          depth: normalizedDepth,
+          height: normalizedHeight,
+          importDate: form.importDate || null,
+          importId: form.importId.trim() || null,
+          fromCompanyId: form.fromCompanyId.trim() || null,
+          visibility: form.visibility,
+          tier: form.tier,
+          status: form.status,
+          minCustomerTier: form.minCustomerTier || null,
+          visibilityNote: form.visibilityNote.trim() || null,
+          sourceType: form.sourceType,
+          consignmentRate: form.sourceType === "CONSIGNED" ? consignmentRate : null,
+          consignmentAgreementId:
+            form.sourceType === "CONSIGNED" && form.consignmentAgreementId.trim()
+              ? form.consignmentAgreementId.trim()
+              : null,
+          consignmentContractMediaId:
+            form.sourceType === "CONSIGNED" ? uploadedConsignmentContract[0]?.id || null : null,
+          commissionAllocations: normalizedAllocations,
+          ...(form.visibility === "TARGETED_USER" ? { targetUserIds: productTargetUserIds } : {}),
+          ...(hasAnyPublicMedia
+            ? {
+                publicMedia: {
+                  thumbnailMediaId: uploadedThumbnailMedia[0]?.id || null,
+                  featureVideoMediaId: uploadedFeatureVideoMedia[0]?.id || null,
+                  galleryMediaIds: uploadedGalleryMedia.map((media) => media.id),
+                  certificateMediaId: uploadedCertificateMedia[0]?.id || null,
+                },
+              }
             : {}),
-          ...(publicVisibilityPreset === "TARGETED_USER"
-            ? { targetUserIds: publicTargetUserIds }
+          ...(uploadedRoleMedia.length > 0
+            ? {
+                roleBasedMedia: uploadedRoleMedia.map((media, index) => ({
+                  mediaId: media.id,
+                  allowedRoles: [roleVisibilityPreset],
+                  displayOrder: index,
+                })),
+              }
             : {}),
-        });
-
-        mediaIds.push(...uploadedPublicMedia.map((media) => media.id));
-      }
-
-      if (roleMediaFiles.length > 0) {
-        const uploadedRoleMedia = await uploadMediaFiles({
-          files: roleMediaFiles.map((mediaFile) => mediaFile.file),
-          accessToken,
-          visibilityPreset: roleVisibilityPreset,
-        });
-
-        mediaIds.push(...uploadedRoleMedia.map((media) => media.id));
-      }
-
-      const createResponse = await fetch("/api/v1/admin/products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          ...payload,
-          mediaIds,
-        }),
-        cache: "no-store",
       });
 
-      const createBody = (await createResponse.json().catch(() => null)) as ApiErrorPayload | null;
-
-      if (!createResponse.ok) {
-        throw new Error(toErrorMessage(createBody, "Failed to create product."));
-      }
-
+      setAdminProductsFlash({
+        tone: createResponse.statusCode === 202 ? "info" : "success",
+        message:
+          createResponse.message
+          || (createResponse.statusCode === 202
+            ? "Product creation submitted for main admin approval."
+            : "Product created."),
+      });
       router.push(productsPath);
     } catch (caughtError) {
       const message =
@@ -716,9 +726,9 @@ export default function AddProductPage() {
         )}
 
         <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-lg text-sm text-blue-700 dark:text-blue-300">
-          Origin, description, weight conversion, new visibility modes, and consignment contract
-          upload are now visible in the UI. Submit remains on the current payload until the updated
-          product endpoint is provided.
+          Media uploads are created first, then this form sends grouped references through
+          `publicMedia`, `roleBasedMedia`, and `consignmentContractMediaId`. A `202` response is
+          treated as a successful approval submission.
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
@@ -1193,19 +1203,14 @@ export default function AddProductPage() {
             ) : null}
             {form.visibility === "TARGETED_USER" ? (
               <div className="sm:col-span-2">
-                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
-                  Target Users
-                </label>
-                <textarea
-                  value={form.targetUserIdsInput}
-                  onChange={(e) => updateField("targetUserIdsInput", e.target.value)}
-                  rows={3}
-                  placeholder="Enter customer user ids separated by commas or new lines"
-                  className={inputCls}
+                <AdminCustomerPicker
+                  selectedIds={parseTargetUserIdsInput(form.targetUserIdsInput)}
+                  onChange={(nextIds) => updateField("targetUserIdsInput", nextIds.join(", "))}
+                  getAccessToken={getAccessToken}
+                  disabled={loading || productCreateBlocked}
+                  label="Target Users"
+                  helperText="Pick the exact customer accounts that should be able to view this product."
                 />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  This will switch to a searchable customer selector once the new endpoint is available.
-                </p>
               </div>
             ) : null}
             <div className="sm:col-span-2">
@@ -1282,13 +1287,13 @@ export default function AddProductPage() {
                   Consignment Agreement Contract
                 </p>
                 <MediaUploader
-                  files={consignmentAgreementFiles}
-                  onChange={setConsignmentAgreementFiles}
+                  files={consignmentContractFiles}
+                  onChange={setConsignmentContractFiles}
                   maxFiles={1}
                   maxSizeMB={50}
                   maxVideoSizeMB={500}
                   allowedTypes={["PDF"]}
-                  helperText="Upload the signed consignment contract PDF. Endpoint mapping is staged."
+                  helperText="Upload the signed contract PDF. The product payload will keep the agreement id separate and send the uploaded file as `consignmentContractMediaId`."
                 />
               </div>
 
@@ -1348,15 +1353,13 @@ export default function AddProductPage() {
 
             {publicVisibilityPreset === "TARGETED_USER" && (
               <div className="md:col-span-2">
-                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Target User IDs
-                </label>
-                <textarea
-                  value={publicTargetUserIdsInput}
-                  onChange={(e) => setPublicTargetUserIdsInput(e.target.value)}
-                  rows={3}
-                  placeholder="Enter user IDs separated by commas or new lines"
-                  className={inputCls}
+                <AdminCustomerPicker
+                  selectedIds={parseTargetUserIdsInput(publicTargetUserIdsInput)}
+                  onChange={(nextIds) => setPublicTargetUserIdsInput(nextIds.join(", "))}
+                  getAccessToken={getAccessToken}
+                  disabled={loading || productCreateBlocked}
+                  label="Target User IDs"
+                  helperText="Choose the customer accounts allowed to view the uploaded public media."
                 />
               </div>
             )}

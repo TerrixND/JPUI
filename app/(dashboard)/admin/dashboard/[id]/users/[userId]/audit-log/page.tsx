@@ -2,29 +2,24 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import supabase from "@/lib/supabase";
 import {
-  getAdminAuditLogs,
+  getAdminUserAuditLogs,
   getAdminUserDetail,
   handleAccountAccessDeniedError,
   type AdminAuditLogRow,
 } from "@/lib/apiClient";
 import {
-  dedupeAuditRows,
   formatDateTime,
   formatRelativeTime,
   getUserDetailDisplayName,
 } from "@/lib/adminUiHelpers";
+import supabase from "@/lib/supabase";
 
-const sortByCreatedAt = (rows: AdminAuditLogRow[]) =>
-  [...rows].sort((left, right) => {
-    const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
-    const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
-    return rightTime - leftTime;
-  });
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const SCOPE_OPTIONS = ["ALL", "ACTOR", "ENTITY"] as const;
 
 export default function AdminUserAuditLogPage() {
   const params = useParams();
@@ -35,6 +30,11 @@ export default function AdminUserAuditLogPage() {
   const [rows, setRows] = useState<AdminAuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [scope, setScope] = useState<(typeof SCOPE_OPTIONS)[number]>("ALL");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(25);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -60,48 +60,53 @@ export default function AdminUserAuditLogPage() {
 
     try {
       const accessToken = await getAccessToken();
-      const [detail, actorLogs, targetLogs] = await Promise.all([
+      const [detail, auditResponse] = await Promise.all([
         getAdminUserDetail({ accessToken, userId }),
-        getAdminAuditLogs({ accessToken, actorUserId: userId, limit: 100 }),
-        getAdminAuditLogs({ accessToken, entityId: userId, limit: 100 }),
+        getAdminUserAuditLogs({
+          accessToken,
+          userId,
+          scope,
+          page,
+          limit,
+        }),
       ]);
 
       setName(getUserDetailDisplayName(detail));
-      setRows(
-        sortByCreatedAt(
-          dedupeAuditRows([...actorLogs.items, ...targetLogs.items]),
-        ),
-      );
+      setRows(auditResponse.items);
+      setTotal(auditResponse.total);
+      setTotalPages(Math.max(1, auditResponse.totalPages));
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
       }
 
       setRows([]);
+      setTotal(0);
+      setTotalPages(1);
       setError(caughtError instanceof Error ? caughtError.message : "Failed to load audit log.");
     } finally {
       setLoading(false);
     }
-  }, [getAccessToken, userId]);
+  }, [getAccessToken, limit, page, scope, userId]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
-  const actorCount = useMemo(
-    () => rows.filter((row) => row.actorId === userId).length,
-    [rows, userId],
-  );
-  const targetCount = useMemo(
-    () => rows.filter((row) => row.targetId === userId).length,
-    [rows, userId],
-  );
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const totalStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const totalEnd = Math.min(total, page * limit);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${name} Audit Log`}
-        description="Combined actor and target history for the selected user."
+        description="Dedicated user audit history from the updated `/admin/users/:userId/audit-logs` route."
         action={
           <Link
             href={`${dashboardBasePath}/users/${userId}`}
@@ -112,30 +117,41 @@ export default function AdminUserAuditLogPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Total Rows
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
-            {rows.length}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Actor Activity
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
-            {actorCount}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Targeted Activity
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
-            {targetCount}
-          </p>
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="grid gap-3 md:grid-cols-[220px_160px_1fr]">
+          <select
+            value={scope}
+            onChange={(event) => {
+              setPage(1);
+              setScope(event.target.value as (typeof SCOPE_OPTIONS)[number]);
+            }}
+            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+          >
+            {SCOPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={limit}
+            onChange={(event) => {
+              setPage(1);
+              setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
+            }}
+            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} rows
+              </option>
+            ))}
+          </select>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-400">
+            {totalStart}-{totalEnd} of {total}
+          </div>
         </div>
       </div>
 
@@ -201,6 +217,28 @@ export default function AdminUserAuditLogPage() {
             </table>
           </div>
         )}
+
+        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700/60">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page === 1}
+            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Prev
+          </button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Page {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

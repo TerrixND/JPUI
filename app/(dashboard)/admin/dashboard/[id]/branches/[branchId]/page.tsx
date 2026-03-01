@@ -5,95 +5,36 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
-import supabase from "@/lib/supabase";
 import {
-  getAdminAuditLogs,
-  getAdminBranchesWithManagers,
-  getAdminInventoryRequests,
+  getAdminBranchDetail,
   handleAccountAccessDeniedError,
-  type AdminAuditLogRow,
-  type AdminBranchWithManagersRecord,
+  type AdminBranchDetailResponse,
 } from "@/lib/apiClient";
-import {
-  branchStatusBadge,
-  formatDate,
-  formatDateTime,
-  getPrimaryManagerLabel,
-} from "@/lib/adminUiHelpers";
+import { formatDate, formatDateTime } from "@/lib/adminUiHelpers";
+import supabase from "@/lib/supabase";
 
-type BranchMemberRow = {
-  id: string;
-  memberRole: string;
-  assignedAt: string | null;
-  isPrimary: boolean;
-  user: {
-    id: string;
-    email: string | null;
-    role: string | null;
-    status: string | null;
-    displayName: string;
-  };
-};
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
 
-type BranchMemberApiRow = {
-  id?: string;
-  memberRole?: string;
-  assignedAt?: string | null;
-  isPrimary?: boolean;
-  user?: {
-    id?: string;
-    email?: string | null;
-    role?: string | null;
-    status?: string | null;
-    adminProfile?: { displayName?: string | null } | null;
-    managerProfile?: { displayName?: string | null } | null;
-    salespersonProfile?: { displayName?: string | null } | null;
-    customerProfile?: { displayName?: string | null } | null;
-  } | null;
-};
-
-const normalizeMemberRow = (row: BranchMemberApiRow): BranchMemberRow | null => {
-  const userId = String(row.user?.id || "").trim();
-  if (!userId) {
-    return null;
+const formatMoney = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
   }
 
-  return {
-    id: String(row.id || `${userId}-${row.memberRole || "MEMBER"}`).trim(),
-    memberRole: String(row.memberRole || row.user?.role || "MEMBER").trim().toUpperCase(),
-    assignedAt: row.assignedAt || null,
-    isPrimary: row.isPrimary === true,
-    user: {
-      id: userId,
-      email: row.user?.email || null,
-      role: row.user?.role || null,
-      status: row.user?.status || null,
-      displayName:
-        row.user?.adminProfile?.displayName
-        || row.user?.managerProfile?.displayName
-        || row.user?.salespersonProfile?.displayName
-        || row.user?.customerProfile?.displayName
-        || row.user?.email
-        || userId,
-    },
-  };
+  return money.format(value);
 };
 
-const activityDot = (index: number) => {
-  const palette = ["bg-emerald-500", "bg-blue-500", "bg-amber-500", "bg-fuchsia-500", "bg-gray-500"];
-  return palette[index % palette.length];
-};
+const asNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
 export default function AdminBranchDetailPage() {
   const params = useParams();
   const { dashboardBasePath, isMainAdmin } = useRole();
   const branchId = String(params.branchId || "");
 
-  const [branch, setBranch] = useState<AdminBranchWithManagersRecord | null>(null);
-  const [members, setMembers] = useState<BranchMemberRow[]>([]);
-  const [auditRows, setAuditRows] = useState<AdminAuditLogRow[]>([]);
-  const [requestCount, setRequestCount] = useState(0);
-  const [fulfilledCount, setFulfilledCount] = useState(0);
+  const [payload, setPayload] = useState<AdminBranchDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -121,64 +62,18 @@ export default function AdminBranchDetailPage() {
 
     try {
       const accessToken = await getAccessToken();
-      const [branchResponse, membersResponse, auditResponse, requestResponse] = await Promise.all([
-        getAdminBranchesWithManagers({
-          accessToken,
-          page: 1,
-          limit: 200,
-          includeInactive: true,
-        }),
-        fetch(`/api/v1/admin/branches/${encodeURIComponent(branchId)}/members`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
-        }).then(async (response) => {
-          if (!response.ok) {
-            return [] as BranchMemberApiRow[];
-          }
-          const payload = (await response.json().catch(() => [])) as BranchMemberApiRow[];
-          return Array.isArray(payload) ? payload : [];
-        }),
-        getAdminAuditLogs({
-          accessToken,
-          branchId,
-          limit: 12,
-        }),
-        getAdminInventoryRequests({
-          accessToken,
-          branchId,
-          limit: 100,
-        }),
-      ]);
+      const response = await getAdminBranchDetail({
+        accessToken,
+        branchId,
+      });
 
-      const selectedBranch = branchResponse.items.find((item) => item.id === branchId) || null;
-      if (!selectedBranch) {
-        throw new Error("Branch not found.");
-      }
-
-      setBranch(selectedBranch);
-      setMembers(
-        membersResponse
-          .map((row) => normalizeMemberRow(row))
-          .filter((row): row is BranchMemberRow => Boolean(row)),
-      );
-      setAuditRows(auditResponse.items);
-      setRequestCount(requestResponse.items.length);
-      setFulfilledCount(
-        requestResponse.items.filter((item) => item.status === "FULFILLED" || item.status === "APPROVED").length,
-      );
+      setPayload(response);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
       }
 
-      setBranch(null);
-      setMembers([]);
-      setAuditRows([]);
-      setRequestCount(0);
-      setFulfilledCount(0);
+      setPayload(null);
       setError(caughtError instanceof Error ? caughtError.message : "Failed to load branch detail.");
     } finally {
       setLoading(false);
@@ -189,18 +84,34 @@ export default function AdminBranchDetailPage() {
     void loadData();
   }, [loadData]);
 
-  const totalManagers = useMemo(
-    () => members.filter((member) => member.memberRole === "MANAGER").length || branch?.managerCount || 0,
-    [branch?.managerCount, members],
-  );
-
+  const branch = payload?.branch || null;
+  const analytics = payload?.analytics || null;
+  const branchUsers = payload?.users || [];
+  const recentAuditLogs = payload?.recentAuditLogs || [];
   const branchPath = `${dashboardBasePath}/branches/${branchId}`;
+
+  const metrics = useMemo(
+    () => ({
+      userCount: branch?.userCount ?? asNumber(analytics?.userCount) ?? branchUsers.length,
+      inventoryValue:
+        branch?.inventoryValue ??
+        asNumber(analytics?.inventoryValue) ??
+        asNumber(analytics?.inventoryValueAmount),
+      successfulSales:
+        branch?.successfulSalesCount ??
+        asNumber(analytics?.successfulSalesCount) ??
+        asNumber(analytics?.successfulSales),
+      requestCount:
+        branch?.requestCount ?? asNumber(analytics?.requestCount) ?? asNumber(analytics?.requests),
+    }),
+    [analytics, branch, branchUsers.length],
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={branch?.name || "Branch Detail"}
-        description="Branch detail, analytics, users, and audit preview flow."
+        description="Dedicated branch page backed by the updated `/admin/branches/:branchId` route."
         action={
           <Link
             href={`${dashboardBasePath}/branches`}
@@ -210,11 +121,6 @@ export default function AdminBranchDetailPage() {
           </Link>
         }
       />
-
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
-        This page adds the missing branch flow from your spec. Inventory value and successful sales
-        cards are present as UI targets and can be bound to the final analytics endpoints later.
-      </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300">
@@ -235,14 +141,14 @@ export default function AdminBranchDetailPage() {
         ) : (
           <>
             <div className="mb-5 flex flex-wrap items-center gap-3">
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${branchStatusBadge(branch.status)}`}>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                 {branch.status || "-"}
               </span>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                 {branch.city || "Unknown city"}
               </span>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                Primary Manager: {getPrimaryManagerLabel(branch)}
+                Primary Manager: {branch.primaryManager?.displayName || branch.primaryManager?.email || "-"}
               </span>
             </div>
 
@@ -255,15 +161,15 @@ export default function AdminBranchDetailPage() {
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                  City
-                </p>
-                <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{branch.city || "-"}</p>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                   Address
                 </p>
                 <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{branch.address || "-"}</p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  Created
+                </p>
+                <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{formatDate(branch.createdAt)}</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
@@ -276,39 +182,32 @@ export default function AdminBranchDetailPage() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Branch Admin
+            Branch Users
           </p>
-          <p className="mt-2 text-lg font-bold text-gray-900 dark:text-gray-100">
-            {branch ? getPrimaryManagerLabel(branch) : "-"}
-          </p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{metrics.userCount ?? 0}</p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Total Users
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{members.length}</p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Total Managers
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{totalManagers}</p>
-        </div>
-        <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-5 dark:border-gray-700/60 dark:bg-gray-800/20">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Inventory Value
           </p>
-          <p className="mt-2 text-base font-semibold text-gray-500 dark:text-gray-400">Endpoint pending</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {formatMoney(metrics.inventoryValue)}
+          </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Successful Flow
+            Successful Sales
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{fulfilledCount}</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{requestCount} request row(s) loaded</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{metrics.successfulSales ?? 0}</p>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+            Requests
+          </p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{metrics.requestCount ?? 0}</p>
         </div>
       </div>
 
@@ -329,7 +228,7 @@ export default function AdminBranchDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => (
+                {branchUsers.map((member) => (
                   <tr key={member.id} className="border-b border-gray-100 last:border-0 dark:border-gray-800">
                     <td className="px-5 py-3 text-gray-900 dark:text-gray-100">
                       {isMainAdmin ? (
@@ -337,15 +236,17 @@ export default function AdminBranchDetailPage() {
                           href={`${dashboardBasePath}/users/${member.user.id}`}
                           className="font-semibold text-emerald-700 transition-colors hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
                         >
-                          {member.user.displayName}
+                          {member.user.displayName || member.user.email || member.user.id}
                         </Link>
                       ) : (
-                        <span className="font-semibold">{member.user.displayName}</span>
+                        <span className="font-semibold">
+                          {member.user.displayName || member.user.email || member.user.id}
+                        </span>
                       )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">{member.user.email || member.user.id}</p>
                     </td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {member.memberRole}
+                      {member.memberRole || "-"}
                       {member.isPrimary ? " • Primary" : ""}
                     </td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
@@ -356,7 +257,7 @@ export default function AdminBranchDetailPage() {
                     </td>
                   </tr>
                 ))}
-                {!members.length ? (
+                {branchUsers.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-5 py-6 text-sm text-gray-500 dark:text-gray-400">
                       No branch users found.
@@ -370,7 +271,7 @@ export default function AdminBranchDetailPage() {
 
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Branch Audit Preview</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Recent Audit</h2>
             <Link
               href={`${branchPath}/audit-log`}
               className="text-sm font-semibold text-emerald-700 transition-colors hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
@@ -380,27 +281,19 @@ export default function AdminBranchDetailPage() {
           </div>
 
           <div className="px-5 py-4">
-            {auditRows.length ? (
+            {recentAuditLogs.length ? (
               <div className="space-y-4">
-                {auditRows.map((row, index) => (
-                  <div key={row.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <span className={`mt-1 h-2.5 w-2.5 rounded-full ${activityDot(index)}`} />
-                      {index < auditRows.length - 1 ? (
-                        <span className="mt-1 min-h-8 w-px bg-gray-200 dark:bg-gray-700" />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1 pb-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {row.action}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {row.message || row.targetId || "No detail provided."}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                        {formatDateTime(row.createdAt)}
-                      </p>
-                    </div>
+                {recentAuditLogs.map((row) => (
+                  <div key={row.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/60 dark:bg-gray-800/40">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {row.action}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      {row.message || row.targetId || "No detail provided."}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                      {formatDateTime(row.createdAt)}
+                    </p>
                   </div>
                 ))}
               </div>

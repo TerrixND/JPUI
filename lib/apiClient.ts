@@ -17,6 +17,13 @@ export type MediaVisibilityPreset =
   | "ADMIN"
   | "MANAGER"
   | "SALES";
+export type MediaSlot =
+  | "PUBLIC_THUMBNAIL"
+  | "PUBLIC_FEATURE_VIDEO"
+  | "PUBLIC_GALLERY"
+  | "PUBLIC_CERTIFICATE"
+  | "ROLE_REFERENCE"
+  | "CONSIGNMENT_CONTRACT";
 
 type ApiErrorPayload = {
   message?: unknown;
@@ -57,17 +64,24 @@ export class ApiClientError extends Error {
 export type MediaPresignResponse = {
   uploadUrl: string;
   key: string;
+  url: string | null;
   expiresAt: string | null;
+  uploadMethod: string;
+  uploadHeaders: Record<string, string>;
+  productId: string | null;
+  consignmentAgreementId: string | null;
 };
 
 export type MediaRecord = {
   id: string;
   productId: string | null;
+  consignmentAgreementId: string | null;
   type: MediaType | string;
   mimeType: string;
   sizeBytes: number;
   url: string;
   createdAt: string;
+  slot: MediaSlot | null;
   visibilitySections: MediaSection[];
   audience: MediaAudience | null;
   allowedRoles: MediaRole[];
@@ -87,10 +101,12 @@ export type PublicMediaUrlResponse = {
 export type AdminMediaUrlResponse = {
   id: string;
   productId: string | null;
+  consignmentAgreementId: string | null;
   type: string | null;
   mimeType: string | null;
   sizeBytes: number | null;
   url: string;
+  slot: MediaSlot | null;
   visibilitySections: MediaSection[];
   audience: MediaAudience | null;
   allowedRoles: MediaRole[];
@@ -374,12 +390,24 @@ export type AdminUsersResponse = AdminPageResponseMeta & {
   raw: unknown;
 };
 
+export type AccountAccessState = {
+  code: string | null;
+  blockedScope: string | null;
+  canAuthenticate: boolean | null;
+  canAccessRoleRoutes: boolean | null;
+  remainingMs: number | null;
+  raw: JsonRecord | null;
+};
+
 export type UserMeResponse = {
   id: string | null;
+  supabaseUserId: string | null;
+  email: string | null;
   role: string | null;
   status: string | null;
   isSetup: boolean;
   isMainAdmin: boolean;
+  accountAccess: AccountAccessState | null;
   raw: unknown;
 };
 
@@ -388,11 +416,13 @@ export type AdminRestrictionMode = "ACCOUNT" | "ADMIN_ACTIONS";
 export type AdminActionBlock =
   | "PRODUCT_CREATE"
   | "PRODUCT_EDIT"
+  | "PRODUCT_VISIBILITY_MANAGE"
   | "PRODUCT_DELETE"
   | "INVENTORY_REQUEST_DECIDE"
   | "USER_ACCESS_MANAGE"
   | "APPROVAL_REVIEW"
-  | "STAFF_RULE_MANAGE";
+  | "STAFF_RULE_MANAGE"
+  | "LOG_DELETE";
 export type AdminApprovalActionType = "USER_STATUS_CHANGE" | "USER_RESTRICTION_UPSERT" | "USER_BAN";
 export type AdminApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type AdminApprovalDecision = "APPROVE" | "REJECT";
@@ -524,6 +554,44 @@ export type AdminBranchesWithManagersResponse = AdminPageResponseMeta & {
   raw: unknown;
 };
 
+export type AdminBranchNetworkRecord = AdminBranchWithManagersRecord & {
+  analytics: JsonRecord | null;
+  userCount: number | null;
+  inventoryValue: number | null;
+  successfulSalesCount: number | null;
+  requestCount: number | null;
+};
+
+export type AdminBranchNetworkResponse = AdminPageResponseMeta & {
+  items: AdminBranchNetworkRecord[];
+  summary: JsonRecord | null;
+  raw: unknown;
+};
+
+export type AdminBranchUserRecord = {
+  id: string;
+  memberRole: string | null;
+  assignedAt: string | null;
+  endedAt: string | null;
+  isPrimary: boolean;
+  user: {
+    id: string;
+    email: string | null;
+    role: string | null;
+    status: string | null;
+    displayName: string | null;
+  };
+  raw: JsonRecord;
+};
+
+export type AdminBranchDetailResponse = {
+  branch: AdminBranchNetworkRecord | null;
+  analytics: JsonRecord | null;
+  users: AdminBranchUserRecord[];
+  recentAuditLogs: AdminAuditLogRow[];
+  raw: unknown;
+};
+
 export type AdminInventoryRequestUser = {
   id: string;
   email: string | null;
@@ -592,6 +660,125 @@ export type AdminInventoryRequestsResponse = AdminPageResponseMeta & {
   raw: unknown;
 };
 
+export type AdminCustomerListItem = {
+  id: string;
+  email: string | null;
+  status: string | null;
+  displayName: string | null;
+  phone: string | null;
+  customerTier: CustomerTier | null;
+  raw: JsonRecord;
+};
+
+export type AdminCustomersResponse = AdminPageResponseMeta & {
+  items: AdminCustomerListItem[];
+  raw: unknown;
+};
+
+export type AdminProductMediaReference = {
+  id: string | null;
+  type: string | null;
+  url: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  slot: MediaSlot | null;
+  visibilitySections: MediaSection[];
+  audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUsers: Array<{
+    userId: string;
+  }>;
+  visibilityPreset: MediaVisibilityPreset | null;
+  raw: JsonRecord;
+};
+
+export type AdminProductBeneficiaryUser = {
+  id: string;
+  email: string | null;
+  role: string | null;
+  displayName: string | null;
+  raw: JsonRecord;
+};
+
+export type AdminProductBeneficiaryBranch = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  city: string | null;
+  status: string | null;
+  raw: JsonRecord;
+};
+
+export type AdminProductCommissionAllocation = {
+  id: string;
+  targetType: "BRANCH" | "USER" | string;
+  beneficiaryUserId: string | null;
+  beneficiaryBranchId: string | null;
+  rate: number | null;
+  note: string | null;
+  beneficiaryUser: AdminProductBeneficiaryUser | null;
+  beneficiaryBranch: AdminProductBeneficiaryBranch | null;
+  raw: JsonRecord;
+};
+
+export type AdminProductRecord = {
+  id: string;
+  sku: string | null;
+  name: string | null;
+  color: string | null;
+  origin: string | null;
+  description: string | null;
+  buyPrice: number | null;
+  saleMinPrice: number | null;
+  saleMaxPrice: number | null;
+  weight: number | null;
+  weightUnit: string | null;
+  length: number | null;
+  depth: number | null;
+  height: number | null;
+  importDate: string | null;
+  importId: string | null;
+  fromCompanyId: string | null;
+  visibility: string | null;
+  tier: string | null;
+  status: string | null;
+  minCustomerTier: CustomerTier | null;
+  targetUserIds: string[];
+  visibilityNote: string | null;
+  sourceType: string | null;
+  consignmentRate: number | null;
+  consignmentAgreementId: string | null;
+  consignmentContractMediaId: string | null;
+  thumbnailImageId: string | null;
+  featureVideoId: string | null;
+  galleryImageIds: string[];
+  certificateMediaIds: string[];
+  media: AdminProductMediaReference[];
+  commissionAllocations: AdminProductCommissionAllocation[];
+  raw: JsonRecord;
+};
+
+export type AdminProductsResponse = AdminPageResponseMeta & {
+  items: AdminProductRecord[];
+  raw: unknown;
+};
+
+export type AdminInventoryProfitAnalytics = {
+  includeSold: boolean;
+  totals: {
+    productCount: number;
+    pricedProductCount: number;
+    unpricedProductCount: number;
+    projectedRevenueMin: number;
+    projectedRevenueMax: number;
+    projectedNetProfitMin: number;
+    projectedNetProfitMax: number;
+  };
+  inventory: unknown[];
+  raw: unknown;
+};
+
 export type MediaPageContext =
   | "PRODUCT_DETAIL"
   | "PRODUCT_LISTING"
@@ -625,9 +812,23 @@ const asNullableString = (value: unknown) => {
 const asFiniteNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
+const asFiniteNumberish = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const asPositiveInt = (value: unknown) => {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+};
+
+const asNonNegativeInt = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return null;
   }
 
@@ -643,7 +844,32 @@ const normalizeCustomerTier = (value: unknown): CustomerTier | null => {
   return null;
 };
 
-const ACCOUNT_ACCESS_DENIED_CODES = new Set(["ACCOUNT_BANNED", "ACCOUNT_RESTRICTED"]);
+const normalizeAccountAccess = (value: unknown): AccountAccessState | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  return {
+    code: asNullableString(row.code),
+    blockedScope: asNullableString(row.blockedScope),
+    canAuthenticate:
+      typeof row.canAuthenticate === "boolean" ? row.canAuthenticate : null,
+    canAccessRoleRoutes:
+      typeof row.canAccessRoleRoutes === "boolean" ? row.canAccessRoleRoutes : null,
+    remainingMs:
+      asNonNegativeInt(row.remainingMs) ??
+      asNonNegativeInt(row.remainingMilliseconds) ??
+      asNonNegativeInt(row.remaining),
+    raw: row,
+  };
+};
+
+const ACCOUNT_ACCESS_DENIED_CODES = new Set([
+  "ACCOUNT_BANNED",
+  "ACCOUNT_RESTRICTED",
+  "ACCOUNT_TERMINATED",
+]);
 const ADMIN_ACTION_RESTRICTED_CODE = "ADMIN_ACTION_RESTRICTED";
 let accountDeniedRedirectInProgress = false;
 
@@ -729,7 +955,6 @@ export const handleAccountAccessDeniedError = (value: unknown) => {
     return false;
   }
 
-  void forceLogoutToBlockedPage();
   return true;
 };
 
@@ -759,7 +984,12 @@ const buildHeaders = ({
   return merged;
 };
 
-const fetchJson = async ({
+type FetchJsonResponse = {
+  status: number;
+  payload: unknown;
+};
+
+const fetchJsonResponse = async ({
   path,
   method = "GET",
   accessToken,
@@ -773,7 +1003,7 @@ const fetchJson = async ({
   headers?: HeadersInit;
   body?: BodyInit | null;
   fallbackErrorMessage: string;
-}) => {
+}): Promise<FetchJsonResponse> => {
   const requestInit: RequestInit = {
     method,
     headers: buildHeaders({
@@ -818,10 +1048,6 @@ const fetchJson = async ({
     const code = asNullableString(errorPayload?.code);
     const reason = asNullableString(errorPayload?.reason);
 
-    if (response.status === 403 && isAccountAccessDeniedCode(code)) {
-      void forceLogoutToBlockedPage();
-    }
-
     throw new ApiClientError({
       message: `${responseMessage} [HTTP ${response.status}]`,
       status: response.status,
@@ -831,7 +1057,34 @@ const fetchJson = async ({
     });
   }
 
-  return payload;
+  return {
+    status: response.status,
+    payload,
+  };
+};
+
+const fetchJson = async (
+  options: Parameters<typeof fetchJsonResponse>[0],
+) => {
+  const response = await fetchJsonResponse(options);
+  return response.payload;
+};
+
+const normalizeMediaSlot = (value: unknown): MediaSlot | null => {
+  const normalized = asString(value).toUpperCase();
+
+  if (
+    normalized === "PUBLIC_THUMBNAIL" ||
+    normalized === "PUBLIC_FEATURE_VIDEO" ||
+    normalized === "PUBLIC_GALLERY" ||
+    normalized === "PUBLIC_CERTIFICATE" ||
+    normalized === "ROLE_REFERENCE" ||
+    normalized === "CONSIGNMENT_CONTRACT"
+  ) {
+    return normalized;
+  }
+
+  return null;
 };
 
 const normalizeMediaRecord = (payload: unknown): MediaRecord | null => {
@@ -908,11 +1161,13 @@ const normalizeMediaRecord = (payload: unknown): MediaRecord | null => {
         : candidate.productId === null
           ? null
           : null,
+    consignmentAgreementId: asNullableString(candidate.consignmentAgreementId),
     type: asString(candidate.type).toUpperCase(),
     mimeType,
     sizeBytes,
     url,
     createdAt,
+    slot: normalizeMediaSlot(candidate.slot),
     visibilitySections,
     audience:
       audience === "PUBLIC" ||
@@ -934,10 +1189,13 @@ const normalizeMediaUrlResponse = (
 ): Pick<
   AdminMediaUrlResponse,
   | "id"
+  | "productId"
+  | "consignmentAgreementId"
   | "type"
   | "mimeType"
   | "sizeBytes"
   | "url"
+  | "slot"
   | "visibilitySections"
   | "audience"
   | "allowedRoles"
@@ -1005,10 +1263,13 @@ const normalizeMediaUrlResponse = (
 
   return {
     id,
+    productId: asNullableString(root.productId),
+    consignmentAgreementId: asNullableString(root.consignmentAgreementId),
     url,
     type: asNullableString(root.type),
     mimeType: asNullableString(root.mimeType),
     sizeBytes: asFiniteNumber(root.sizeBytes),
+    slot: normalizeMediaSlot(root.slot),
     visibilitySections,
     audience,
     allowedRoles,
@@ -1294,6 +1555,14 @@ const extractPaginatedRows = (payload: unknown): unknown[] => {
     return root.branches;
   }
 
+  if (Array.isArray(root.products)) {
+    return root.products;
+  }
+
+  if (Array.isArray(root.customers)) {
+    return root.customers;
+  }
+
   return [];
 };
 
@@ -1576,19 +1845,56 @@ const normalizeAdminUserDetail = (value: unknown): AdminUserDetail | null => {
   };
 };
 
-const normalizeAdminActionResponse = (statusCode: number, payload: unknown): AdminActionResponse => {
+const normalizeAdminActionResponse = (
+  statusCode: number,
+  payload: unknown,
+  responseStatus?: number,
+): AdminActionResponse => {
   const root = asRecord(payload) ?? {};
   const code = asNullableString(root.code);
+  const approvalRequest = normalizeAdminApprovalRequest(root.approvalRequest);
+  const request = normalizeAdminApprovalRequest(root.request);
+  const inferredStatusCode =
+    responseStatus ??
+    asPositiveInt(root.statusCode) ??
+    asPositiveInt(root.httpStatus) ??
+    ((approvalRequest || request || code === "APPROVAL_REQUEST_SUBMITTED") ? 202 : statusCode);
 
   return {
-    statusCode: code === "APPROVAL_REQUEST_SUBMITTED" ? 202 : statusCode,
+    statusCode: inferredStatusCode,
     message: asNullableString(root.message),
     code,
-    approvalRequest: normalizeAdminApprovalRequest(root.approvalRequest),
-    request: normalizeAdminApprovalRequest(root.request),
+    approvalRequest,
+    request,
     executionResult: root.executionResult ?? null,
     data: asRecord(payload),
     raw: payload,
+  };
+};
+
+const normalizeAdminCustomerRow = (value: unknown): AdminCustomerListItem | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const customerProfile = asRecord(row.customerProfile);
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    status: asNullableString(row.status),
+    displayName: resolveProfileField(row, "displayName"),
+    phone: resolveProfileField(row, "phone"),
+    customerTier:
+      normalizeCustomerTier(customerProfile?.tier) ??
+      normalizeCustomerTier(row.customerTier),
+    raw: row,
   };
 };
 
@@ -1649,6 +1955,273 @@ const normalizeAdminBranchRow = (value: unknown): AdminBranchWithManagersRecord 
     primaryManager,
     managerCount: asPositiveInt(row.managerCount) ?? managers.length,
     managers,
+    raw: row,
+  };
+};
+
+const normalizeAdminBranchNetworkRow = (value: unknown): AdminBranchNetworkRecord | null => {
+  const base =
+    normalizeAdminBranchRow(value) ??
+    normalizeAdminBranchRow(asRecord(value)?.branch) ??
+    null;
+  const row = asRecord(value);
+
+  if (!base || !row) {
+    return null;
+  }
+
+  const analytics = asRecord(row.analytics) ?? asRecord(asRecord(row.branch)?.analytics);
+
+  return {
+    ...base,
+    analytics,
+    userCount:
+      asNonNegativeInt(row.userCount) ??
+      asNonNegativeInt(analytics?.userCount) ??
+      asNonNegativeInt(analytics?.users),
+    inventoryValue:
+      asFiniteNumber(row.inventoryValue) ??
+      asFiniteNumber(analytics?.inventoryValue) ??
+      asFiniteNumber(analytics?.inventoryValueAmount),
+    successfulSalesCount:
+      asNonNegativeInt(row.successfulSalesCount) ??
+      asNonNegativeInt(row.successfulSales) ??
+      asNonNegativeInt(analytics?.successfulSalesCount) ??
+      asNonNegativeInt(analytics?.successfulSales),
+    requestCount:
+      asNonNegativeInt(row.requestCount) ??
+      asNonNegativeInt(analytics?.requestCount) ??
+      asNonNegativeInt(analytics?.requests),
+  };
+};
+
+const resolveBranchUserDisplayName = (user: JsonRecord | null) =>
+  resolveProfileField(user ?? {}, "displayName") || asNullableString(user?.email);
+
+const normalizeAdminBranchUserRow = (value: unknown): AdminBranchUserRecord | null => {
+  const row = asRecord(value);
+  const user = asRecord(row?.user);
+  const userId = asString(user?.id);
+
+  if (!row || !userId) {
+    return null;
+  }
+
+  const id =
+    asString(row.id) ||
+    `${userId}:${asString(row.memberRole) || asString(user?.role) || "MEMBER"}`;
+
+  return {
+    id,
+    memberRole: asNullableString(row.memberRole) || asNullableString(user?.role),
+    assignedAt: asNullableString(row.assignedAt),
+    endedAt: asNullableString(row.endedAt),
+    isPrimary: row.isPrimary === true,
+    user: {
+      id: userId,
+      email: asNullableString(user?.email),
+      role: asNullableString(user?.role),
+      status: asNullableString(user?.status),
+      displayName: resolveBranchUserDisplayName(user) || userId,
+    },
+    raw: row,
+  };
+};
+
+const normalizeAdminProductBeneficiaryUser = (
+  value: unknown,
+): AdminProductBeneficiaryUser | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+    displayName: resolveProfileField(row, "displayName"),
+    raw: row,
+  };
+};
+
+const normalizeAdminProductBeneficiaryBranch = (
+  value: unknown,
+): AdminProductBeneficiaryBranch | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    code: asNullableString(row.code),
+    name: asNullableString(row.name),
+    city: asNullableString(row.city),
+    status: asNullableString(row.status),
+    raw: row,
+  };
+};
+
+const normalizeAdminProductMediaReference = (
+  value: unknown,
+): AdminProductMediaReference | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const normalized = normalizeMediaUrlResponse(row);
+  const mediaId = asNullableString(row.id);
+  const mediaUrl = asNullableString(row.url);
+
+  if (!normalized && !mediaId && !mediaUrl) {
+    return null;
+  }
+
+  return {
+    id: normalized?.id ?? mediaId,
+    type: normalized?.type ?? asNullableString(row.type),
+    url: normalized?.url ?? mediaUrl,
+    mimeType: normalized?.mimeType ?? asNullableString(row.mimeType),
+    sizeBytes: normalized?.sizeBytes ?? asFiniteNumberish(row.sizeBytes),
+    slot: normalized?.slot ?? normalizeMediaSlot(row.slot),
+    visibilitySections: normalized?.visibilitySections ?? [],
+    audience: normalized?.audience ?? null,
+    allowedRoles: normalized?.allowedRoles ?? [],
+    minCustomerTier: normalized?.minCustomerTier ?? null,
+    targetUsers: normalized?.targetUsers ?? [],
+    visibilityPreset: normalized?.visibilityPreset ?? null,
+    raw: row,
+  };
+};
+
+const normalizeAdminProductCommissionAllocation = (
+  value: unknown,
+): AdminProductCommissionAllocation | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    targetType: asString(row.targetType).toUpperCase() || "USER",
+    beneficiaryUserId:
+      asNullableString(row.beneficiaryUserId) ??
+      asNullableString(row.userId),
+    beneficiaryBranchId:
+      asNullableString(row.beneficiaryBranchId) ??
+      asNullableString(row.branchId),
+    rate: asFiniteNumberish(row.rate),
+    note: asNullableString(row.note),
+    beneficiaryUser: normalizeAdminProductBeneficiaryUser(row.beneficiaryUser),
+    beneficiaryBranch: normalizeAdminProductBeneficiaryBranch(row.beneficiaryBranch),
+    raw: row,
+  };
+};
+
+const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const publicMedia = asRecord(row.publicMedia);
+  const certificateMediaId =
+    asNullableString(publicMedia?.certificateMediaId) ||
+    asNullableString(row.certificateMediaId);
+
+  const directTargetUserIds = Array.isArray(row.targetUserIds)
+    ? row.targetUserIds.map((entry) => asString(entry)).filter(Boolean)
+    : [];
+  const nestedTargetUserIds = Array.isArray(row.targetUsers)
+    ? row.targetUsers
+        .map((entry) => asRecord(entry))
+        .map((entry) => asString(entry?.userId))
+        .filter(Boolean)
+    : [];
+  const media = Array.isArray(row.media)
+    ? row.media
+        .map((entry) => normalizeAdminProductMediaReference(entry))
+        .filter((entry): entry is AdminProductMediaReference => Boolean(entry))
+    : [];
+  const commissionAllocations = Array.isArray(row.commissionAllocations)
+    ? row.commissionAllocations
+        .map((entry) => normalizeAdminProductCommissionAllocation(entry))
+        .filter((entry): entry is AdminProductCommissionAllocation => Boolean(entry))
+    : [];
+
+  return {
+    id,
+    sku: asNullableString(row.sku),
+    name: asNullableString(row.name),
+    color: asNullableString(row.color),
+    origin: asNullableString(row.origin),
+    description: asNullableString(row.description),
+    buyPrice: asFiniteNumberish(row.buyPrice),
+    saleMinPrice: asFiniteNumberish(row.saleMinPrice),
+    saleMaxPrice: asFiniteNumberish(row.saleMaxPrice),
+    weight: asFiniteNumberish(row.weight),
+    weightUnit: asNullableString(row.weightUnit),
+    length: asFiniteNumberish(row.length),
+    depth: asFiniteNumberish(row.depth),
+    height: asFiniteNumberish(row.height),
+    importDate: asNullableString(row.importDate),
+    importId: asNullableString(row.importId),
+    fromCompanyId: asNullableString(row.fromCompanyId),
+    visibility: asNullableString(row.visibility),
+    tier: asNullableString(row.tier),
+    status: asNullableString(row.status),
+    minCustomerTier: normalizeCustomerTier(row.minCustomerTier),
+    targetUserIds: [...new Set([...directTargetUserIds, ...nestedTargetUserIds])],
+    visibilityNote: asNullableString(row.visibilityNote),
+    sourceType: asNullableString(row.sourceType),
+    consignmentRate: asFiniteNumberish(row.consignmentRate),
+    consignmentAgreementId: asNullableString(row.consignmentAgreementId),
+    consignmentContractMediaId: asNullableString(row.consignmentContractMediaId),
+    thumbnailImageId:
+      asNullableString(publicMedia?.thumbnailMediaId) ??
+      asNullableString(row.thumbnailImageId),
+    featureVideoId:
+      asNullableString(publicMedia?.featureVideoMediaId) ??
+      asNullableString(row.featureVideoId),
+    galleryImageIds: normalizeIdList(
+      Array.isArray(publicMedia?.galleryMediaIds)
+        ? publicMedia?.galleryMediaIds
+        : Array.isArray(row.galleryImageIds)
+          ? row.galleryImageIds
+          : [],
+    ),
+    certificateMediaIds: normalizeIdList(
+      Array.isArray(row.certificateMediaIds)
+        ? row.certificateMediaIds
+        : certificateMediaId
+          ? [certificateMediaId]
+          : [],
+    ),
+    media,
+    commissionAllocations,
     raw: row,
   };
 };
@@ -1758,14 +2331,18 @@ export const mapPageContextToMediaSection = (context: MediaPageContext): MediaSe
 
 export const createMediaPresign = async ({
   accessToken,
+  fileName,
   contentType,
   sizeBytes,
   productId,
+  consignmentAgreementId,
 }: {
   accessToken: string;
+  fileName: string;
   contentType: string;
-  sizeBytes: number;
+  sizeBytes?: number;
   productId?: string;
+  consignmentAgreementId?: string;
 }): Promise<MediaPresignResponse> => {
   const payload = await fetchJson({
     path: `${API_BASE_PATH}/media/presign`,
@@ -1775,16 +2352,35 @@ export const createMediaPresign = async ({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      fileName,
       contentType,
-      sizeBytes,
+      ...(typeof sizeBytes === "number" ? { sizeBytes } : {}),
       ...(productId ? { productId } : {}),
+      ...(consignmentAgreementId ? { consignmentAgreementId } : {}),
     }),
     fallbackErrorMessage: "Failed to request media upload URL.",
   });
 
   const root = asRecord(payload);
-  const uploadUrl = asString(root?.uploadUrl);
-  const key = asString(root?.key);
+  const upload = asRecord(root?.upload) ?? asRecord(root?.uploadTarget);
+  const uploadUrl =
+    asString(root?.uploadUrl) ||
+    asString(root?.presignedUrl) ||
+    asString(upload?.url) ||
+    asString(root?.url);
+  const key =
+    asString(root?.key) ||
+    asString(root?.storageKey) ||
+    asString(root?.objectKey) ||
+    asString(root?.path);
+  const uploadHeadersRecord = asRecord(root?.uploadHeaders) ?? asRecord(root?.headers) ?? asRecord(upload?.headers);
+  const uploadHeaders: Record<string, string> = {};
+
+  for (const [headerName, headerValue] of Object.entries(uploadHeadersRecord ?? {})) {
+    if (typeof headerValue === "string" && headerValue.trim()) {
+      uploadHeaders[headerName] = headerValue;
+    }
+  }
 
   if (!uploadUrl || !key) {
     throw new ApiClientError({
@@ -1797,7 +2393,15 @@ export const createMediaPresign = async ({
   return {
     uploadUrl,
     key,
-    expiresAt: asNullableString(root?.expiresAt),
+    url:
+      asNullableString(root?.storageUrl) ||
+      asNullableString(root?.fileUrl) ||
+      asNullableString(root?.publicUrl),
+    expiresAt: asNullableString(root?.expiresAt) || asNullableString(upload?.expiresAt),
+    uploadMethod: asString(root?.uploadMethod) || asString(upload?.method) || "PUT",
+    uploadHeaders,
+    productId: asNullableString(root?.productId),
+    consignmentAgreementId: asNullableString(root?.consignmentAgreementId),
   };
 };
 
@@ -1805,16 +2409,26 @@ export const uploadFileToPresignedUrl = async ({
   uploadUrl,
   file,
   contentType,
+  method = "PUT",
+  headers,
 }: {
   uploadUrl: string;
   file: File;
   contentType: string;
+  method?: string;
+  headers?: Record<string, string>;
 }) => {
+  const mergedHeaders: Record<string, string> = {
+    ...(headers ?? {}),
+  };
+
+  if (!Object.keys(mergedHeaders).some((headerName) => headerName.toLowerCase() === "content-type")) {
+    mergedHeaders["Content-Type"] = contentType;
+  }
+
   const response = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-    },
+    method,
+    headers: mergedHeaders,
     body: file,
     cache: "no-store",
   });
@@ -1833,6 +2447,9 @@ export const createMediaRecord = async ({
   mimeType,
   sizeBytes,
   productId,
+  consignmentAgreementId,
+  slot,
+  displayOrder,
   visibilitySections,
   audience,
   visibilityPreset,
@@ -1841,10 +2458,13 @@ export const createMediaRecord = async ({
   targetUserIds,
 }: {
   accessToken: string;
-  key: string;
-  mimeType: string;
-  sizeBytes: number;
+  key?: string;
+  mimeType?: string;
+  sizeBytes?: number;
   productId?: string;
+  consignmentAgreementId?: string;
+  slot?: MediaSlot | string;
+  displayOrder?: number;
   visibilitySections?: MediaSection[];
   audience?: MediaAudience;
   visibilityPreset?: MediaVisibilityPreset;
@@ -1852,6 +2472,54 @@ export const createMediaRecord = async ({
   minCustomerTier?: CustomerTier;
   targetUserIds?: string[];
 }): Promise<MediaRecord> => {
+  const normalizedKey = asString(key);
+  const normalizedSlot =
+    normalizeMediaSlot(slot) ||
+    (consignmentAgreementId ? "CONSIGNMENT_CONTRACT" : null);
+  const normalizedPreset = visibilityPreset ?? null;
+  const normalizedAudience =
+    audience ??
+    (normalizedPreset === "PUBLIC" || normalizedPreset === "TOP_SHELF"
+      ? "PUBLIC"
+      : normalizedPreset === "USER_TIER" || normalizedPreset === "TARGETED_USER"
+        ? "TARGETED"
+        : normalizedPreset === "PRIVATE"
+          ? "PRIVATE"
+          : normalizedPreset === "ADMIN"
+            ? "ADMIN_ONLY"
+            : normalizedPreset === "MANAGER" || normalizedPreset === "SALES"
+              ? "ROLE_BASED"
+              : null);
+  const normalizedAllowedRoles =
+    allowedRoles && allowedRoles.length > 0
+      ? [...new Set(allowedRoles.map((role) => asString(role).toUpperCase()).filter(Boolean))]
+      : normalizedPreset === "ADMIN"
+        ? ["ADMIN"]
+        : normalizedPreset === "MANAGER"
+          ? ["MANAGER"]
+          : normalizedPreset === "SALES"
+            ? ["SALES"]
+            : [];
+  const normalizedSections =
+    visibilitySections && visibilitySections.length > 0
+      ? [...new Set(visibilitySections.map((section) => asString(section).toUpperCase()).filter(Boolean))]
+      : normalizedPreset === "TOP_SHELF"
+        ? ["PRODUCT_PAGE", "TOP_SHELF"]
+        : normalizedPreset === "PUBLIC"
+          ? ["PRODUCT_PAGE"]
+          : normalizedPreset === "PRIVATE"
+            ? ["PRIVATE"]
+            : [];
+  const normalizedTargetUserIds = normalizeIdList(targetUserIds);
+
+  if (!normalizedKey || !mimeType) {
+    throw new ApiClientError({
+      message: "Invalid media create payload.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
   const payload = await fetchJson({
     path: `${API_BASE_PATH}/media`,
     method: "POST",
@@ -1860,16 +2528,18 @@ export const createMediaRecord = async ({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      key,
+      key: normalizedKey,
       mimeType,
-      sizeBytes,
+      ...(typeof sizeBytes === "number" ? { sizeBytes } : {}),
       ...(productId ? { productId } : {}),
-      ...(visibilitySections?.length ? { visibilitySections } : {}),
-      ...(audience ? { audience } : {}),
-      ...(visibilityPreset ? { visibilityPreset } : {}),
-      ...(allowedRoles?.length ? { allowedRoles } : {}),
+      ...(consignmentAgreementId ? { consignmentAgreementId } : {}),
+      ...(normalizedSlot ? { slot: normalizedSlot } : {}),
+      ...(typeof displayOrder === "number" ? { displayOrder } : {}),
+      ...(normalizedSections.length ? { visibilitySections: normalizedSections } : {}),
+      ...(normalizedAudience ? { audience: normalizedAudience } : {}),
+      ...(normalizedAllowedRoles.length ? { allowedRoles: normalizedAllowedRoles } : {}),
       ...(minCustomerTier ? { minCustomerTier } : {}),
-      ...(targetUserIds?.length ? { targetUserIds } : {}),
+      ...(normalizedTargetUserIds.length ? { targetUserIds: normalizedTargetUserIds } : {}),
     }),
     fallbackErrorMessage: "Failed to create media record.",
   });
@@ -1945,7 +2615,539 @@ export const getAdminMediaUrl = async ({
 
   return {
     ...normalized,
-    productId: asNullableString(root?.productId),
+    productId: normalized.productId ?? asNullableString(root?.productId),
+    consignmentAgreementId:
+      normalized.consignmentAgreementId ?? asNullableString(root?.consignmentAgreementId),
+    slot: normalized.slot ?? normalizeMediaSlot(root?.slot),
+  };
+};
+
+export const deleteAdminMedia = async ({
+  accessToken,
+  mediaId,
+}: {
+  accessToken: string;
+  mediaId: string;
+}) => {
+  const response = await fetch(`${API_BASE_PATH}/admin/media/${encodeURIComponent(mediaId)}`, {
+    method: "DELETE",
+    headers: buildHeaders({
+      accessToken,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    const errorPayload = asRecord(payload) as ApiErrorPayload | null;
+
+    throw new ApiClientError({
+      message: buildErrorMessage(errorPayload, "Failed to delete media."),
+      status: response.status,
+      code: asNullableString(errorPayload?.code),
+      reason: asNullableString(errorPayload?.reason),
+      payload,
+    });
+  }
+
+  return payload;
+};
+
+export type AdminProductRoleMediaInput = {
+  roleVisibility: string;
+  mediaIds: string[];
+};
+
+export type AdminProductPublicMediaInput = {
+  thumbnailMediaId?: string | null;
+  featureVideoMediaId?: string | null;
+  galleryMediaIds?: string[];
+  certificateMediaId?: string | null;
+};
+
+export type AdminProductRoleBasedMediaInput = {
+  mediaId: string;
+  allowedRoles: string[];
+  displayOrder?: number | null;
+};
+
+export type AdminProductCommissionAllocationInput = {
+  targetType: "BRANCH" | "USER" | string;
+  beneficiaryUserId?: string | null;
+  beneficiaryBranchId?: string | null;
+  rate: number;
+  note?: string | null;
+};
+
+export type AdminProductUpsertPayload = {
+  sku?: string | null;
+  name?: string | null;
+  color?: string | null;
+  origin?: string | null;
+  description?: string | null;
+  buyPrice?: number | null;
+  saleMinPrice?: number | null;
+  saleMaxPrice?: number | null;
+  weight?: number | null;
+  weightUnit?: string | null;
+  length?: number | null;
+  depth?: number | null;
+  height?: number | null;
+  importDate?: string | null;
+  importId?: string | null;
+  fromCompanyId?: string | null;
+  visibility?: string | null;
+  tier?: string | null;
+  status?: string | null;
+  minCustomerTier?: string | null;
+  targetUserIds?: string[];
+  visibilityNote?: string | null;
+  sourceType?: string | null;
+  consignmentRate?: number | null;
+  consignmentAgreementId?: string | null;
+  consignmentContractMediaId?: string | null;
+  publicMedia?: AdminProductPublicMediaInput | null;
+  roleBasedMedia?: AdminProductRoleBasedMediaInput[];
+  thumbnailImageId?: string | null;
+  featureVideoId?: string | null;
+  galleryImageIds?: string[];
+  certificateMediaIds?: string[];
+  roleMedia?: AdminProductRoleMediaInput[];
+  commissionAllocations?: AdminProductCommissionAllocationInput[];
+};
+
+const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+
+const normalizeIdList = (values: string[] | null | undefined) =>
+  [...new Set((Array.isArray(values) ? values : []).map((entry) => asString(entry)).filter(Boolean))];
+
+const normalizeFiniteOrNull = (value: unknown) => {
+  if (value === null) {
+    return null;
+  }
+
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+};
+
+const normalizeRoleList = (values: string[] | null | undefined) =>
+  [...new Set(
+    (Array.isArray(values) ? values : [])
+      .map((entry) => asString(entry).toUpperCase())
+      .filter((entry): entry is MediaRole => entry === "ADMIN" || entry === "MANAGER" || entry === "SALES"),
+  )];
+
+const normalizeAdminProductPayload = (input: AdminProductUpsertPayload): JsonRecord => {
+  const body: JsonRecord = {};
+
+  if (hasOwn(input, "sku")) {
+    body.sku = asString(input.sku);
+  }
+  if (hasOwn(input, "name")) {
+    body.name = asNullableString(input.name);
+  }
+  if (hasOwn(input, "color")) {
+    body.color = asNullableString(input.color);
+  }
+  if (hasOwn(input, "origin")) {
+    body.origin = asNullableString(input.origin);
+  }
+  if (hasOwn(input, "description")) {
+    body.description = asNullableString(input.description);
+  }
+  if (hasOwn(input, "buyPrice")) {
+    body.buyPrice = normalizeFiniteOrNull(input.buyPrice);
+  }
+  if (hasOwn(input, "saleMinPrice")) {
+    body.saleMinPrice = normalizeFiniteOrNull(input.saleMinPrice);
+  }
+  if (hasOwn(input, "saleMaxPrice")) {
+    body.saleMaxPrice = normalizeFiniteOrNull(input.saleMaxPrice);
+  }
+  if (hasOwn(input, "weight")) {
+    body.weight = normalizeFiniteOrNull(input.weight);
+  }
+  if (hasOwn(input, "weightUnit")) {
+    body.weightUnit = asNullableString(input.weightUnit)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "length")) {
+    body.length = normalizeFiniteOrNull(input.length);
+  }
+  if (hasOwn(input, "depth")) {
+    body.depth = normalizeFiniteOrNull(input.depth);
+  }
+  if (hasOwn(input, "height")) {
+    body.height = normalizeFiniteOrNull(input.height);
+  }
+  if (hasOwn(input, "importDate")) {
+    body.importDate = asNullableString(input.importDate);
+  }
+  if (hasOwn(input, "importId")) {
+    body.importId = asNullableString(input.importId);
+  }
+  if (hasOwn(input, "fromCompanyId")) {
+    body.fromCompanyId = asNullableString(input.fromCompanyId);
+  }
+  if (hasOwn(input, "visibility")) {
+    body.visibility = asNullableString(input.visibility)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "tier")) {
+    body.tier = asNullableString(input.tier)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "status")) {
+    body.status = asNullableString(input.status)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "minCustomerTier")) {
+    body.minCustomerTier = asNullableString(input.minCustomerTier)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "targetUserIds")) {
+    body.targetUserIds = normalizeIdList(input.targetUserIds);
+  }
+  if (hasOwn(input, "visibilityNote")) {
+    body.visibilityNote = asNullableString(input.visibilityNote);
+  }
+  if (hasOwn(input, "sourceType")) {
+    body.sourceType = asNullableString(input.sourceType)?.toUpperCase() ?? null;
+  }
+  if (hasOwn(input, "consignmentRate")) {
+    body.consignmentRate = normalizeFiniteOrNull(input.consignmentRate);
+  }
+  if (hasOwn(input, "consignmentAgreementId")) {
+    body.consignmentAgreementId = asNullableString(input.consignmentAgreementId);
+  }
+  if (hasOwn(input, "consignmentContractMediaId")) {
+    body.consignmentContractMediaId = asNullableString(input.consignmentContractMediaId);
+  }
+
+  const normalizedPublicMedia =
+    hasOwn(input, "publicMedia") && input.publicMedia
+      ? {
+          thumbnailMediaId: asNullableString(input.publicMedia.thumbnailMediaId),
+          featureVideoMediaId: asNullableString(input.publicMedia.featureVideoMediaId),
+          galleryMediaIds: normalizeIdList(input.publicMedia.galleryMediaIds),
+          certificateMediaId: asNullableString(input.publicMedia.certificateMediaId),
+        }
+      : hasOwn(input, "thumbnailImageId") ||
+          hasOwn(input, "featureVideoId") ||
+          hasOwn(input, "galleryImageIds") ||
+          hasOwn(input, "certificateMediaIds")
+        ? {
+            thumbnailMediaId: asNullableString(input.thumbnailImageId),
+            featureVideoMediaId: asNullableString(input.featureVideoId),
+            galleryMediaIds: normalizeIdList(input.galleryImageIds),
+            certificateMediaId: normalizeIdList(input.certificateMediaIds)[0] ?? null,
+          }
+        : null;
+
+  if (normalizedPublicMedia) {
+    body.publicMedia = {
+      ...(normalizedPublicMedia.thumbnailMediaId
+        ? { thumbnailMediaId: normalizedPublicMedia.thumbnailMediaId }
+        : {}),
+      ...(normalizedPublicMedia.featureVideoMediaId
+        ? { featureVideoMediaId: normalizedPublicMedia.featureVideoMediaId }
+        : {}),
+      ...(normalizedPublicMedia.galleryMediaIds.length
+        ? { galleryMediaIds: normalizedPublicMedia.galleryMediaIds }
+        : {}),
+      ...(normalizedPublicMedia.certificateMediaId
+        ? { certificateMediaId: normalizedPublicMedia.certificateMediaId }
+        : {}),
+    };
+  }
+
+  const normalizedRoleBasedMedia =
+    hasOwn(input, "roleBasedMedia")
+      ? (Array.isArray(input.roleBasedMedia) ? input.roleBasedMedia : [])
+          .map((row) => ({
+            mediaId: asString(row?.mediaId),
+            allowedRoles: normalizeRoleList(row?.allowedRoles),
+            ...(typeof row?.displayOrder === "number" && Number.isFinite(row.displayOrder)
+              ? { displayOrder: row.displayOrder }
+              : {}),
+          }))
+          .filter((row) => row.mediaId && row.allowedRoles.length > 0)
+      : hasOwn(input, "roleMedia")
+        ? (Array.isArray(input.roleMedia) ? input.roleMedia : []).flatMap((row) => {
+            const roleVisibility = asString(row?.roleVisibility).toUpperCase();
+            const allowedRoles = normalizeRoleList(roleVisibility ? [roleVisibility] : []);
+
+            if (allowedRoles.length === 0) {
+              return [];
+            }
+
+            return normalizeIdList(row?.mediaIds).map((mediaId, index) => ({
+              mediaId,
+              allowedRoles,
+              displayOrder: index,
+            }));
+          })
+        : [];
+
+  if (normalizedRoleBasedMedia.length > 0) {
+    body.roleBasedMedia = normalizedRoleBasedMedia;
+  }
+  if (hasOwn(input, "commissionAllocations")) {
+    body.commissionAllocations = (Array.isArray(input.commissionAllocations)
+      ? input.commissionAllocations
+      : []
+    )
+      .map((row) => ({
+        targetType: asString(row?.targetType).toUpperCase(),
+        ...(asString(row?.beneficiaryUserId)
+          ? { beneficiaryUserId: asString(row?.beneficiaryUserId) }
+          : {}),
+        ...(asString(row?.beneficiaryBranchId)
+          ? { beneficiaryBranchId: asString(row?.beneficiaryBranchId) }
+          : {}),
+        rate: normalizeFiniteOrNull(row?.rate),
+        ...(asString(row?.note) ? { note: asString(row?.note) } : {}),
+      }))
+      .filter(
+        (row) =>
+          (row.targetType === "BRANCH" || row.targetType === "USER") &&
+          typeof row.rate === "number",
+      );
+  }
+
+  return body;
+};
+
+export const createAdminProduct = async ({
+  accessToken,
+  product,
+}: {
+  accessToken: string;
+  product: AdminProductUpsertPayload;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/products`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(normalizeAdminProductPayload(product)),
+    fallbackErrorMessage: "Failed to create product.",
+  });
+
+  return normalizeAdminActionResponse(201, response.payload, response.status);
+};
+
+export const updateAdminProduct = async ({
+  accessToken,
+  productId,
+  product,
+}: {
+  accessToken: string;
+  productId: string;
+  product: AdminProductUpsertPayload;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(normalizeAdminProductPayload(product)),
+    fallbackErrorMessage: "Failed to update product.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const updateAdminProductQuickVisibility = async ({
+  accessToken,
+  productId,
+  visibility,
+  minCustomerTier,
+  targetUserIds,
+  visibilityNote,
+  reason,
+}: {
+  accessToken: string;
+  productId: string;
+  visibility: string;
+  minCustomerTier?: string | null;
+  targetUserIds?: string[];
+  visibilityNote?: string | null;
+  reason?: string | null;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/quick-visibility`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      visibility: asString(visibility).toUpperCase(),
+      ...(minCustomerTier ? { minCustomerTier: asString(minCustomerTier).toUpperCase() } : {}),
+      ...(targetUserIds?.length ? { targetUserIds } : {}),
+      ...(visibilityNote ? { visibilityNote: visibilityNote.trim() } : {}),
+      ...(reason ? { reason: reason.trim() } : {}),
+    }),
+    fallbackErrorMessage: "Failed to update product visibility.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const deleteAdminProduct = async ({
+  accessToken,
+  productId,
+  reason,
+}: {
+  accessToken: string;
+  productId: string;
+  reason?: string | null;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}`,
+    method: "DELETE",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(reason ? { reason: reason.trim() } : {}),
+    fallbackErrorMessage: "Failed to delete product.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const getAdminProducts = async ({
+  accessToken,
+  page,
+  limit,
+  includeSold,
+  search,
+  status,
+  visibility,
+}: {
+  accessToken: string;
+  page?: number;
+  limit?: number;
+  includeSold?: boolean;
+  search?: string;
+  status?: string;
+  visibility?: string;
+}): Promise<AdminProductsResponse> => {
+  const query = new URLSearchParams();
+
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (typeof includeSold === "boolean") {
+    query.set("includeSold", includeSold ? "true" : "false");
+  }
+  if (search) {
+    query.set("search", search.trim());
+  }
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (visibility) {
+    query.set("visibility", asString(visibility).toUpperCase());
+  }
+
+  const queryString = query.toString();
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products${queryString ? `?${queryString}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load admin products.",
+  });
+
+  const rows = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminProductRow(row))
+    .filter((row): row is AdminProductRecord => Boolean(row));
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const getAdminProductDetail = async ({
+  accessToken,
+  productId,
+}: {
+  accessToken: string;
+  productId: string;
+}): Promise<AdminProductRecord> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load product details.",
+  });
+
+  const product =
+    normalizeAdminProductRow(payload) ??
+    normalizeAdminProductRow(asRecord(payload)?.product) ??
+    normalizeAdminProductRow(asRecord(payload)?.item);
+
+  if (!product) {
+    throw new ApiClientError({
+      message: "Invalid admin product detail response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return product;
+};
+
+export const getAdminInventoryProfitAnalytics = async ({
+  accessToken,
+  includeSold,
+}: {
+  accessToken: string;
+  includeSold?: boolean;
+}): Promise<AdminInventoryProfitAnalytics> => {
+  const query = new URLSearchParams();
+  if (typeof includeSold === "boolean") {
+    query.set("includeSold", includeSold ? "true" : "false");
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/analytics/inventory-profit${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load inventory profit analytics.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const totals = asRecord(root.totals) ?? {};
+  const inventory = Array.isArray(root.inventory) ? root.inventory : [];
+
+  return {
+    includeSold: root.includeSold === true,
+    totals: {
+      productCount: asNonNegativeInt(totals.productCount) ?? 0,
+      pricedProductCount: asNonNegativeInt(totals.pricedProductCount) ?? 0,
+      unpricedProductCount: asNonNegativeInt(totals.unpricedProductCount) ?? 0,
+      projectedRevenueMin: asFiniteNumberish(totals.projectedRevenueMin) ?? 0,
+      projectedRevenueMax: asFiniteNumberish(totals.projectedRevenueMax) ?? 0,
+      projectedNetProfitMin: asFiniteNumberish(totals.projectedNetProfitMin) ?? 0,
+      projectedNetProfitMax: asFiniteNumberish(totals.projectedNetProfitMax) ?? 0,
+    },
+    inventory,
+    raw: payload,
   };
 };
 
@@ -1977,9 +3179,9 @@ export const getAdminUsers = async ({
   }
 
   if (accountStatus) {
-    query.set("accountStatus", asString(accountStatus));
+    query.set("status", asString(accountStatus));
   } else if (status) {
-    query.set("accountStatus", asString(status));
+    query.set("status", asString(status));
   }
 
   if (role) {
@@ -2031,10 +3233,16 @@ export const getUserMe = async ({
 
   return {
     id: asNullableString(root.id),
+    supabaseUserId: asNullableString(root.supabaseUserId),
+    email: asNullableString(root.email),
     role: asNullableString(root.role),
     status: asNullableString(root.status),
     isSetup: root.isSetup === true,
     isMainAdmin: root.isMainAdmin === true,
+    accountAccess:
+      normalizeAccountAccess(root.accountAccess) ??
+      normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
+      null,
     raw: payload,
   };
 };
@@ -2065,6 +3273,29 @@ export const getAdminUserDetail = async ({
   return detail;
 };
 
+export const updateAdminUserPermissions = async ({
+  accessToken,
+  userId,
+  permissions,
+}: {
+  accessToken: string;
+  userId: string;
+  permissions: Record<string, unknown>;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/permissions`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(permissions),
+    fallbackErrorMessage: "Failed to update user permissions.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
 export const updateAdminUserStatus = async ({
   accessToken,
   userId,
@@ -2076,7 +3307,7 @@ export const updateAdminUserStatus = async ({
   status: AdminAccountStatus | string;
   reason?: string;
 }): Promise<AdminActionResponse> => {
-  const payload = await fetchJson({
+  const response = await fetchJsonResponse({
     path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/status`,
     method: "PATCH",
     accessToken,
@@ -2090,8 +3321,38 @@ export const updateAdminUserStatus = async ({
     fallbackErrorMessage: "Failed to update user status.",
   });
 
-  return normalizeAdminActionResponse(200, payload);
+  return normalizeAdminActionResponse(200, response.payload, response.status);
 };
+
+export const createAdminUserRestriction = async ({
+  accessToken,
+  userId,
+  reason,
+  note,
+  startsAt,
+  endsAt,
+  restrictionMode,
+  adminActionBlocks,
+}: {
+  accessToken: string;
+  userId: string;
+  reason?: string;
+  note?: string | null;
+  startsAt?: string;
+  endsAt?: string | null;
+  restrictionMode?: AdminRestrictionMode | string;
+  adminActionBlocks?: Array<AdminActionBlock | string>;
+}) =>
+  upsertAdminUserRestriction({
+    accessToken,
+    userId,
+    reason,
+    note,
+    startsAt,
+    endsAt,
+    restrictionMode,
+    adminActionBlocks,
+  });
 
 export const upsertAdminUserRestriction = async ({
   accessToken,
@@ -2136,7 +3397,7 @@ export const upsertAdminUserRestriction = async ({
   if (typeof isActive === "boolean") body.isActive = isActive;
   if (metadata !== undefined) body.metadata = metadata;
 
-  const payload = await fetchJson({
+  const response = await fetchJsonResponse({
     path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/restrictions`,
     method: "POST",
     accessToken,
@@ -2147,8 +3408,32 @@ export const upsertAdminUserRestriction = async ({
     fallbackErrorMessage: "Failed to save user restriction.",
   });
 
-  return normalizeAdminActionResponse(200, payload);
+  return normalizeAdminActionResponse(200, response.payload, response.status);
 };
+
+export const createAdminUserBan = async ({
+  accessToken,
+  userId,
+  reason,
+  note,
+  startsAt,
+  endsAt,
+}: {
+  accessToken: string;
+  userId: string;
+  reason: string;
+  note?: string | null;
+  startsAt?: string;
+  endsAt?: string | null;
+}) =>
+  banAdminUser({
+    accessToken,
+    userId,
+    reason,
+    note,
+    startsAt,
+    endsAt,
+  });
 
 export const banAdminUser = async ({
   accessToken,
@@ -2183,7 +3468,7 @@ export const banAdminUser = async ({
   if (durationDays !== undefined && durationDays !== null) body.durationDays = durationDays;
   if (metadata !== undefined) body.metadata = metadata;
 
-  const payload = await fetchJson({
+  const response = await fetchJsonResponse({
     path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/ban`,
     method: "POST",
     accessToken,
@@ -2194,7 +3479,151 @@ export const banAdminUser = async ({
     fallbackErrorMessage: "Failed to ban user.",
   });
 
-  return normalizeAdminActionResponse(200, payload);
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const resolveAdminUserAction = async ({
+  accessToken,
+  userId,
+  actionType,
+  controlId,
+  note,
+}: {
+  accessToken: string;
+  userId: string;
+  actionType: "RESTRICTION" | "BAN" | "TERMINATION" | string;
+  controlId?: string;
+  note?: string;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/admin-actions/resolve`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      actionType: asString(actionType).toUpperCase(),
+      ...(controlId ? { controlId: controlId.trim() } : {}),
+      ...(note ? { note: note.trim() } : {}),
+    }),
+    fallbackErrorMessage: "Failed to resolve user access action.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const getAdminUserAuditLogs = async ({
+  accessToken,
+  userId,
+  scope = "ALL",
+  page,
+  limit,
+  from,
+  to,
+}: {
+  accessToken: string;
+  userId: string;
+  scope?: "ALL" | "ACTOR" | "ENTITY" | string;
+  page?: number;
+  limit?: number;
+  from?: string;
+  to?: string;
+}): Promise<AdminAuditLogsResponse> => {
+  const query = new URLSearchParams();
+
+  if (scope) {
+    query.set("scope", asString(scope).toUpperCase());
+  }
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (from) {
+    query.set("from", from);
+  }
+  if (to) {
+    query.set("to", to);
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/audit-logs${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load user audit logs.",
+  });
+
+  const rows = extractAuditRows(payload)
+    .map((row) => normalizeAuditRow(row))
+    .filter((row): row is AdminAuditLogRow => Boolean(row));
+
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const getAdminUserApprovalRequests = async ({
+  accessToken,
+  userId,
+  status,
+  relation = "ALL",
+  page,
+  limit,
+}: {
+  accessToken: string;
+  userId: string;
+  status?: AdminApprovalRequestStatus | string;
+  relation?: "ALL" | "SUBMITTED" | "TARGETED" | string;
+  page?: number;
+  limit?: number;
+}): Promise<AdminApprovalRequestsResponse> => {
+  const query = new URLSearchParams();
+
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (relation) {
+    query.set("relation", asString(relation).toUpperCase());
+  }
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/users/${encodeURIComponent(userId)}/approval-requests${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load user approval requests.",
+  });
+
+  const rows = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminApprovalRequest(row))
+    .filter((row): row is AdminApprovalRequest => Boolean(row));
+
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
 };
 
 export const getAdminApprovalRequests = async ({
@@ -2264,14 +3693,18 @@ export const decideAdminApprovalRequest = async ({
   accessToken,
   requestId,
   decision,
-  note,
+  decisionNote,
+  enableAutoApproveForFuture,
+  overrides,
 }: {
   accessToken: string;
   requestId: string;
   decision: AdminApprovalDecision | string;
-  note?: string;
+  decisionNote?: string;
+  enableAutoApproveForFuture?: boolean;
+  overrides?: Record<string, unknown>;
 }): Promise<AdminActionResponse> => {
-  const payload = await fetchJson({
+  const response = await fetchJsonResponse({
     path: `${API_BASE_PATH}/admin/approval-requests/${encodeURIComponent(requestId)}/decision`,
     method: "PATCH",
     accessToken,
@@ -2280,12 +3713,16 @@ export const decideAdminApprovalRequest = async ({
     },
     body: JSON.stringify({
       decision: asString(decision).toUpperCase(),
-      ...(note ? { note: note.trim() } : {}),
+      ...(decisionNote ? { decisionNote: decisionNote.trim() } : {}),
+      ...(typeof enableAutoApproveForFuture === "boolean"
+        ? { enableAutoApproveForFuture }
+        : {}),
+      ...(overrides ?? {}),
     }),
     fallbackErrorMessage: "Failed to decide approval request.",
   });
 
-  return normalizeAdminActionResponse(200, payload);
+  return normalizeAdminActionResponse(200, response.payload, response.status);
 };
 
 export const getAdminBranchesWithManagers = async ({
@@ -2331,6 +3768,228 @@ export const getAdminBranchesWithManagers = async ({
     .map((row) => normalizeAdminBranchRow(row))
     .filter((row): row is AdminBranchWithManagersRecord => Boolean(row));
 
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const getAdminBranchAnalytics = async ({
+  accessToken,
+  status,
+  includeInactiveBranches,
+  rows,
+}: {
+  accessToken: string;
+  status?: AdminBranchStatus | string;
+  includeInactiveBranches?: boolean;
+  rows?: number;
+}): Promise<AdminBranchNetworkResponse> => {
+  const query = new URLSearchParams();
+  const normalizedRows =
+    typeof rows === "number" && Number.isFinite(rows)
+      ? Math.min(50, Math.max(10, Math.trunc(rows)))
+      : null;
+
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (typeof includeInactiveBranches === "boolean") {
+    query.set(
+      "includeInactiveBranches",
+      includeInactiveBranches ? "true" : "false",
+    );
+  }
+  if (normalizedRows !== null) {
+    query.set("rows", String(normalizedRows));
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/analytics/branches${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load branch network analytics.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const items = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminBranchNetworkRow(row))
+    .filter((row): row is AdminBranchNetworkRecord => Boolean(row));
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: items.length,
+  });
+
+  return {
+    items,
+    summary: asRecord(root.summary) ?? asRecord(root.analytics),
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const getAdminBranchDetail = async ({
+  accessToken,
+  branchId,
+}: {
+  accessToken: string;
+  branchId: string;
+}): Promise<AdminBranchDetailResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/branches/${encodeURIComponent(branchId)}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load branch detail.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const branch =
+    normalizeAdminBranchNetworkRow(root.branch) ??
+    normalizeAdminBranchNetworkRow(payload) ??
+    null;
+  const users = Array.isArray(root.users)
+    ? root.users
+        .map((row) => normalizeAdminBranchUserRow(row))
+        .filter((row): row is AdminBranchUserRecord => Boolean(row))
+    : [];
+  const recentAuditLogs = Array.isArray(root.recentAuditLogs)
+    ? root.recentAuditLogs
+        .map((row) => normalizeAuditRow(row))
+        .filter((row): row is AdminAuditLogRow => Boolean(row))
+    : [];
+
+  return {
+    branch,
+    analytics: asRecord(root.analytics),
+    users,
+    recentAuditLogs,
+    raw: payload,
+  };
+};
+
+export const getAdminBranchMembers = async ({
+  accessToken,
+  branchId,
+}: {
+  accessToken: string;
+  branchId: string;
+}): Promise<AdminBranchUserRecord[]> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/branches/${encodeURIComponent(branchId)}/members`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load branch members.",
+  });
+
+  return extractPaginatedRows(payload)
+    .map((row) => normalizeAdminBranchUserRow(row))
+    .filter((row): row is AdminBranchUserRecord => Boolean(row));
+};
+
+export const getAdminBranchAuditLogs = async ({
+  accessToken,
+  branchId,
+  page,
+  limit,
+  from,
+  to,
+  action,
+  entityType,
+}: {
+  accessToken: string;
+  branchId: string;
+  page?: number;
+  limit?: number;
+  from?: string;
+  to?: string;
+  action?: string;
+  entityType?: string;
+}): Promise<AdminAuditLogsResponse> => {
+  const query = new URLSearchParams();
+
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (from) {
+    query.set("from", from);
+  }
+  if (to) {
+    query.set("to", to);
+  }
+  if (action) {
+    query.set("action", action);
+  }
+  if (entityType) {
+    query.set("entityType", entityType);
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/branches/${encodeURIComponent(branchId)}/audit-logs${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load branch audit logs.",
+  });
+
+  const rows = extractAuditRows(payload)
+    .map((row) => normalizeAuditRow(row))
+    .filter((row): row is AdminAuditLogRow => Boolean(row));
+
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
+export const getAdminCustomers = async ({
+  accessToken,
+  page,
+  limit,
+  search,
+}: {
+  accessToken: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<AdminCustomersResponse> => {
+  const query = new URLSearchParams();
+
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (search) {
+    query.set("search", search.trim());
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/customers${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load customers.",
+  });
+
+  const rows = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminCustomerRow(row))
+    .filter((row): row is AdminCustomerListItem => Boolean(row));
   const root = asRecord(payload) ?? {};
   const pagination = normalizeAuditPagination({
     payload: root,

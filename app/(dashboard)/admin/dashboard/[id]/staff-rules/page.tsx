@@ -7,6 +7,7 @@ import supabase from "@/lib/supabase";
 import {
   getAdminStaffRules,
   createAdminStaffRule,
+  getAdminBranchesWithManagers,
   revokeAdminStaffRule,
   type StaffOnboardingRule,
   type CreateStaffRulePayload,
@@ -137,24 +138,6 @@ type BranchOption = {
   name: string;
   city: string | null;
   status: string;
-};
-
-type ApiErrorPayload = {
-  message?: unknown;
-  code?: unknown;
-  reason?: unknown;
-};
-
-type BranchAnalyticsResponse = {
-  branches?: BranchOption[];
-  message?: string;
-};
-
-const toErrorMessage = (payload: ApiErrorPayload | null, fallback: string) => {
-  const message = typeof payload?.message === "string" ? payload.message : fallback;
-  const code = typeof payload?.code === "string" ? ` (code: ${payload.code})` : "";
-  const reason = typeof payload?.reason === "string" ? ` (reason: ${payload.reason})` : "";
-  return `${message}${code}${reason}`;
 };
 
 /* ------------------------------------------------------------------ */
@@ -354,23 +337,18 @@ export default function AdminStaffRules() {
       setBranchesLoading(true);
       try {
         const accessToken = await getAccessToken();
-        const response = await fetch("/api/v1/admin/analytics/branches", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: "no-store",
+        const response = await getAdminBranchesWithManagers({
+          accessToken,
+          limit: 200,
+          includeInactive: true,
         });
-        const payload = (await response.json().catch(() => null)) as
-          | ApiErrorPayload
-          | BranchAnalyticsResponse
-          | null;
-
-        if (!response.ok) {
-          throw new Error(toErrorMessage(payload as ApiErrorPayload | null, "Failed to load branches."));
-        }
-
-        const branchRows = Array.isArray((payload as BranchAnalyticsResponse)?.branches)
-          ? ((payload as BranchAnalyticsResponse).branches as BranchOption[])
-          : [];
+        const branchRows = response.items.map((branch) => ({
+          id: branch.id,
+          code: branch.code || "",
+          name: branch.name || "Unnamed Branch",
+          city: branch.city,
+          status: branch.status || "ACTIVE",
+        }));
         setBranches(branchRows);
       } catch {
         setBranches([]);

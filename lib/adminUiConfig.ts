@@ -196,19 +196,21 @@ export const deriveQuickVisibilityChoices = ({
   const normalizedTier = String(customerTier || "").trim().toUpperCase();
 
   if (normalizedVisibility === "USER_TIER") {
-    return CUSTOMER_TIER_OPTIONS.map((tier) => ({
-      value: tier,
-      label: tier.replace("_", " "),
-      helper: "Switch the customer tier without opening the full editor.",
-    }));
+    return [
+      {
+        value: "USER_TIER",
+        label: "User-Tier",
+        helper: "Quick updates stay inside tier-targeted visibility.",
+      },
+    ];
   }
 
   if (normalizedVisibility === "TARGETED_USER") {
     return [
       {
         value: "TARGETED_USER",
-        label: "Select Users",
-        helper: "Choose customer accounts from the quick visibility panel.",
+        label: "Targeted User",
+        helper: "Quick updates stay inside targeted-user visibility.",
       },
     ];
   }
@@ -221,7 +223,7 @@ export const deriveQuickVisibilityChoices = ({
       {
         value: "USER_TIER",
         label: "User-Tier",
-        helper: "Tier-specific products can only quick switch within tier targeting.",
+        helper: "Tier-scoped private or staff products can only quick update within USER_TIER.",
       },
     ];
   }
@@ -229,14 +231,14 @@ export const deriveQuickVisibilityChoices = ({
   if (normalizedVisibility === "PUBLIC" || normalizedVisibility === "TOP_SHELF") {
     return [
       {
-        value: "PRIVATE",
-        label: "Private",
-        helper: "Requires the full edit flow and approval to hide from public.",
+        value: "PUBLIC",
+        label: "Public",
+        helper: "Keep the product visible in the public catalog.",
       },
       {
-        value: "STAFF",
-        label: "Staff",
-        helper: "Requires the full edit flow and approval to keep internal only.",
+        value: "TOP_SHELF",
+        label: "Top-Shelf",
+        helper: "Promote the product into top-shelf placement.",
       },
     ];
   }
@@ -245,22 +247,22 @@ export const deriveQuickVisibilityChoices = ({
     {
       value: "PRIVATE",
       label: "Private",
-      helper: "Only admin staff can see the product.",
+      helper: "Limit the product to admin-only visibility.",
     },
     {
       value: "STAFF",
       label: "Staff",
-      helper: "Visible to admin, manager, and sales staff.",
+      helper: "Keep the product visible to staff only.",
     },
     {
       value: "PUBLIC",
       label: "Public",
-      helper: "Show in the global product page.",
+      helper: "Show the product in the public catalog.",
     },
     {
       value: "TOP_SHELF",
       label: "Top-Shelf",
-      helper: "Promote on home and product landing areas.",
+      helper: "Promote the product in top-shelf placement.",
     },
   ];
 };

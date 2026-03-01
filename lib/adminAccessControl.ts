@@ -3,11 +3,13 @@ import type { AdminUserAccessRestriction } from "@/lib/apiClient";
 export const ADMIN_ACTION_BLOCKS = [
   "PRODUCT_CREATE",
   "PRODUCT_EDIT",
+  "PRODUCT_VISIBILITY_MANAGE",
   "PRODUCT_DELETE",
   "INVENTORY_REQUEST_DECIDE",
   "USER_ACCESS_MANAGE",
   "APPROVAL_REVIEW",
   "STAFF_RULE_MANAGE",
+  "LOG_DELETE",
 ] as const;
 
 export type AdminActionBlock = (typeof ADMIN_ACTION_BLOCKS)[number];
@@ -132,6 +134,8 @@ export const getAdminActionRestrictionTooltip = (action: AdminActionBlock) => {
       return "You are restricted from creating products.";
     case "PRODUCT_EDIT":
       return "You are restricted from editing products.";
+    case "PRODUCT_VISIBILITY_MANAGE":
+      return "You are restricted from managing product visibility.";
     case "PRODUCT_DELETE":
       return "You are restricted from deleting products.";
     case "INVENTORY_REQUEST_DECIDE":
@@ -142,6 +146,8 @@ export const getAdminActionRestrictionTooltip = (action: AdminActionBlock) => {
       return "You are restricted from reviewing approval requests.";
     case "STAFF_RULE_MANAGE":
       return "You are restricted from managing staff rules.";
+    case "LOG_DELETE":
+      return "You are restricted from deleting logs.";
     default:
       return "This action is currently restricted.";
   }
