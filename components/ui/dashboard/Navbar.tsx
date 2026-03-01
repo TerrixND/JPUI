@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRole } from "./RoleContext";
 import { useTheme } from "./ThemeContext";
 import supabase from "@/lib/supabase";
-import { getAdminAuditLogs, type AdminAuditLogRow } from "@/lib/apiClient";
+import {
+  getAdminAuditLogs,
+  signOutAndRedirect,
+  type AdminAuditLogRow,
+} from "@/lib/apiClient";
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
   admin:       { bg: "bg-red-100 dark:bg-red-900/40",     text: "text-red-700 dark:text-red-400" },
@@ -63,6 +67,7 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const [activities, setActivities] = useState<AdminAuditLogRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const fetchActivity = useCallback(async () => {
@@ -91,6 +96,15 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
       return !prev;
     });
   }, [role, fetchActivity]);
+
+  const handleSignOut = useCallback(async () => {
+    if (signingOut) {
+      return;
+    }
+
+    setSigningOut(true);
+    await signOutAndRedirect("/login");
+  }, [signingOut]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -139,6 +153,17 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
           >
             {roleLabel}
           </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              void handleSignOut();
+            }}
+            disabled={signingOut}
+            className="hidden sm:inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {signingOut ? "Signing Out..." : "Logout"}
+          </button>
 
           {/* Dark mode toggle */}
           <button
@@ -268,6 +293,16 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
           </div>
 
           {/* Profile avatar (mobile) */}
+          <button
+            type="button"
+            onClick={() => {
+              void handleSignOut();
+            }}
+            disabled={signingOut}
+            className="sm:hidden inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {signingOut ? "Signing Out..." : "Logout"}
+          </button>
           <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-semibold lg:hidden">
             {roleLabel[0].toUpperCase()}
           </div>

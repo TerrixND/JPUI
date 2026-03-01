@@ -11,6 +11,7 @@ import {
   forceLogoutToBlockedPage,
   getAdminUserDetail,
   getUserMe,
+  isAccountAccessDeniedError,
   type AccountAccessState,
 } from "@/lib/apiClient";
 import {
@@ -47,6 +48,7 @@ const initialAuthState: DashboardAuthState = {
 const ACCOUNT_ACCESS_CODES = new Set([
   "ACCOUNT_BANNED",
   "ACCOUNT_RESTRICTED",
+  "ACCOUNT_SUSPENDED",
   "ACCOUNT_TERMINATED",
 ]);
 const ADMIN_ACTION_RESTRICTED_CODE = "ADMIN_ACTION_RESTRICTED";
@@ -131,6 +133,8 @@ const getAccessTitle = (accountAccess: AccountAccessState | null) => {
   switch (accountAccess?.code) {
     case "ACCOUNT_BANNED":
       return "Dashboard access is banned";
+    case "ACCOUNT_SUSPENDED":
+      return "Dashboard access is suspended";
     case "ACCOUNT_TERMINATED":
       return "Dashboard access is terminated";
     default:
@@ -142,6 +146,8 @@ const getAccessDescription = (accountAccess: AccountAccessState | null) => {
   switch (accountAccess?.code) {
     case "ACCOUNT_BANNED":
       return "A main admin has banned this account from role-based routes.";
+    case "ACCOUNT_SUSPENDED":
+      return "This account is suspended and cannot continue into protected role-based routes.";
     case "ACCOUNT_TERMINATED":
       return "This account has been terminated and cannot open role-based routes.";
     default:
@@ -450,6 +456,19 @@ export default function DashboardLayout({
           }
 
           hasResolvedInitialAccessRef.current = true;
+
+          if (
+            isAccountAccessDeniedError(error) &&
+            error.code !== "ACCOUNT_RESTRICTED"
+          ) {
+            await forceLogoutToBlockedPage(
+              error.payload ?? {
+                message: error.message,
+                code: error.code,
+              },
+            );
+            return;
+          }
 
           if (error instanceof ApiClientError && error.status === 401) {
             lastResolvedAccessTokenRef.current = "";

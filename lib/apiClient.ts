@@ -411,6 +411,13 @@ export type UserMeResponse = {
   raw: unknown;
 };
 
+export type BlockedAccountSnapshot = {
+  code: string | null;
+  message: string | null;
+  accountAccess: AccountAccessState | null;
+  raw: JsonRecord | null;
+};
+
 export type AdminAccessControlType = "RESTRICTION" | "BAN";
 export type AdminRestrictionMode = "ACCOUNT" | "ADMIN_ACTIONS";
 export type AdminActionBlock =
@@ -868,19 +875,133 @@ const normalizeAccountAccess = (value: unknown): AccountAccessState | null => {
 const ACCOUNT_ACCESS_DENIED_CODES = new Set([
   "ACCOUNT_BANNED",
   "ACCOUNT_RESTRICTED",
+  "ACCOUNT_SUSPENDED",
   "ACCOUNT_TERMINATED",
 ]);
 const ADMIN_ACTION_RESTRICTED_CODE = "ADMIN_ACTION_RESTRICTED";
 let accountDeniedRedirectInProgress = false;
+const BLOCKED_ACCOUNT_STORAGE_KEY = "jp_blocked_account_snapshot";
+let blockedAccountSnapshotCacheRaw: string | null | undefined;
+let blockedAccountSnapshotCacheValue: BlockedAccountSnapshot | null = null;
 
 const normalizeErrorCode = (value: unknown) => asString(value).toUpperCase();
 
 const isAccountAccessDeniedCode = (value: unknown) =>
   ACCOUNT_ACCESS_DENIED_CODES.has(normalizeErrorCode(value));
 
-export const redirectToBlockedPage = () => {
+const normalizeBlockedAccountSnapshot = (
+  value: unknown,
+): BlockedAccountSnapshot | null => {
+  const root = asRecord(value);
+  const details = asRecord(root?.details);
+  const accountAccess =
+    normalizeAccountAccess(details) ??
+    normalizeAccountAccess(root?.accountAccess) ??
+    normalizeAccountAccess(value);
+  const code =
+    asNullableString(root?.code) ??
+    accountAccess?.code ??
+    null;
+  const message =
+    asNullableString(root?.message) ??
+    asNullableString(details?.message) ??
+    null;
+
+  if (!code && !message && !accountAccess) {
+    return null;
+  }
+
+  return {
+    code,
+    message,
+    accountAccess,
+    raw: root,
+  };
+};
+
+export const storeBlockedAccountSnapshot = (value: unknown) => {
   if (typeof window === "undefined") {
     return;
+  }
+
+  const snapshot = normalizeBlockedAccountSnapshot(value);
+  if (!snapshot) {
+    return;
+  }
+
+  blockedAccountSnapshotCacheRaw = JSON.stringify(snapshot);
+  blockedAccountSnapshotCacheValue = snapshot;
+  window.sessionStorage.setItem(
+    BLOCKED_ACCOUNT_STORAGE_KEY,
+    blockedAccountSnapshotCacheRaw,
+  );
+};
+
+export const readBlockedAccountSnapshot = (): BlockedAccountSnapshot | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(BLOCKED_ACCOUNT_STORAGE_KEY);
+  if (!raw) {
+    blockedAccountSnapshotCacheRaw = null;
+    blockedAccountSnapshotCacheValue = null;
+    return null;
+  }
+
+  if (raw === blockedAccountSnapshotCacheRaw) {
+    return blockedAccountSnapshotCacheValue;
+  }
+
+  try {
+    blockedAccountSnapshotCacheRaw = raw;
+    blockedAccountSnapshotCacheValue = normalizeBlockedAccountSnapshot(JSON.parse(raw));
+    return blockedAccountSnapshotCacheValue;
+  } catch {
+    blockedAccountSnapshotCacheRaw = raw;
+    blockedAccountSnapshotCacheValue = null;
+    return null;
+  }
+};
+
+export const clearBlockedAccountSnapshot = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  blockedAccountSnapshotCacheRaw = null;
+  blockedAccountSnapshotCacheValue = null;
+  window.sessionStorage.removeItem(BLOCKED_ACCOUNT_STORAGE_KEY);
+};
+
+export const signOutAndRedirect = async (redirectPath = "/login") => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearBlockedAccountSnapshot();
+
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Ignore sign-out failure and still redirect.
+  }
+
+  if (window.location.pathname !== redirectPath) {
+    window.location.replace(redirectPath);
+    return;
+  }
+
+  window.location.reload();
+};
+
+export const redirectToBlockedPage = (value?: unknown) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (value !== undefined) {
+    storeBlockedAccountSnapshot(value);
   }
 
   if (window.location.pathname !== "/blocked") {
@@ -888,9 +1009,13 @@ export const redirectToBlockedPage = () => {
   }
 };
 
-export const forceLogoutToBlockedPage = async () => {
+export const forceLogoutToBlockedPage = async (value?: unknown) => {
   if (typeof window === "undefined") {
     return;
+  }
+
+  if (value !== undefined) {
+    storeBlockedAccountSnapshot(value);
   }
 
   if (accountDeniedRedirectInProgress) {

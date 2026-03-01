@@ -1,7 +1,19 @@
 "use client";
 
 import InputBox from "@/components/ui/InputBox";
+import {
+  ApiClientError,
+  forceLogoutToBlockedPage,
+  getUserMe,
+  isAccountAccessDeniedError,
+  redirectToBlockedPage,
+} from "@/lib/apiClient";
+import {
+  isAuthBlockedError,
+  precheckLogin,
+} from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
@@ -27,6 +39,13 @@ const LoginPage = () => {
       }
 
       const normalizedEmail = email.trim();
+      if (!normalizedEmail || !password) {
+        throw new Error("Email and password are required.");
+      }
+
+      await precheckLogin({
+        email: normalizedEmail,
+      });
 
       const { data, error: signInError } = await supabase.auth.signInWithPassword(
         {
@@ -39,9 +58,46 @@ const LoginPage = () => {
         throw new Error(signInError?.message || "Unable to login.");
       }
 
+      try {
+        await getUserMe({
+          accessToken: data.session.access_token,
+        });
+      } catch (error) {
+        if (isAccountAccessDeniedError(error)) {
+          await forceLogoutToBlockedPage(
+            error.payload ?? {
+              message: error.message,
+              code: error.code,
+            },
+          );
+          return;
+        }
+
+        throw error;
+      }
+
       router.replace("/");
       router.refresh();
     } catch (err) {
+      if (isAuthBlockedError(err)) {
+        redirectToBlockedPage({
+          message: err.message,
+          code: err.code,
+          details: err.details,
+        });
+        return;
+      }
+
+      if (err instanceof ApiClientError && isAccountAccessDeniedError(err)) {
+        void forceLogoutToBlockedPage(
+          err.payload ?? {
+            message: err.message,
+            code: err.code,
+          },
+        );
+        return;
+      }
+
       setError(err instanceof Error ? err.message : "Unable to login.");
     } finally {
       setLoading(false);
@@ -98,9 +154,11 @@ const LoginPage = () => {
       cursor-pointer
     "
           >
-            <img
+            <Image
               src="/icons/Google.png"
               alt="Google logo"
+              width={20}
+              height={20}
               className="w-5 h-5 object-contain"
             />
             <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
@@ -124,9 +182,11 @@ const LoginPage = () => {
       cursor-pointer
     "
           >
-            <img
+            <Image
               src="/icons/Line.png"
               alt="Line logo"
+              width={20}
+              height={20}
               className="w-5 h-5 object-contain"
             />
             <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
@@ -150,9 +210,11 @@ const LoginPage = () => {
       cursor-pointer
     "
           >
-            <img
+            <Image
               src="/icons/facebook.png"
               alt="Facebook logo"
+              width={20}
+              height={20}
               className="w-5 h-5 object-contain"
             />
             <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">

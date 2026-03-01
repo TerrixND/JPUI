@@ -6,7 +6,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import useAuth from "@/hooks/useAuth";
 import { usePathname } from "next/navigation";
 import supabase from "@/lib/supabase";
-import { getUserMe } from "@/lib/apiClient";
+import {
+  forceLogoutToBlockedPage,
+  getUserMe,
+  isAccountAccessDeniedError,
+  signOutAndRedirect,
+} from "@/lib/apiClient";
 import {
   getDashboardBasePath,
   mapBackendRoleToDashboardRole,
@@ -19,6 +24,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const authUserId = user?.id || null;
 
   const whiteRoutes = [
@@ -105,7 +111,17 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               : null,
           );
         }
-      } catch {
+      } catch (error) {
+        if (isAccountAccessDeniedError(error)) {
+          await forceLogoutToBlockedPage(
+            error.payload ?? {
+              message: error.message,
+              code: error.code,
+            },
+          );
+          return;
+        }
+
         if (!isDisposed) {
           setDashboardHref(null);
         }
@@ -118,6 +134,15 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
       isDisposed = true;
     };
   }, [authUserId]);
+
+  const handleSignOut = async () => {
+    if (signingOut) {
+      return;
+    }
+
+    setSigningOut(true);
+    await signOutAndRedirect("/login");
+  };
 
   return (
     <div
@@ -163,6 +188,16 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               <Link href="/profile" className="hidden md:block">
                 <User className={`w-5 h-5 ${iconColor}`} />
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSignOut();
+                }}
+                disabled={signingOut}
+                className={`text-sm ${textColor} hover:opacity-70 transition-opacity duration-200 disabled:opacity-50`}
+              >
+                {signingOut ? "Signing Out..." : "Logout"}
+              </button>
             </div>
           ) : (
             <div className="hidden md:flex gap-6 items-center">
@@ -214,13 +249,26 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
           ))}
 
           {user ? (
-            <Link
-              href="/profile"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
-            >
-              Profile
-            </Link>
+            <>
+              <Link
+                href="/profile"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+              >
+                Profile
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void handleSignOut();
+                }}
+                disabled={signingOut}
+                className="text-left text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1 disabled:opacity-50"
+              >
+                {signingOut ? "Signing Out..." : "Logout"}
+              </button>
+            </>
           ) : (
             <>
               <Link

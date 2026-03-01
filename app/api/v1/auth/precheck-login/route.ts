@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/auth/precheck-signup`;
+  const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/auth/precheck-login`;
 
   try {
     const targetOrigin = new URL(targetUrl).origin;
@@ -59,16 +59,6 @@ export async function POST(request: NextRequest) {
     const contentType =
       upstreamResponse.headers.get("content-type") || "application/json";
 
-    if (contentType.toLowerCase().includes("application/json")) {
-      try {
-        return NextResponse.json(JSON.parse(upstreamBody), {
-          status: upstreamResponse.status,
-        });
-      } catch {
-        // Fall through and return the raw upstream body.
-      }
-    }
-
     return new NextResponse(upstreamBody, {
       status: upstreamResponse.status,
       headers: {
@@ -81,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        message: `Unable to reach upstream signup precheck endpoint (${targetUrl}). ${message}`,
+        message: `Unable to reach upstream login precheck endpoint (${targetUrl}). ${message}`,
       },
       { status: 502 },
     );

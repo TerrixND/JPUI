@@ -2,6 +2,14 @@
 
 import InputBox from "@/components/ui/InputBox";
 import {
+  ApiClientError,
+  forceLogoutToBlockedPage,
+  getUserMe,
+  isAccountAccessDeniedError,
+  redirectToBlockedPage,
+} from "@/lib/apiClient";
+import {
+  isAuthBlockedError,
   bootstrapAdmin,
   clearPendingSetupPayload,
   precheckSignup,
@@ -76,6 +84,7 @@ const SignupPage = () => {
 
       const precheckResult = await precheckSignup({
         email: normalizedEmail,
+        flow: "SETUP_USER",
         ...profilePayload,
       });
       const onboardingMode = resolveOnboardingMode(precheckResult);
@@ -99,6 +108,24 @@ const SignupPage = () => {
           await setupUser(data.session.access_token, profilePayload);
         }
 
+        try {
+          await getUserMe({
+            accessToken: data.session.access_token,
+          });
+        } catch (authError) {
+          if (isAccountAccessDeniedError(authError)) {
+            await forceLogoutToBlockedPage(
+              authError.payload ?? {
+                message: authError.message,
+                code: authError.code,
+              },
+            );
+            return;
+          }
+
+          throw authError;
+        }
+
         clearPendingSetupPayload();
         router.replace("/");
         router.refresh();
@@ -110,6 +137,29 @@ const SignupPage = () => {
         "Sign up successful. Verify your email, then login to finish account setup.",
       );
     } catch (err) {
+      if (isAuthBlockedError(err)) {
+        if (isSupabaseConfigured) {
+          await supabase.auth.signOut().catch(() => undefined);
+        }
+
+        redirectToBlockedPage({
+          message: err.message,
+          code: err.code,
+          details: err.details,
+        });
+        return;
+      }
+
+      if (err instanceof ApiClientError && isAccountAccessDeniedError(err)) {
+        void forceLogoutToBlockedPage(
+          err.payload ?? {
+            message: err.message,
+            code: err.code,
+          },
+        );
+        return;
+      }
+
       setError(err instanceof Error ? err.message : "Unable to sign up.");
     } finally {
       setLoading(false);

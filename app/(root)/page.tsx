@@ -10,8 +10,15 @@ import {
   bootstrapAdmin,
   clearPendingSetupPayload,
   getPendingSetupProfileForEmail,
+  isAuthBlockedError,
   setupUser,
 } from "@/lib/setupUser";
+import {
+  forceLogoutToBlockedPage,
+  getUserMe,
+  isAccountAccessDeniedError,
+  redirectToBlockedPage,
+} from "@/lib/apiClient";
 
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import React, { useEffect, useRef, useState } from "react";
@@ -58,8 +65,36 @@ const HomePage = () => {
           await setupUser(session.access_token, pendingSetupProfile.payload);
         }
 
+        try {
+          await getUserMe({
+            accessToken: session.access_token,
+          });
+        } catch (accountError) {
+          if (isAccountAccessDeniedError(accountError)) {
+            await forceLogoutToBlockedPage(
+              accountError.payload ?? {
+                message: accountError.message,
+                code: accountError.code,
+              },
+            );
+            return;
+          }
+
+          throw accountError;
+        }
+
         clearPendingSetupPayload();
       } catch (error) {
+        if (isAuthBlockedError(error)) {
+          await supabase.auth.signOut().catch(() => undefined);
+          redirectToBlockedPage({
+            message: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          return;
+        }
+
         setSetupError(
           error instanceof Error
             ? error.message
