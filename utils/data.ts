@@ -913,3 +913,23 @@ export const generateCertificateSvg = (product: CertificateProduct) => {
   </text>
 </svg>`;
 };
+
+export const cart_item_data = [
+  {
+    id: "1",
+    name: "Imperial Jade Dragon Pendant",
+    sku: "JDE-IMP-2025-0001",
+    color: "Emerald Green",
+    image:
+      "/images/earring.png"
+  },
+  {
+    id: "2",
+    name: "Natural Burmese Jade Bangle",
+    sku: "JDE-BGL-2025-0007",
+    color: "Deep Moss Green",
+    image:
+      "/images/bracelet.png"
+  },
+];
+
