@@ -143,6 +143,7 @@ Content-Type for write routes: `application/json`
 - `POST /appointments/:appointmentId/possessions`
 
 ### Sales commission
+- `GET /commission-policies`
 - `POST /commission-policies`
 - `GET /salespersons/:salespersonUserId/performance`
 - `GET /salespersons/:salespersonUserId/possessions`
@@ -477,6 +478,72 @@ Purpose: check out a product to a salesperson for an appointment.
 
 ## 8) Sales Commission Policy
 
+### GET `/commission-policies`
+Purpose: list commission policies inside manager branch scope.
+
+### Query
+- `branchId` optional UUID if manager has exactly one branch
+- `limit` optional integer, default `100`, max `200`
+- `isActive` optional boolean
+- `salespersonUserId` optional salesperson user UUID
+- `productId` optional UUID for product-specific policies
+- `productTier` optional `STANDARD | VIP | ULTRA_RARE`
+
+### Current backend behavior
+- Manager must have access to the branch.
+- If `salespersonUserId` is provided, that salesperson must belong to the branch.
+- If `productId` is provided, the product must be manager-visible, which means not `PRIVATE`.
+- Product-specific policies tied to `PRIVATE` products are not returned.
+- Response is ordered by:
+1. active first
+2. lower `priority` first
+3. newest first
+
+### Response shape
+```json
+{
+  "branchId": "branch-uuid",
+  "count": 2,
+  "records": [
+    {
+      "id": "policy-uuid",
+      "branchId": "branch-uuid",
+      "scope": "PRODUCT_SPECIFIC",
+      "salespersonId": "sales-profile-uuid",
+      "productTier": null,
+      "productId": "product-uuid",
+      "rate": "7.5",
+      "activeFrom": "2026-03-01T00:00:00.000Z",
+      "activeTo": null,
+      "isActive": true,
+      "priority": 100,
+      "note": "Specific SKU commission",
+      "salesperson": {
+        "id": "sales-profile-uuid",
+        "displayName": "Top Seller",
+        "user": {
+          "id": "sales-user-uuid",
+          "email": "sales@example.com",
+          "status": "ACTIVE"
+        }
+      },
+      "product": {
+        "id": "product-uuid",
+        "sku": "SKU-001",
+        "name": "Example Product",
+        "visibility": "STAFF",
+        "status": "AVAILABLE"
+      },
+      "createdByUser": {
+        "id": "manager-user-uuid",
+        "email": "manager@example.com",
+        "role": "MANAGER"
+      }
+    }
+  ]
+}
+```
+
 ### POST `/commission-policies`
 Purpose: create salesperson commission policy inside manager branch scope.
 
@@ -549,6 +616,7 @@ Purpose: create salesperson commission policy inside manager branch scope.
 - Returns the created `CommissionPolicy` row.
 
 ### Related read routes
+- `GET /commission-policies`
 - `GET /salespersons/:salespersonUserId/performance`
 - `GET /salespersons/:salespersonUserId/possessions`
 

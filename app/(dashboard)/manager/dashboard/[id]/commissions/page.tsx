@@ -9,6 +9,7 @@ import {
   filterManagerBranchStaff,
   getManagerAnalyticsBranches,
   getManagerBranchUsers,
+  getManagerCommissionPolicies,
   getManagerProducts,
   getManagerSalespersonPerformance,
   type ManagerBranchAnalyticsRecord,
@@ -40,12 +41,46 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
+type SessionCommissionPolicyRecord = ManagerCommissionPolicyRecord & {
+  branchLabel: string | null;
+  salespersonLabel: string | null;
+  scopeLabel: string | null;
+};
+
+const formatScopeLabel = (
+  row: ManagerCommissionPolicyRecord,
+  productFallbackLabel?: string | null,
+) => {
+  if (row.productId) {
+    const productLabel =
+      [row.product?.sku, row.product?.name].filter(Boolean).join(" · ") ||
+      productFallbackLabel ||
+      row.productId;
+    return `Product-specific · ${productLabel}`;
+  }
+
+  if (row.productTier) {
+    return `Tier · ${row.productTier}`;
+  }
+
+  if (!row.scope || row.scope === "DEFAULT") {
+    return "Default";
+  }
+
+  return row.scope
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 export default function ManagerCommissions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
 
   const [branchId, setBranchId] = useState("");
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
@@ -53,7 +88,7 @@ export default function ManagerCommissions() {
   const [products, setProducts] = useState<ManagerProductSummary[]>([]);
   const [branchAnalytics, setBranchAnalytics] =
     useState<ManagerBranchAnalyticsRecord | null>(null);
-  const [createdPolicies, setCreatedPolicies] = useState<ManagerCommissionPolicyRecord[]>([]);
+  const [policies, setPolicies] = useState<ManagerCommissionPolicyRecord[]>([]);
   const [performance, setPerformance] = useState<ManagerSalespersonPerformance | null>(null);
 
   const [salespersonUserId, setSalespersonUserId] = useState("");
@@ -98,15 +133,17 @@ export default function ManagerCommissions() {
         setSalespersons([]);
         setProducts([]);
         setBranchAnalytics(null);
+        setPolicies([]);
         return;
       }
 
       setLoading(true);
+      setPoliciesLoading(true);
       setError("");
 
       try {
         const accessToken = await getAccessToken();
-        const [branchUsers, productResponse, analytics] = await Promise.all([
+        const [branchUsers, productResponse, analytics, policyResponse] = await Promise.all([
           getManagerBranchUsers({
             accessToken,
             branchId: resolvedBranchId,
@@ -119,12 +156,18 @@ export default function ManagerCommissions() {
             accessToken,
             branchId: resolvedBranchId,
           }),
+          getManagerCommissionPolicies({
+            accessToken,
+            branchId: resolvedBranchId,
+            limit: 100,
+          }),
         ]);
 
         const salesRows = filterManagerBranchStaff(branchUsers.users, ["SALES"]);
         setSalespersons(salesRows);
         setProducts(productResponse.products);
         setBranchAnalytics(analytics.branches[0] || null);
+        setPolicies(policyResponse.records);
         setSalespersonUserId((current) => {
           if (current && salesRows.some((row) => row.userId === current)) {
             return current;
@@ -138,9 +181,11 @@ export default function ManagerCommissions() {
         setSalespersons([]);
         setProducts([]);
         setBranchAnalytics(null);
+        setPolicies([]);
         setError(getErrorMessage(caughtError));
       } finally {
         setLoading(false);
+        setPoliciesLoading(false);
       }
     },
     [branchId, getAccessToken],
@@ -160,6 +205,7 @@ export default function ManagerCommissions() {
         setSalespersons([]);
         setProducts([]);
         setBranchAnalytics(null);
+        setPolicies([]);
         setError(getErrorMessage(caughtError));
         setLoading(false);
       }
@@ -246,7 +292,47 @@ export default function ManagerCommissions() {
       });
 
       if (result) {
-        setCreatedPolicies((current) => [result, ...current].slice(0, 30));
+        setPolicies((current) =>
+          [
+            {
+              ...result,
+              branchId: result.branchId || branchId,
+              salespersonUserId: result.salespersonUserId || salespersonUserId,
+              salespersonId: result.salespersonId || null,
+              rate: result.rate ?? parsedRate,
+              activeFrom:
+                result.activeFrom || (activeFrom ? new Date(activeFrom).toISOString() : null),
+              activeTo:
+                result.activeTo || (activeTo ? new Date(activeTo).toISOString() : null),
+              isActive: result.isActive ?? true,
+              salesperson:
+                result.salesperson ||
+                (selectedSalesperson
+                  ? {
+                      id: result.salespersonId || selectedSalesperson.userId,
+                      displayName: selectedSalesperson.displayName,
+                      user: {
+                        id: selectedSalesperson.userId,
+                        email: selectedSalesperson.email,
+                        status: selectedSalesperson.status,
+                      },
+                    }
+                  : null),
+              product:
+                result.product ||
+                (selectedProduct
+                  ? {
+                      id: selectedProduct.id,
+                      sku: selectedProduct.sku,
+                      name: selectedProduct.name,
+                      visibility: selectedProduct.visibility,
+                      status: selectedProduct.status,
+                    }
+                  : null),
+            },
+            ...current.filter((row) => row.id !== result.id),
+          ].slice(0, 100),
+        );
       }
 
       setNotice("Commission policy created.");
@@ -255,6 +341,23 @@ export default function ManagerCommissions() {
       setActiveFrom("");
       setActiveTo("");
       setNote("");
+
+      setPoliciesLoading(true);
+      try {
+        const policyResponse = await getManagerCommissionPolicies({
+          accessToken,
+          branchId,
+          limit: 100,
+        });
+        setPolicies(policyResponse.records);
+      } catch (refreshError) {
+        if (handleAccountAccessDeniedError(refreshError)) {
+          return;
+        }
+        setError(getErrorMessage(refreshError));
+      } finally {
+        setPoliciesLoading(false);
+      }
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
         return;
@@ -268,6 +371,50 @@ export default function ManagerCommissions() {
   const selectedSalesperson = useMemo(
     () => salespersons.find((row) => row.userId === salespersonUserId) || null,
     [salespersonUserId, salespersons],
+  );
+  const selectedProduct = useMemo(
+    () => products.find((row) => row.id === productId) || null,
+    [productId, products],
+  );
+  const branchLabelById = useMemo(
+    () => new Map(branchOptions.map((row) => [row.id, row.label])),
+    [branchOptions],
+  );
+  const salespersonLabelByUserId = useMemo(
+    () =>
+      new Map(
+        salespersons.map((row) => [
+          row.userId,
+          row.displayName || row.email || row.userId,
+        ]),
+      ),
+    [salespersons],
+  );
+  const productLabelById = useMemo(
+    () =>
+      new Map(
+        products.map((row) => [row.id, [row.sku, row.name].filter(Boolean).join(" · ") || row.id]),
+      ),
+    [products],
+  );
+  const policyRows = useMemo<SessionCommissionPolicyRecord[]>(
+    () =>
+      policies.map((row) => ({
+        ...row,
+        branchLabel: (row.branchId ? branchLabelById.get(row.branchId) : null) || row.branchId,
+        salespersonLabel:
+          row.salesperson?.displayName ||
+          row.salesperson?.user?.email ||
+          (row.salespersonUserId
+            ? salespersonLabelByUserId.get(row.salespersonUserId) || row.salespersonUserId
+            : row.salespersonId) ||
+          null,
+        scopeLabel: formatScopeLabel(
+          row,
+          row.productId ? productLabelById.get(row.productId) : null,
+        ),
+      })),
+    [branchLabelById, policies, productLabelById, salespersonLabelByUserId],
   );
 
   return (
@@ -498,40 +645,61 @@ export default function ManagerCommissions() {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            Recent Created Policies (This Session)
+            Saved Branch Policies
           </h2>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {branchId
+              ? "Loaded from the manager commission policy API for the selected branch."
+              : "Select a branch to load saved commission policies."}
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                <th className="px-5 py-3 font-medium">Policy</th>
+                <th className="px-5 py-3 font-medium">Policy ID</th>
                 <th className="px-5 py-3 font-medium">Branch</th>
                 <th className="px-5 py-3 font-medium">Salesperson</th>
                 <th className="px-5 py-3 font-medium">Rate</th>
                 <th className="px-5 py-3 font-medium">Scope</th>
                 <th className="px-5 py-3 font-medium">Active From</th>
+                <th className="px-5 py-3 font-medium">Active To</th>
               </tr>
             </thead>
             <tbody>
-              {createdPolicies.length === 0 ? (
+              {policiesLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                    No commission policies created in this session yet.
+                  <td colSpan={7} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
+                    Loading commission policies...
+                  </td>
+                </tr>
+              ) : policyRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
+                    No saved commission policies found for this branch.
                   </td>
                 </tr>
               ) : (
-                createdPolicies.map((row) => (
+                policyRows.map((row) => (
                   <tr key={row.id} className="border-b border-gray-50 dark:border-gray-800">
                     <td className="px-5 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">{row.id}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{row.branchId || "-"}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{row.salespersonUserId || "-"}</td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-gray-200">{row.rate ?? "-"}</td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {row.productId || row.productTier || "Default"}
+                      {row.branchLabel || row.branchId || "-"}
+                    </td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                      {row.salespersonLabel || row.salespersonUserId || row.salespersonId || "-"}
+                    </td>
+                    <td className="px-5 py-3 text-gray-700 dark:text-gray-200">
+                      {row.rate !== null ? `${row.rate}%` : "-"}
+                    </td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                      {row.scopeLabel || row.productId || row.productTier || row.scope || "Default"}
                     </td>
                     <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
                       {formatDateTime(row.activeFrom)}
+                    </td>
+                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
+                      {formatDateTime(row.activeTo)}
                     </td>
                   </tr>
                 ))

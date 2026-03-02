@@ -34,7 +34,23 @@ const asNullableString = (value: unknown) => {
 const asFiniteNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
+const asFiniteNumberish = (value: unknown) => {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
 const asBoolean = (value: unknown) => value === true;
+
+const asNullableBoolean = (value: unknown) => {
+  if (value === true) {
+    return true;
+  }
+  if (value === false) {
+    return false;
+  }
+
+  return null;
+};
 
 const asPositiveInt = (value: unknown) => {
   const numeric = typeof value === "number" ? value : Number(value);
@@ -1703,14 +1719,111 @@ export type ManagerCommissionPolicyRecord = {
   id: string;
   branchId: string | null;
   salespersonUserId: string | null;
+  salespersonId: string | null;
   rate: number | null;
+  scope: string | null;
   productTier: string | null;
   productId: string | null;
   activeFrom: string | null;
   activeTo: string | null;
+  isActive: boolean | null;
   priority: number | null;
   note: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  salesperson: {
+    id: string;
+    displayName: string | null;
+    user: {
+      id: string;
+      email: string | null;
+      status: string | null;
+    } | null;
+  } | null;
+  product: {
+    id: string;
+    sku: string | null;
+    name: string | null;
+    visibility: string | null;
+    status: string | null;
+  } | null;
+  createdByUser: {
+    id: string;
+    email: string | null;
+    role: string | null;
+  } | null;
   raw: JsonRecord;
+};
+
+const normalizeManagerCommissionPolicySalesperson = (
+  value: unknown,
+): ManagerCommissionPolicyRecord["salesperson"] => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const user = asRecord(row.user);
+  const userId = asString(user?.id);
+
+  return {
+    id,
+    displayName: asNullableString(row.displayName),
+    user: userId
+      ? {
+          id: userId,
+          email: asNullableString(user?.email),
+          status: asNullableString(user?.status),
+        }
+      : null,
+  };
+};
+
+const normalizeManagerCommissionPolicyProduct = (
+  value: unknown,
+): ManagerCommissionPolicyRecord["product"] => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    sku: asNullableString(row.sku),
+    name: asNullableString(row.name),
+    visibility: asNullableString(row.visibility),
+    status: asNullableString(row.status),
+  };
+};
+
+const normalizeManagerCommissionPolicyCreatedByUser = (
+  value: unknown,
+): ManagerCommissionPolicyRecord["createdByUser"] => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+  };
 };
 
 const normalizeManagerCommissionPolicy = (
@@ -1726,19 +1839,100 @@ const normalizeManagerCommissionPolicy = (
     return null;
   }
 
+  const salesperson = normalizeManagerCommissionPolicySalesperson(row.salesperson);
+  const product = normalizeManagerCommissionPolicyProduct(row.product);
+  const createdByUser = normalizeManagerCommissionPolicyCreatedByUser(
+    row.createdByUser,
+  );
+
   return {
     id,
     branchId: asNullableString(row.branchId),
     salespersonUserId:
-      asNullableString(row.salespersonUserId) || asNullableString(row.userId),
-    rate: asFiniteNumber(row.rate),
+      asNullableString(row.salespersonUserId) ||
+      asNullableString(row.userId) ||
+      salesperson?.user?.id ||
+      null,
+    salespersonId: asNullableString(row.salespersonId) || salesperson?.id || null,
+    rate: asFiniteNumberish(row.rate),
+    scope: asNullableString(row.scope),
     productTier: asNullableString(row.productTier),
-    productId: asNullableString(row.productId),
+    productId: asNullableString(row.productId) || product?.id || null,
     activeFrom: asNullableString(row.activeFrom),
     activeTo: asNullableString(row.activeTo),
-    priority: asFiniteNumber(row.priority),
+    isActive: asNullableBoolean(row.isActive),
+    priority: asFiniteNumberish(row.priority),
     note: asNullableString(row.note),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    salesperson,
+    product,
+    createdByUser,
     raw: row,
+  };
+};
+
+export type ManagerCommissionPoliciesResponse = {
+  branchId: string | null;
+  count: number;
+  records: ManagerCommissionPolicyRecord[];
+  raw: unknown;
+};
+
+export const getManagerCommissionPolicies = async ({
+  accessToken,
+  branchId,
+  limit,
+  isActive,
+  salespersonUserId,
+  productId,
+  productTier,
+}: {
+  accessToken: string;
+  branchId?: string;
+  limit?: number;
+  isActive?: boolean;
+  salespersonUserId?: string;
+  productId?: string;
+  productTier?: string;
+}): Promise<ManagerCommissionPoliciesResponse> => {
+  const query = new URLSearchParams();
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (isActive !== undefined) {
+    query.set("isActive", String(isActive));
+  }
+  if (salespersonUserId) {
+    query.set("salespersonUserId", salespersonUserId.trim());
+  }
+  if (productId) {
+    query.set("productId", productId.trim());
+  }
+  if (productTier) {
+    query.set("productTier", asString(productTier).toUpperCase());
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/commission-policies${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load commission policies.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const records = extractRows(payload)
+    .map((entry) => normalizeManagerCommissionPolicy(entry))
+    .filter((entry): entry is ManagerCommissionPolicyRecord => Boolean(entry));
+
+  return {
+    branchId: asNullableString(root.branchId),
+    count: asPositiveInt(root.count) ?? records.length,
+    records,
+    raw: payload,
   };
 };
 
