@@ -200,7 +200,7 @@ export default function AdminBranches() {
     <div className="space-y-6">
       <PageHeader
         title="Branch Network"
-        description="Branch network analytics from the updated `/admin/analytics/branches` route."
+        description="Overview of all branches in your network with analytics and status."
       />
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">

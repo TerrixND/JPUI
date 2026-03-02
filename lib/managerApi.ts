@@ -335,6 +335,97 @@ export const filterManagerBranchStaff = (
   });
 };
 
+export type ManagerProductMediaReference = {
+  id: string | null;
+  type: string | null;
+  url: string | null;
+  slot: string | null;
+  raw: JsonRecord;
+};
+
+const normalizeStringList = (value: unknown) =>
+  Array.isArray(value) ? value.map((entry) => asString(entry)).filter(Boolean) : [];
+
+const normalizeManagerProductMedia = (
+  value: unknown,
+): ManagerProductMediaReference | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asNullableString(row.id);
+  const type = asNullableString(row.type);
+  const url =
+    asNullableString(row.url) ||
+    asNullableString(asRecord(row.media)?.url);
+  const slot = asNullableString(row.slot);
+
+  if (!id && !type && !url && !slot) {
+    return null;
+  }
+
+  return {
+    id,
+    type,
+    url,
+    slot,
+    raw: row,
+  };
+};
+
+const scoreManagerProductMediaPreview = (media: ManagerProductMediaReference) => {
+  const slot = asString(media.slot).toUpperCase();
+  const type = asString(media.type).toUpperCase();
+  let score = 0;
+
+  if (slot === "THUMBNAIL") score += 100;
+  if (slot === "PRIMARY") score += 90;
+  if (slot === "GALLERY") score += 80;
+  if (slot === "FEATURE_VIDEO") score -= 100;
+
+  if (type === "IMAGE" || type.startsWith("IMAGE/")) score += 20;
+  if (type === "VIDEO" || type.startsWith("VIDEO/")) score -= 50;
+
+  if (media.url) score += 5;
+  if (media.id) score += 3;
+
+  return score;
+};
+
+const extractManagerProductPreview = (row: JsonRecord) => {
+  const publicMedia = asRecord(row.publicMedia);
+  const media = Array.isArray(row.media)
+    ? row.media
+        .map((entry) => normalizeManagerProductMedia(entry))
+        .filter((entry): entry is ManagerProductMediaReference => Boolean(entry))
+    : [];
+  const preferredMedia = [...media]
+    .filter((entry) => entry.url || entry.id)
+    .sort((left, right) => scoreManagerProductMediaPreview(right) - scoreManagerProductMediaPreview(left))[0];
+
+  const directPreviewUrl =
+    preferredMedia?.url ??
+    asNullableString(row.previewImageUrl) ??
+    asNullableString(row.thumbnailUrl) ??
+    asNullableString(row.imageUrl) ??
+    asNullableString(row.mediaUrl) ??
+    asNullableString(row.url);
+  const directPreviewMediaId =
+    preferredMedia?.id ??
+    asNullableString(publicMedia?.thumbnailMediaId) ??
+    asNullableString(row.thumbnailImageId) ??
+    normalizeStringList(publicMedia?.galleryMediaIds)[0] ??
+    normalizeStringList(row.galleryImageIds)[0] ??
+    null;
+
+  return {
+    media,
+    previewImageUrl: directPreviewUrl,
+    previewImageMediaId: directPreviewMediaId,
+  };
+};
+
 export type ManagerProductSummary = {
   id: string;
   sku: string | null;
@@ -350,6 +441,9 @@ export type ManagerProductSummary = {
   projectedBranchCommissionMax: number | null;
   selectedValue: number | null;
   targetedUsersCount: number;
+  previewImageUrl: string | null;
+  previewImageMediaId: string | null;
+  media: ManagerProductMediaReference[];
   raw: JsonRecord;
 };
 
@@ -366,6 +460,7 @@ const normalizeManagerProduct = (value: unknown): ManagerProductSummary | null =
 
   const saleRange = asRecord(row.saleRange);
   const projectedRange = asRecord(row.projectedBranchCommissionRange);
+  const preview = extractManagerProductPreview(row);
 
   return {
     id,
@@ -382,6 +477,9 @@ const normalizeManagerProduct = (value: unknown): ManagerProductSummary | null =
     projectedBranchCommissionMax: asFiniteNumber(projectedRange?.max),
     selectedValue: asFiniteNumber(row.selectedValue),
     targetedUsersCount: asPositiveInt(row.targetedUsersCount) ?? 0,
+    previewImageUrl: preview.previewImageUrl,
+    previewImageMediaId: preview.previewImageMediaId,
+    media: preview.media,
     raw: row,
   };
 };

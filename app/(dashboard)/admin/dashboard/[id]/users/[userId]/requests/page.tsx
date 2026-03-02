@@ -112,7 +112,7 @@ export default function AdminUserRequestsPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${name} Requests`}
-        description="Dedicated approval-request history from the updated `/admin/users/:userId/approval-requests` route."
+        description="View all approval requests submitted by this user."
         action={
           <Link
             href={`${dashboardBasePath}/users/${userId}`}

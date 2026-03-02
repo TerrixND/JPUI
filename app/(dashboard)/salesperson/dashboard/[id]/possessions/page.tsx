@@ -1,3 +1,5 @@
+"use client";
+
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 
 const possessions = [
@@ -12,10 +14,10 @@ const possessions = [
 
 function statusStyle(status: string) {
   switch (status) {
-    case "IN_HAND":  return "bg-blue-100 text-blue-700";
-    case "SOLD":     return "bg-green-100 text-green-700";
-    case "RETURNED": return "bg-gray-200 text-gray-500";
-    default:         return "bg-gray-100 text-gray-600";
+    case "IN_HAND":  return "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400";
+    case "SOLD":     return "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400";
+    case "RETURNED": return "bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300";
+    default:         return "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400";
   }
 }
 
@@ -31,32 +33,28 @@ export default function SalespersonPossessions() {
         description="Products currently allocated to you and their status."
       />
 
-      <div className="flex flex-wrap gap-2">
-        <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-[11px] font-mono rounded-md">GET /salesperson/me/possessions</span>
-      </div>
-
-      {/* Summary */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-blue-50 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-blue-700">{inHand}</p>
-          <p className="text-xs text-blue-600 mt-1">In Hand</p>
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-center border border-blue-100 dark:border-blue-800/40 transition-colors">
+          <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{inHand}</p>
+          <p className="text-xs font-medium text-blue-600 dark:text-blue-500 mt-1">In Hand</p>
         </div>
-        <div className="bg-green-50 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-green-700">{sold}</p>
-          <p className="text-xs text-green-600 mt-1">Sold</p>
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center border border-green-100 dark:border-green-800/40 transition-colors">
+          <p className="text-2xl font-bold text-green-700 dark:text-green-400">{sold}</p>
+          <p className="text-xs font-medium text-green-600 dark:text-green-500 mt-1">Sold</p>
         </div>
-        <div className="bg-gray-100 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-gray-600">{returned}</p>
-          <p className="text-xs text-gray-500 mt-1">Returned</p>
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-4 text-center border border-gray-200 dark:border-gray-700/60 transition-colors">
+          <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">{returned}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1">Returned</p>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Desktop Table */}
+      <div className="hidden sm:block bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 bg-gray-50/50 border-b border-gray-200">
+              <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-700/30 border-b border-gray-200 dark:border-gray-700/60">
                 <th className="px-5 py-3 font-medium">Product</th>
                 <th className="px-5 py-3 font-medium">Serial</th>
                 <th className="px-5 py-3 font-medium">Appointment</th>
@@ -67,12 +65,12 @@ export default function SalespersonPossessions() {
             </thead>
             <tbody>
               {possessions.map((p) => (
-                <tr key={p.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-gray-900">{p.product}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{p.serial}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{p.appointment}</td>
-                  <td className="px-5 py-3 text-gray-600">{p.assignedDate}</td>
-                  <td className="px-5 py-3 text-gray-600">{p.value}</td>
+                <tr key={p.id} className="border-b border-gray-50 dark:border-gray-700/40 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                  <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{p.product}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{p.serial}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{p.appointment}</td>
+                  <td className="px-5 py-3 text-gray-600 dark:text-gray-400">{p.assignedDate}</td>
+                  <td className="px-5 py-3 text-gray-600 dark:text-gray-400">{p.value}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(p.status)}`}>
                       {p.status.replace("_", " ")}
@@ -84,7 +82,38 @@ export default function SalespersonPossessions() {
           </table>
         </div>
       </div>
+
+      {/* Mobile Cards */}
+      <div className="sm:hidden space-y-3">
+        {possessions.map((p) => (
+          <div key={p.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.product}</p>
+              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(p.status)}`}>
+                {p.status.replace("_", " ")}
+              </span>
+            </div>
+            <div className="space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex justify-between">
+                <span>Serial</span>
+                <span className="font-mono text-gray-600 dark:text-gray-300">{p.serial}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Appointment</span>
+                <span className="font-mono text-gray-600 dark:text-gray-300">{p.appointment}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Assigned</span>
+                <span className="text-gray-600 dark:text-gray-300">{p.assignedDate}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Value</span>
+                <span className="font-medium text-gray-700 dark:text-gray-200">{p.value}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
-

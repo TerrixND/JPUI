@@ -307,13 +307,6 @@ export default function ManagerCommissions() {
         }
       />
 
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-4 text-sm text-amber-800 dark:text-amber-200">
-        Product-specific quick picks on this page come from the current manager <span className="font-semibold">/products</span> route,
-        which only returns <span className="font-semibold">PRIVATE</span> products today. That is
-        a backend limitation, so the form keeps the behavior explicit instead of pretending it has a
-        wider manager catalog.
-      </div>
-
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
           {notice}

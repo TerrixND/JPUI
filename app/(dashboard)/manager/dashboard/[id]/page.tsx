@@ -274,7 +274,7 @@ export default function ManagerDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Manager Dashboard"
-        description="Branch-scoped operations built on the current manager API contract."
+        description="Overview of your branches, staff, appointments, and product selections."
         action={
           <div className="flex items-center gap-2">
             <select
@@ -304,32 +304,6 @@ export default function ManagerDashboard() {
           </div>
         }
       />
-
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(16,185,129,0.08))] dark:bg-[linear-gradient(135deg,rgba(120,53,15,0.35),rgba(6,78,59,0.18))] p-5">
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300">
-              Current Contract
-            </p>
-            <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
-              Branch staff comes from <span className="font-semibold">/branch-users</span>.
-              Branch admin is inferred as <span className="font-semibold">MANAGER + isPrimary</span>.
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-700 dark:text-gray-200">
-              Manager inventory flow currently means approve the appointment, create an
-              inventory request, then allocate possession after upstream approval.
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-700 dark:text-gray-200">
-              The manager API still does not expose a non-private product catalog or a customer
-              finder route, so the product page stays honest about those gaps.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {error && (
         <div className="px-4 py-3 rounded-lg border border-red-200 dark:border-red-700/50 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">

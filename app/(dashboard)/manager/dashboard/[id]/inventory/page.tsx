@@ -261,12 +261,6 @@ export default function ManagerInventory() {
         }
       />
 
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-4 text-sm text-amber-800 dark:text-amber-200">
-        The current backend creates this request directly at the main-admin stage. There is no
-        dedicated salesperson-originated request chain exposed in manager API yet, so this page
-        reflects the current direct manager request behavior.
-      </div>
-
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
           {notice}
@@ -385,8 +379,7 @@ export default function ManagerInventory() {
             Recent Submitted Requests (This Session)
           </h2>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            The manager usage contract documents request creation but not a manager-side read route
-            for historical inventory requests, so this table reflects the current session only.
+            Requests submitted during this session are listed below.
           </p>
         </div>
 

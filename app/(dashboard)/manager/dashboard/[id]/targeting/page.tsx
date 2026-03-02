@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import supabase from "@/lib/supabase";
-import { handleAccountAccessDeniedError } from "@/lib/apiClient";
+import { getPublicMediaUrl, handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   createManagerBranchProductRequest,
   getManagerAnalyticsBranches,
@@ -38,6 +38,9 @@ const parseUserIds = (value: string) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const getProductLabel = (product: Pick<ManagerProductSummary, "id" | "sku" | "name">) =>
+  [product.sku, product.name].filter(Boolean).join(" · ") || product.id;
+
 export default function ManagerTargeting() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,6 +65,7 @@ export default function ManagerTargeting() {
   const [requestProductIds, setRequestProductIds] = useState<string[]>([]);
   const [requestedCommissionRate, setRequestedCommissionRate] = useState("");
   const [requestNote, setRequestNote] = useState("");
+  const [productPreviewUrls, setProductPreviewUrls] = useState<Record<string, string>>({});
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -157,6 +161,76 @@ export default function ManagerTargeting() {
       void loadProductsAndRequests(branchId);
     }
   }, [branchId, loadProductsAndRequests]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const directPreviewUrls = Object.fromEntries(
+      products
+        .map((product) => [product.id, product.previewImageUrl] as const)
+        .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+    );
+
+    setProductPreviewUrls(directPreviewUrls);
+
+    const pendingPreviewProducts = products.filter(
+      (product) => !product.previewImageUrl && product.previewImageMediaId,
+    );
+
+    if (!pendingPreviewProducts.length) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const resolvePreviewUrls = async () => {
+      try {
+        const accessToken = await getAccessToken();
+        const resolvedEntries = await Promise.all(
+          pendingPreviewProducts.map(async (product) => {
+            if (!product.previewImageMediaId) {
+              return null;
+            }
+
+            try {
+              const media = await getPublicMediaUrl(product.previewImageMediaId, "PRIVATE", {
+                accessToken,
+              });
+
+              return media.url ? ([product.id, media.url] as const) : null;
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const resolvedPreviewUrls = Object.fromEntries(
+          resolvedEntries.filter(
+            (entry): entry is readonly [string, string] => Boolean(entry),
+          ),
+        );
+
+        setProductPreviewUrls({
+          ...directPreviewUrls,
+          ...resolvedPreviewUrls,
+        });
+      } catch {
+        if (!cancelled) {
+          setProductPreviewUrls(directPreviewUrls);
+        }
+      }
+    };
+
+    void resolvePreviewUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAccessToken, products]);
 
   const selectedTargetingProduct = useMemo(
     () => products.find((row) => row.id === targetingProductId) || null,
@@ -256,7 +330,7 @@ export default function ManagerTargeting() {
     <div className="space-y-6">
       <PageHeader
         title="Products & Targeting"
-        description="Private product request workflow plus manual visibility targeting for branch-held products."
+        description="Request products for your branch and manage visibility targeting."
         action={
           <div className="flex items-center gap-2">
             <select
@@ -289,24 +363,6 @@ export default function ManagerTargeting() {
         }
       />
 
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-5">
-        <div className="grid gap-3 lg:grid-cols-3 text-sm text-amber-900 dark:text-amber-100">
-          <p>
-            The current manager <span className="font-semibold">/products</span> route only lists
-            non-archived <span className="font-semibold">PRIVATE</span> products, not the requested
-            non-private manager catalog.
-          </p>
-          <p>
-            The manager API still does not provide a customer finder route, so explicit targeting is
-            updated with pasted customer user IDs instead of a customer picker.
-          </p>
-          <p>
-            Clearing the customer list now sends <span className="font-semibold">userIds: []</span>,
-            which is the backend-supported way to remove all explicit targeted users.
-          </p>
-        </div>
-      </div>
-
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
           {notice}
@@ -326,7 +382,7 @@ export default function ManagerTargeting() {
               Private Products Available For Branch Request
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              This list is intentionally limited to the current private-product route behavior.
+              Products available for branch selection requests.
             </p>
           </div>
 
@@ -342,26 +398,42 @@ export default function ManagerTargeting() {
             ) : (
               products.map((product) => {
                 const requestDisabled = product.isSelectedForBranch;
+                const previewUrl = productPreviewUrls[product.id] || "";
                 return (
                   <div key={product.id} className="px-5 py-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          {[product.sku, product.name].filter(Boolean).join(" · ") || product.id}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Visibility: {product.visibility || "-"} · Tier: {product.tier || "-"} ·
-                          Status: {product.status || "-"}
-                        </p>
-                        {(product.saleRangeMin !== null || product.saleRangeMax !== null) && (
-                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Sale range: {product.saleRangeMin ?? "-"} - {product.saleRangeMax ?? "-"}
-                          </p>
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 text-[11px] text-gray-400 dark:border-gray-700/60 dark:bg-gray-800/50 dark:text-gray-500">
+                        {previewUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={previewUrl}
+                            alt={`${getProductLabel(product)} preview`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span>No preview</span>
                         )}
                       </div>
-                      <span className="text-[11px] rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-1 text-gray-600 dark:text-gray-300">
-                        {product.isSelectedForBranch ? "Already active in branch" : "Requestable"}
-                      </span>
+                      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {getProductLabel(product)}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Visibility: {product.visibility || "-"} · Tier: {product.tier || "-"} ·
+                            Status: {product.status || "-"}
+                          </p>
+                          {(product.saleRangeMin !== null || product.saleRangeMax !== null) && (
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Sale range: {product.saleRangeMin ?? "-"} - {product.saleRangeMax ?? "-"}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-[11px] rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-1 text-gray-600 dark:text-gray-300">
+                          {product.isSelectedForBranch ? "Already active in branch" : "Requestable"}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -415,9 +487,7 @@ export default function ManagerTargeting() {
             {selectedTargetingProduct && (
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Quick-picked product:{" "}
-                {[selectedTargetingProduct.sku, selectedTargetingProduct.name]
-                  .filter(Boolean)
-                  .join(" · ") || selectedTargetingProduct.id}
+                {getProductLabel(selectedTargetingProduct)}
               </p>
             )}
             <select

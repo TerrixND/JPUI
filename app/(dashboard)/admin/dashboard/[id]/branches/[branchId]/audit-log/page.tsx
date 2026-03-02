@@ -99,7 +99,7 @@ export default function AdminBranchAuditLogPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${branchName} Audit Log`}
-        description="Dedicated audit history from the updated `/admin/branches/:branchId/audit-logs` route."
+        description="Complete audit trail of actions related to this branch."
         action={
           <Link
             href={`${dashboardBasePath}/branches/${branchId}`}

@@ -264,12 +264,6 @@ export default function ManagerSalespersons() {
         }
       />
 
-      <div className="rounded-2xl border border-blue-200 dark:border-blue-700/50 bg-blue-50/70 dark:bg-blue-900/15 p-4 text-sm text-blue-800 dark:text-blue-200">
-        This page stays read-focused because salesperson status changes are not part of the
-        current documented manager API. The roster, performance, and possession data are
-        wired directly to supported manager routes.
-      </div>
-
       {error && (
         <div className="px-4 py-3 rounded-lg border border-red-200 dark:border-red-700/40 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
           {error}

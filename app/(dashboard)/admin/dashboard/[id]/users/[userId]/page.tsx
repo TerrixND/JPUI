@@ -593,7 +593,7 @@ export default function AdminUserDetailPage() {
 
       <SectionCard
         title="User Snapshot"
-        description="Container 1: name, role, status, and account details."
+        description="Name, role, status, and account details."
       >
         {loading || !detail ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -638,7 +638,7 @@ export default function AdminUserDetailPage() {
 
       <SectionCard
         title="History Links"
-        description="Container 2: audit log and request history are separate pages from the detail screen."
+        description="Access audit log and request history for this user."
       >
         <div className="grid gap-4 md:grid-cols-2">
           <Link
@@ -665,7 +665,7 @@ export default function AdminUserDetailPage() {
 
       <SectionCard
         title="Permissions"
-        description="Container 3: edit the stored permission profile and save it to the dedicated permissions route."
+        description="Edit user permission capabilities and role-based access settings."
       >
         {!detail ? null : canEditPermissions ? (
           <div className="space-y-4">
@@ -815,7 +815,7 @@ export default function AdminUserDetailPage() {
 
       <SectionCard
         title="Admin Actions"
-        description="Container 4: restrict, ban, terminate, and resolve existing access controls."
+        description="Restrict, ban, terminate, and resolve user access controls."
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">

@@ -300,12 +300,6 @@ export default function ManagerAppointments() {
         }
       />
 
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 p-4 text-sm text-amber-800 dark:text-amber-200">
-        The current manager API does not expose a linked salesperson-to-manager possession request
-        chain. The supported flow is: approve the appointment, request inventory if needed, then
-        create the possession checkout for the salesperson.
-      </div>
-
       {notice && (
         <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
           {notice}

@@ -111,7 +111,7 @@ export default function AdminBranchDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={branch?.name || "Branch Detail"}
-        description="Dedicated branch page backed by the updated `/admin/branches/:branchId` route."
+        description="Branch metrics, team members, and recent audit activity."
         action={
           <Link
             href={`${dashboardBasePath}/branches`}

@@ -106,7 +106,7 @@ export default function AdminUserAuditLogPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${name} Audit Log`}
-        description="Dedicated user audit history from the updated `/admin/users/:userId/audit-logs` route."
+        description="Complete audit trail of actions involving this user."
         action={
           <Link
             href={`${dashboardBasePath}/users/${userId}`}
