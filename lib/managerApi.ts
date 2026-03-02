@@ -1,4 +1,12 @@
-import { API_BASE_PATH, ApiClientError } from "./apiClient";
+import {
+  API_BASE_PATH,
+  ApiClientError,
+  type CustomerTier,
+  type MediaAudience,
+  type MediaRole,
+  type MediaSection,
+  type MediaVisibilityPreset,
+} from "./apiClient";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -35,6 +43,99 @@ const asPositiveInt = (value: unknown) => {
   }
 
   return Math.floor(numeric);
+};
+
+const normalizeCustomerTier = (value: unknown): CustomerTier | null => {
+  const normalized = asString(value).toUpperCase();
+  if (normalized === "REGULAR" || normalized === "VIP" || normalized === "ULTRA_VIP") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const normalizeMediaAudience = (value: unknown): MediaAudience | null => {
+  const normalized = asString(value).toUpperCase();
+  if (
+    normalized === "PUBLIC" ||
+    normalized === "TARGETED" ||
+    normalized === "ADMIN_ONLY" ||
+    normalized === "ROLE_BASED" ||
+    normalized === "PRIVATE"
+  ) {
+    return normalized;
+  }
+
+  return null;
+};
+
+const normalizeMediaRoleList = (value: unknown): MediaRole[] =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => asString(entry).toUpperCase())
+        .filter(
+          (entry): entry is MediaRole =>
+            entry === "ADMIN" || entry === "MANAGER" || entry === "SALES",
+        )
+    : [];
+
+const normalizeMediaSections = (value: unknown): MediaSection[] =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => asString(entry).toUpperCase())
+        .filter(
+          (entry): entry is MediaSection =>
+            entry === "PRODUCT_PAGE" ||
+            entry === "TOP_SHELF" ||
+            entry === "VIP" ||
+            entry === "PRIVATE",
+        )
+    : [];
+
+const normalizeMediaVisibilityPreset = (
+  value: unknown,
+): MediaVisibilityPreset | null => {
+  const normalized = asString(value).toUpperCase().replace(/[\s-]+/g, "_");
+  if (
+    normalized === "PUBLIC" ||
+    normalized === "TOP_SHELF" ||
+    normalized === "USER_TIER" ||
+    normalized === "TARGETED_USER" ||
+    normalized === "PRIVATE" ||
+    normalized === "ADMIN" ||
+    normalized === "MANAGER" ||
+    normalized === "SALES"
+  ) {
+    return normalized;
+  }
+
+  return null;
+};
+
+export type ManagerProductVisibility =
+  | "PRIVATE"
+  | "STAFF"
+  | "PUBLIC"
+  | "TOP_SHELF"
+  | "USER_TIER"
+  | "TARGETED_USER";
+
+const normalizeManagerProductVisibility = (
+  value: unknown,
+): ManagerProductVisibility | null => {
+  const normalized = asString(value).toUpperCase();
+  if (
+    normalized === "PRIVATE" ||
+    normalized === "STAFF" ||
+    normalized === "PUBLIC" ||
+    normalized === "TOP_SHELF" ||
+    normalized === "USER_TIER" ||
+    normalized === "TARGETED_USER"
+  ) {
+    return normalized;
+  }
+
+  return null;
 };
 
 const parseJsonResponse = async (response: Response) => {
@@ -339,7 +440,20 @@ export type ManagerProductMediaReference = {
   id: string | null;
   type: string | null;
   url: string | null;
+  originalUrl: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
   slot: string | null;
+  visibilitySections: MediaSection[];
+  audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUsers: Array<{
+    userId: string;
+  }>;
+  visibilityPreset: MediaVisibilityPreset | null;
+  isPrimary: boolean;
+  displayOrder: number | null;
   raw: JsonRecord;
 };
 
@@ -357,11 +471,43 @@ const normalizeManagerProductMedia = (
   const id = asNullableString(row.id);
   const type = asNullableString(row.type);
   const url =
+    asNullableString(row.previewUrl) ||
+    asNullableString(row.signedUrl) ||
     asNullableString(row.url) ||
     asNullableString(asRecord(row.media)?.url);
+  const originalUrl = asNullableString(row.originalUrl);
+  const mimeType = asNullableString(row.mimeType);
+  const sizeBytes = asFiniteNumber(row.sizeBytes);
   const slot = asNullableString(row.slot);
+  const visibilitySections = normalizeMediaSections(row.visibilitySections);
+  const audience = normalizeMediaAudience(row.audience);
+  const allowedRoles = normalizeMediaRoleList(row.allowedRoles);
+  const minCustomerTier = normalizeCustomerTier(row.minCustomerTier);
+  const targetUsers = Array.isArray(row.targetUsers)
+    ? row.targetUsers
+        .map((entry) => asRecord(entry))
+        .map((entry) => ({ userId: asString(entry?.userId) }))
+        .filter((entry) => Boolean(entry.userId))
+    : [];
+  const visibilityPreset = normalizeMediaVisibilityPreset(row.visibilityPreset);
+  const isPrimary = asBoolean(row.isPrimary);
+  const displayOrder = asPositiveInt(row.displayOrder) ?? asFiniteNumber(row.displayOrder);
 
-  if (!id && !type && !url && !slot) {
+  if (
+    !id &&
+    !type &&
+    !url &&
+    !originalUrl &&
+    !mimeType &&
+    sizeBytes === null &&
+    !slot &&
+    !visibilitySections.length &&
+    !audience &&
+    !allowedRoles.length &&
+    !minCustomerTier &&
+    !targetUsers.length &&
+    !visibilityPreset
+  ) {
     return null;
   }
 
@@ -369,7 +515,18 @@ const normalizeManagerProductMedia = (
     id,
     type,
     url,
+    originalUrl,
+    mimeType,
+    sizeBytes,
     slot,
+    visibilitySections,
+    audience,
+    allowedRoles,
+    minCustomerTier,
+    targetUsers,
+    visibilityPreset,
+    isPrimary,
+    displayOrder,
     raw: row,
   };
 };
@@ -377,18 +534,27 @@ const normalizeManagerProductMedia = (
 const scoreManagerProductMediaPreview = (media: ManagerProductMediaReference) => {
   const slot = asString(media.slot).toUpperCase();
   const type = asString(media.type).toUpperCase();
+  const mimeType = asString(media.mimeType).toUpperCase();
   let score = 0;
 
-  if (slot === "THUMBNAIL") score += 100;
-  if (slot === "PRIMARY") score += 90;
-  if (slot === "GALLERY") score += 80;
-  if (slot === "FEATURE_VIDEO") score -= 100;
+  if (media.isPrimary) score += 120;
+  if (slot.includes("THUMBNAIL")) score += 100;
+  if (slot.includes("PRIMARY")) score += 90;
+  if (slot.includes("GALLERY")) score += 80;
+  if (slot.includes("FEATURE_VIDEO")) score -= 100;
+  if (slot.includes("VIDEO")) score -= 80;
+  if (slot.includes("CERTIFICATE")) score -= 40;
 
   if (type === "IMAGE" || type.startsWith("IMAGE/")) score += 20;
+  if (mimeType.startsWith("IMAGE/")) score += 20;
   if (type === "VIDEO" || type.startsWith("VIDEO/")) score -= 50;
+  if (mimeType.startsWith("VIDEO/")) score -= 50;
+  if (mimeType === "APPLICATION/PDF") score -= 30;
 
   if (media.url) score += 5;
+  if (media.originalUrl) score += 1;
   if (media.id) score += 3;
+  if (media.displayOrder !== null) score += Math.max(20 - media.displayOrder, 0);
 
   return score;
 };
@@ -401,12 +567,15 @@ const extractManagerProductPreview = (row: JsonRecord) => {
         .filter((entry): entry is ManagerProductMediaReference => Boolean(entry))
     : [];
   const preferredMedia = [...media]
-    .filter((entry) => entry.url || entry.id)
+    .filter((entry) => entry.url || entry.originalUrl || entry.id)
     .sort((left, right) => scoreManagerProductMediaPreview(right) - scoreManagerProductMediaPreview(left))[0];
 
   const directPreviewUrl =
     preferredMedia?.url ??
+    preferredMedia?.originalUrl ??
     asNullableString(row.previewImageUrl) ??
+    asNullableString(row.previewUrl) ??
+    asNullableString(row.signedUrl) ??
     asNullableString(row.thumbnailUrl) ??
     asNullableString(row.imageUrl) ??
     asNullableString(row.mediaUrl) ??
@@ -432,7 +601,8 @@ export type ManagerProductSummary = {
   name: string | null;
   tier: string | null;
   status: string | null;
-  visibility: string | null;
+  visibility: ManagerProductVisibility | null;
+  minCustomerTier: CustomerTier | null;
   saleRangeMin: number | null;
   saleRangeMax: number | null;
   isSelectedForBranch: boolean;
@@ -468,7 +638,8 @@ const normalizeManagerProduct = (value: unknown): ManagerProductSummary | null =
     name: asNullableString(row.name),
     tier: asNullableString(row.tier),
     status: asNullableString(row.status),
-    visibility: asNullableString(row.visibility),
+    visibility: normalizeManagerProductVisibility(row.visibility),
+    minCustomerTier: normalizeCustomerTier(row.minCustomerTier),
     saleRangeMin: asFiniteNumber(saleRange?.min),
     saleRangeMax: asFiniteNumber(saleRange?.max),
     isSelectedForBranch: asBoolean(row.isSelectedForBranch),
@@ -856,6 +1027,129 @@ export const getManagerProducts = async ({
     branchId: asNullableString(root.branchId),
     count: asPositiveInt(root.count) ?? products.length,
     products,
+    raw: payload,
+  };
+};
+
+export type ManagerCustomerListItem = {
+  userId: string;
+  displayName: string | null;
+  tier: CustomerTier | null;
+  email: string | null;
+  status: string | null;
+  isTargetedForProduct: boolean;
+  raw: JsonRecord;
+};
+
+export type ManagerCustomersResponse = {
+  branchId: string | null;
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  product: {
+    id: string;
+    visibility: ManagerProductVisibility | null;
+    targetedUsersCount: number;
+  } | null;
+  records: ManagerCustomerListItem[];
+  raw: unknown;
+};
+
+const normalizeManagerCustomer = (
+  value: unknown,
+): ManagerCustomerListItem | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const user = asRecord(row.user);
+  const userId = asString(row.userId) || asString(user?.id);
+  if (!userId) {
+    return null;
+  }
+
+  return {
+    userId,
+    displayName: asNullableString(row.displayName),
+    tier: normalizeCustomerTier(row.tier),
+    email: asNullableString(user?.email) || asNullableString(row.email),
+    status: asNullableString(user?.status) || asNullableString(row.status),
+    isTargetedForProduct: asBoolean(row.isTargetedForProduct),
+    raw: row,
+  };
+};
+
+export const getManagerCustomers = async ({
+  accessToken,
+  branchId,
+  page,
+  limit,
+  search,
+  tier,
+  accountStatus,
+  productId,
+}: {
+  accessToken: string;
+  branchId?: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  tier?: CustomerTier;
+  accountStatus?: "ACTIVE" | "RESTRICTED" | "BANNED" | "TERMINATED";
+  productId?: string;
+}): Promise<ManagerCustomersResponse> => {
+  const query = new URLSearchParams();
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (search) {
+    query.set("search", search.trim());
+  }
+  if (tier) {
+    query.set("tier", tier);
+  }
+  if (accountStatus) {
+    query.set("accountStatus", accountStatus);
+  }
+  if (productId) {
+    query.set("productId", productId.trim());
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/customers${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load customers.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const product = asRecord(root.product);
+  const records = extractRows(payload)
+    .map((entry) => normalizeManagerCustomer(entry))
+    .filter((entry): entry is ManagerCustomerListItem => Boolean(entry));
+
+  return {
+    branchId: asNullableString(root.branchId),
+    page: asPositiveInt(root.page) ?? 1,
+    limit: asPositiveInt(root.limit) ?? records.length,
+    total: asPositiveInt(root.total) ?? records.length,
+    totalPages: asPositiveInt(root.totalPages) ?? (records.length ? 1 : 0),
+    product: product
+      ? {
+          id: asString(product.id),
+          visibility: normalizeManagerProductVisibility(product.visibility),
+          targetedUsersCount: asPositiveInt(product.targetedUsersCount) ?? 0,
+        }
+      : null,
+    records,
     raw: payload,
   };
 };
@@ -1514,8 +1808,8 @@ export const createManagerCommissionPolicy = async ({
 export type ManagerProductTargetingResult = {
   id: string;
   status: string | null;
-  visibility: string | null;
-  minCustomerTier: string | null;
+  visibility: ManagerProductVisibility | null;
+  minCustomerTier: CustomerTier | null;
   targetedUsersCount: number;
   updatedAt: string | null;
   raw: JsonRecord;
@@ -1537,12 +1831,27 @@ const normalizeManagerProductTargeting = (
   return {
     id,
     status: asNullableString(row.status),
-    visibility: asNullableString(row.visibility),
-    minCustomerTier: asNullableString(row.minCustomerTier),
+    visibility: normalizeManagerProductVisibility(row.visibility),
+    minCustomerTier: normalizeCustomerTier(row.minCustomerTier),
     targetedUsersCount: asPositiveInt(row.targetedUsersCount) ?? 0,
     updatedAt: asNullableString(row.updatedAt),
     raw: row,
   };
+};
+
+export type ManagerProductTargetingResponse = {
+  message: string | null;
+  code: string | null;
+  targetedUsersCount: number;
+  product: ManagerProductTargetingResult | null;
+  requestedVisibility: {
+    visibility: ManagerProductVisibility | null;
+    minCustomerTier: CustomerTier | null;
+    targetUserIds: string[];
+    visibilityNote: string | null;
+  } | null;
+  approvalRequest: JsonRecord | null;
+  raw: unknown;
 };
 
 export const updateManagerProductTargeting = async ({
@@ -1557,11 +1866,11 @@ export const updateManagerProductTargeting = async ({
   accessToken: string;
   productId: string;
   branchId: string;
-  visibility?: "PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED";
-  minCustomerTier?: "REGULAR" | "VIP" | "ULTRA_VIP";
+  visibility?: ManagerProductVisibility;
+  minCustomerTier?: CustomerTier;
   userIds?: string[];
   visibilityNote?: string;
-}): Promise<ManagerProductTargetingResult | null> => {
+}): Promise<ManagerProductTargetingResponse> => {
   const body: Record<string, unknown> = {
     branchId: branchId.trim(),
   };
@@ -1587,10 +1896,87 @@ export const updateManagerProductTargeting = async ({
   });
 
   const root = asRecord(payload);
-  return (
-    normalizeManagerProductTargeting(payload) ||
-    normalizeManagerProductTargeting(root?.product)
-  );
+  const requestedVisibility = asRecord(root?.requestedVisibility);
+
+  return {
+    message: asNullableString(root?.message),
+    code: asNullableString(root?.code),
+    targetedUsersCount: asPositiveInt(root?.targetedUsersCount) ?? 0,
+    product:
+      normalizeManagerProductTargeting(payload) ||
+      normalizeManagerProductTargeting(root?.product),
+    requestedVisibility: requestedVisibility
+      ? {
+          visibility: normalizeManagerProductVisibility(requestedVisibility.visibility),
+          minCustomerTier: normalizeCustomerTier(requestedVisibility.minCustomerTier),
+          targetUserIds: Array.isArray(requestedVisibility.targetUserIds)
+            ? requestedVisibility.targetUserIds.map((entry) => asString(entry)).filter(Boolean)
+            : [],
+          visibilityNote: asNullableString(requestedVisibility.visibilityNote),
+        }
+      : null,
+    approvalRequest: asRecord(root?.approvalRequest),
+    raw: payload,
+  };
+};
+
+export type ManagerProductMediaVisibilityResponse = {
+  message: string | null;
+  code: string | null;
+  branchId: string | null;
+  media: ManagerProductMediaReference | null;
+  raw: unknown;
+};
+
+export const updateManagerProductMediaVisibility = async ({
+  accessToken,
+  productId,
+  mediaId,
+  branchId,
+  visibilityPreset,
+  minCustomerTier,
+  userIds,
+}: {
+  accessToken: string;
+  productId: string;
+  mediaId: string;
+  branchId?: string;
+  visibilityPreset?: MediaVisibilityPreset;
+  minCustomerTier?: CustomerTier;
+  userIds?: string[];
+}): Promise<ManagerProductMediaVisibilityResponse> => {
+  const body: Record<string, unknown> = {};
+
+  if (branchId) {
+    body.branchId = branchId.trim();
+  }
+  if (visibilityPreset) {
+    body.visibilityPreset = visibilityPreset;
+  }
+  if (minCustomerTier) {
+    body.minCustomerTier = minCustomerTier;
+  }
+  if (Array.isArray(userIds)) {
+    body.userIds = userIds.map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(mediaId)}/visibility`,
+    method: "PATCH",
+    body,
+    fallbackErrorMessage: "Failed to update product media visibility.",
+  });
+
+  const root = asRecord(payload) ?? {};
+
+  return {
+    message: asNullableString(root.message),
+    code: asNullableString(root.code),
+    branchId: asNullableString(root.branchId),
+    media: normalizeManagerProductMedia(root.media),
+    raw: payload,
+  };
 };
 
 export type ManagerBranchProductRequestRecord = {

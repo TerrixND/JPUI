@@ -1,6 +1,6 @@
 # Manager Full Usage
 
-Last updated: 2026-03-01  
+Last updated: 2026-03-02  
 Base path: `/api/v1/manager`  
 Content-Type for write routes: `application/json`
 
@@ -19,11 +19,45 @@ Content-Type for write routes: `application/json`
 
 ### Important current-state summary
 - `GET /branch-users` exists and is the current route for branch-scoped staff discovery, but it returns all active branch memberships, not only sales + managers.
-- `GET /products` currently returns only `PRIVATE` products. It does not yet match your requested manager product page of "all products except PRIVATE".
-- Branch product selection exists, but it is currently for `PRIVATE` products only and only branch admin can submit the request.
+- `GET /products` now returns products whose visibility is not `PRIVATE`, including signed media URLs that managers can preview.
+- `GET /customers` now exists for targeting-page customer discovery with branch scope, pagination, tier filter, search, and optional product targeting annotation.
+- Branch product selection exists for non-`PRIVATE` products and only branch admin can submit the request.
 - Inventory request creation exists, but the exact chained flow "sales requests -> manager requests -> admin approves -> sales request auto-approved" is not fully exposed as a dedicated route set in manager API.
 - Commission policy creation for sales already exists and is close to your requested UI flow.
-- Product targeting exists, but there is no manager route yet to list customers for the targeting page.
+- Branch admin can now update product media visibility for branch-selected or branch-held non-`PRIVATE` products through manager API.
+
+### Visibility model
+- There are 3 visibility layers in current backend behavior.
+
+#### 1. Main product visibility
+- `PRIVATE`: only admin should access the product.
+- `STAFF`: admin, manager, and sales can access the product.
+- `PUBLIC`: staff and all users can access the product.
+- `TOP_SHELF`: staff and all users can access the product, and frontend can place it in special showcase areas.
+- `USER_TIER`: staff can access the product, and customers can access it when their tier is at or above `minCustomerTier`.
+- `TARGETED_USER`: staff can access the product, and explicitly targeted customers can access it.
+- Manager-facing product pages now treat "manager-visible product" as any product whose main visibility is not `PRIVATE`.
+
+#### 2. Public/customer-facing product media
+- Media visibility presets here are `PUBLIC`, `TOP_SHELF`, `USER_TIER`, `TARGETED_USER`, and `PRIVATE`.
+- Staff can see all of these media variants as long as the product itself is not `PRIVATE`.
+- Customer access is controlled by media visibility plus product visibility.
+- Tier inheritance is cumulative:
+1. `REGULAR` sees `REGULAR`
+2. `VIP` sees `REGULAR + VIP`
+3. `ULTRA_VIP` sees `REGULAR + VIP + ULTRA_VIP`
+
+#### 3. Role-based staff media
+- Role-based media is separate from customer-facing media.
+- Visibility options are `ADMIN`, `MANAGER`, and `SALES`.
+- Customers never see these files.
+- Role inheritance is cumulative:
+1. admin sees `ADMIN + MANAGER + SALES`
+2. manager sees `MANAGER + SALES`
+3. sales sees `SALES`
+
+#### Branch admin edit rule
+- Branch admin can edit media visibility through manager API, but only for non-`PRIVATE` products that are already selected for or held by the branch.
 
 ---
 
@@ -42,9 +76,9 @@ Content-Type for write routes: `application/json`
 
 ### B) Get products for branch where visibility is not PRIVATE
 - Requested by flow: yes
-- Current manager route support: no
-- Current `GET /products` behavior: returns only `PRIVATE` products
-- Result: this requested manager catalog is not implemented yet in manager API
+- Current manager route support: yes
+- Current `GET /products` behavior: returns all non-`PRIVATE` products and their manager-visible media
+- Result: this manager catalog is available in manager API
 
 ### C) Branch inventory selection and possession request chain
 - Requested by flow:
@@ -54,7 +88,7 @@ Content-Type for write routes: `application/json`
 4. admin approval should also satisfy the upstream sales request automatically
 - Current backend support:
 1. branch product request exists: `POST /branch-products`
-2. this request currently handles `PRIVATE` products only
+2. this request handles products whose visibility is not `PRIVATE`
 3. only branch-admin scope can submit it
 4. approval happens later in admin module
 5. inventory request exists: `POST /inventory-requests`
@@ -78,8 +112,8 @@ Content-Type for write routes: `application/json`
 2. get all non-private products
 3. set/edit product target customers
 - Current backend support:
-1. customer list route under manager API: missing
-2. non-private product catalog under manager API: missing
+1. customer list route under manager API: available through `GET /customers`
+2. non-private product catalog under manager API: available through `GET /products`
 3. update product targeting: available through `PATCH /products/:productId/targeting`
 
 ---
@@ -88,6 +122,7 @@ Content-Type for write routes: `application/json`
 
 ### Staff and branch scope
 - `GET /branch-users`
+- `GET /customers`
 - `GET /my-branch`
 - `PATCH /my-branch`
 
@@ -99,6 +134,7 @@ Content-Type for write routes: `application/json`
 - `GET /branch-requests`
 - `PATCH /products/:productId/quick-visibility`
 - `PATCH /products/:productId/targeting`
+- `PATCH /products/:productId/media/:mediaId/visibility`
 
 ### Appointment, inventory, and possession
 - `GET /appointments/pending`
@@ -204,7 +240,7 @@ Purpose: get branch-scoped users with branch membership, role, status, profile d
 
 ### Current manager route
 ### GET `/products`
-Purpose today: list non-archived `PRIVATE` products and indicate whether they were already selected for the branch.
+Purpose today: list non-archived products whose visibility is not `PRIVATE`, include manager-visible media, and indicate whether they were already selected for the branch.
 
 ### Query
 - `branchId` optional UUID if manager has exactly one branch
@@ -221,7 +257,17 @@ Purpose today: list non-archived `PRIVATE` products and indicate whether they we
       "name": "Example Product",
       "tier": "STANDARD",
       "status": "AVAILABLE",
-      "visibility": "PRIVATE",
+      "visibility": "STAFF",
+      "media": [
+        {
+          "id": "media-id",
+          "type": "IMAGE",
+          "url": "https://signed.example.com/...",
+          "originalUrl": "products/product-id/2026/03/admin-user/file.jpg",
+          "audience": "PUBLIC",
+          "visibilitySections": ["PRODUCT_PAGE"]
+        }
+      ],
       "saleRange": {
         "min": 20000,
         "max": 30000
@@ -237,16 +283,19 @@ Purpose today: list non-archived `PRIVATE` products and indicate whether they we
 }
 ```
 
-### Important mismatch
-- This route does not match your requested manager products page.
-- Current backend behavior is:
-1. include only `PRIVATE`
+### Current backend behavior
+1. include only products whose visibility is not `PRIVATE`
 2. exclude archived products
-3. annotate branch selection state using branch product allocation data
+3. include manager-visible public media and role-based media with signed URLs
+4. annotate branch selection state using branch product allocation data
 
 ### What this means for frontend
-- Do not use current `GET /products` if the page should show `PUBLIC`, `TOP_SHELF`, `TARGETED`, or all non-private branch-visible products.
-- A backend change is required for that requested catalog.
+- Use this route for manager product catalog pages and targeting pages.
+- `media` already contains signed preview URLs the manager can open directly.
+- Product media in this response follows your staff-visibility rules:
+1. managers do not receive `PRIVATE` products here
+2. they do receive all public/customer-facing media for non-`PRIVATE` products
+3. they also receive role-based media allowed for `MANAGER` and `SALES`
 
 ---
 
@@ -280,10 +329,10 @@ Purpose today: submit a branch product selection request for main-admin approval
 ### Current backend rules
 - Only branch-admin scope can submit this route.
 - Products must currently be:
-1. `PRIVATE`
+1. visibility is not `PRIVATE`
 2. not archived
 - The request becomes a pending admin approval request.
-- This route is not currently the requested "all non-private branch inventory selector".
+- This route is now aligned with the non-`PRIVATE` branch inventory selector rule.
 
 ### 201 response
 ```json
@@ -307,7 +356,7 @@ Purpose today: submit a branch product selection request for main-admin approval
 
 ### Common validation errors
 - `403 FORBIDDEN`: manager is not branch admin for the branch
-- `400 VALIDATION_ERROR`: invalid product ids, archived product, or product is not `PRIVATE`
+- `400 VALIDATION_ERROR`: invalid product ids, archived product, or product is `PRIVATE`
 - `409 BRANCH_PRODUCT_REQUEST_ALREADY_PENDING`: same product already exists in overlapping pending request
 
 ### GET `/branch-products/requests`
@@ -520,10 +569,50 @@ Use these to support manager-side performance and possession drill-down for each
 ### Current backend support
 
 #### Customer discovery route under manager API
-- Not implemented
+### GET `/customers`
+Purpose: list customers for targeting UI with optional tier, status, search, and product-target annotation.
+
+#### Query
+- `branchId` optional UUID if manager has exactly one branch
+- `page` optional integer, default `1`
+- `limit` optional integer, default `50`, max `200`
+- `customerTier` optional alias of `tier`
+- `tier` optional `REGULAR | VIP | ULTRA_VIP`
+- `accountStatus` optional `ACTIVE | RESTRICTED | BANNED | TERMINATED`
+- `search` optional string matching display name, phone, line, city, email, or user ID
+- `productId` optional UUID to mark which customers are already targeted for one branch-held product
+
+#### Response shape
+```json
+{
+  "branchId": "branch-uuid",
+  "page": 1,
+  "limit": 50,
+  "total": 2,
+  "totalPages": 1,
+  "product": {
+    "id": "product-uuid",
+    "visibility": "TARGETED_USER",
+    "targetedUsersCount": 1
+  },
+  "records": [
+    {
+      "userId": "customer-user-1",
+      "displayName": "VIP Buyer",
+      "tier": "VIP",
+      "user": {
+        "id": "customer-user-1",
+        "email": "vip@example.com",
+        "status": "ACTIVE"
+      },
+      "isTargetedForProduct": true
+    }
+  ]
+}
+```
 
 #### Non-private product list under manager API
-- Not implemented
+- Available through `GET /products`
 
 #### Product targeting update
 ### PATCH `/products/:productId/targeting`
@@ -537,9 +626,10 @@ Purpose: update visibility and explicit customer targets for a product already h
 
 ### Body
 - `branchId` required UUID
-- `visibility` optional `PRIVATE | PUBLIC | TOP_SHELF | TARGETED`
+- `visibility` optional `PRIVATE | STAFF | PUBLIC | TOP_SHELF | USER_TIER | TARGETED_USER`
 - `minCustomerTier` optional `REGULAR | VIP | ULTRA_VIP`
 - `userIds` optional array of customer user IDs
+- `targetUserIds` optional alias of `userIds`
 - `visibilityNote` optional string
 
 ### Important current backend rules
@@ -551,8 +641,7 @@ Purpose: update visibility and explicit customer targets for a product already h
 ```json
 {
   "branchId": "branch-uuid",
-  "visibility": "TARGETED",
-  "minCustomerTier": "REGULAR",
+  "visibility": "TARGETED_USER",
   "userIds": ["customer-user-1", "customer-user-2"],
   "visibilityNote": "Invite-only release"
 }
@@ -571,10 +660,55 @@ Purpose: update visibility and explicit customer targets for a product already h
 - To remove one customer from the targeted list, send the full remaining `userIds` array.
 - To remove all explicit targeted customers, send `userIds: []`.
 
-### Current gap
-- The manager API still needs:
-1. a route to list customers by tier
-2. a route to list non-private products for manager targeting page
+### Product media visibility management
+### PATCH `/products/:productId/media/:mediaId/visibility`
+Purpose: branch-admin-safe media visibility editing for non-`PRIVATE` products already selected for or held by the branch.
+
+#### Path
+- `productId` required UUID
+- `mediaId` required UUID
+
+#### Body
+- `branchId` optional UUID if branch admin has exactly one branch
+- `visibilityPreset` optional `PUBLIC | TOP_SHELF | USER_TIER | TARGETED_USER | PRIVATE | ADMIN | MANAGER | SALES`
+- `visibility` optional alias of `visibilityPreset`
+- `tier` or `minCustomerTier` optional when using `USER_TIER`
+- `targetUserIds` or `userIds` optional when using `TARGETED_USER`
+- `allowedRoles` optional if using direct `ROLE_BASED` payload form
+- `visibilitySections` optional direct low-level override
+- `audience` optional direct low-level override
+
+#### Important current backend rules
+- Only branch admin can use this route.
+- The product must not be `PRIVATE`.
+- The product must already be selected for or held by the branch.
+- This route edits visibility metadata only. It does not upload a new file.
+- Customers never see role-based media.
+
+#### Example: move one video to top shelf
+```json
+{
+  "branchId": "branch-uuid",
+  "visibilityPreset": "TOP_SHELF"
+}
+```
+
+#### Example: make one image visible only to VIP and above
+```json
+{
+  "branchId": "branch-uuid",
+  "visibilityPreset": "USER_TIER",
+  "minCustomerTier": "VIP"
+}
+```
+
+#### Example: make one PDF visible to both manager and sales staff
+```json
+{
+  "branchId": "branch-uuid",
+  "allowedRoles": ["MANAGER", "SALES"]
+}
+```
 
 ---
 
@@ -607,14 +741,11 @@ Purpose: manager branch analytics for approved branch-product selections and rel
 
 ## 11) What Is Missing For Your Intended Manager Module
 
-The following parts of your requested manager flow are not yet implemented in current manager API:
+The following parts of your requested manager flow are still not implemented in current manager API:
 
 1. A dedicated manager route that returns only branch staff rows for `SALES`, branch `MANAGER`, and branch admin without requiring frontend filtering.
-2. A manager product list route that returns products where visibility is anything except `PRIVATE`.
-3. A manager customer discovery route that returns customers and supports tier filtering for `REGULAR`, `VIP`, and `ULTRA_VIP`.
-4. A dedicated sales-originated possession request route that managers can review.
-5. A linked approval chain where admin approval automatically resolves the earlier sales possession request record.
-6. A manager inventory-selection route that works on non-private branch-visible products instead of only `PRIVATE` products.
+2. A dedicated sales-originated possession request route that managers can review.
+3. A linked approval chain where admin approval automatically resolves the earlier sales possession request record.
 
 ---
 
@@ -626,8 +757,9 @@ The following parts of your requested manager flow are not yet implemented in cu
 - Treat `MANAGER + isPrimary=true` as branch admin
 
 ### Product selection page
-- Do not use current `GET /products` for non-private catalog
-- Current `GET /products` is only valid if the page is specifically for requesting `PRIVATE` products into branch allocation
+- Use `GET /products`
+- This route now matches the non-`PRIVATE` manager catalog behavior
+- Use each product's `media` array for direct preview URLs
 
 ### Branch inventory request page
 - Current closest flow:
@@ -643,5 +775,7 @@ The following parts of your requested manager flow are not yet implemented in cu
 - Send `productId` for SKU-specific rule
 
 ### Targeting page
-- Current write route is `PATCH /products/:productId/targeting`
-- Customer finder and non-private product finder still need backend routes
+- Use `GET /customers` for customer discovery
+- Use `GET /products` for non-`PRIVATE` product discovery
+- Use `PATCH /products/:productId/targeting` for product targeting
+- Use `PATCH /products/:productId/media/:mediaId/visibility` when branch admin needs to adjust media visibility

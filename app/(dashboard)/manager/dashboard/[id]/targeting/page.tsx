@@ -1,17 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import ManagerCustomerPicker from "@/components/ui/dashboard/ManagerCustomerPicker";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import supabase from "@/lib/supabase";
-import { getPublicMediaUrl, handleAccountAccessDeniedError } from "@/lib/apiClient";
+import {
+  getPublicMediaUrl,
+  handleAccountAccessDeniedError,
+  type CustomerTier,
+  type MediaVisibilityPreset,
+} from "@/lib/apiClient";
+import { deriveVisibilityPresetFromMedia } from "@/lib/mediaVisibility";
 import {
   createManagerBranchProductRequest,
   getManagerAnalyticsBranches,
   getManagerBranchProductRequests,
+  getManagerCustomers,
   getManagerProducts,
+  updateManagerProductMediaVisibility,
   updateManagerProductTargeting,
+  type ManagerProductMediaReference,
   type ManagerBranchProductRequestRecord,
   type ManagerProductSummary,
+  type ManagerProductVisibility,
 } from "@/lib/managerApi";
 
 const getErrorMessage = (value: unknown) =>
@@ -32,14 +43,58 @@ const statusStyle = (status: string | null) => {
   }
 };
 
-const parseUserIds = (value: string) =>
-  value
-    .split(/[\s,]+/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+const isManagerProductVisibility = (
+  value: string | null,
+): value is ManagerProductVisibility =>
+  value === "PRIVATE" ||
+  value === "STAFF" ||
+  value === "PUBLIC" ||
+  value === "TOP_SHELF" ||
+  value === "USER_TIER" ||
+  value === "TARGETED_USER";
 
 const getProductLabel = (product: Pick<ManagerProductSummary, "id" | "sku" | "name">) =>
   [product.sku, product.name].filter(Boolean).join(" · ") || product.id;
+
+type MediaVisibilityDraft = {
+  visibilityPreset: MediaVisibilityPreset | "";
+  minCustomerTier: "" | CustomerTier;
+  targetUserIds: string[];
+};
+
+const isImageMedia = (media: Pick<ManagerProductMediaReference, "type" | "mimeType">) => {
+  const type = String(media.type || "").trim().toUpperCase();
+  const mimeType = String(media.mimeType || "").trim().toUpperCase();
+  return type === "IMAGE" || type.startsWith("IMAGE/") || mimeType.startsWith("IMAGE/");
+};
+
+const deriveManagerMediaPreset = (media: ManagerProductMediaReference): MediaVisibilityPreset | null =>
+  media.visibilityPreset ||
+  deriveVisibilityPresetFromMedia({
+    visibilityPreset: media.visibilityPreset,
+    audience: media.audience,
+    visibilitySections: media.visibilitySections,
+    allowedRoles: media.allowedRoles,
+    minCustomerTier: media.minCustomerTier,
+    targetUsers: media.targetUsers,
+  });
+
+const getMediaLabel = (media: ManagerProductMediaReference) =>
+  [media.slot, media.type].filter(Boolean).join(" · ") || media.id || "Media";
+
+const getProductPreviewUrl = (
+  product: ManagerProductSummary,
+  resolvedPreviewUrls: Record<string, string>,
+) => {
+  const directUrl =
+    resolvedPreviewUrls[product.id] ||
+    product.previewImageUrl ||
+    product.media.find((entry) => entry.url)?.url ||
+    product.media.find((entry) => entry.originalUrl)?.originalUrl ||
+    "";
+
+  return directUrl.trim();
+};
 
 export default function ManagerTargeting() {
   const [loading, setLoading] = useState(true);
@@ -53,19 +108,24 @@ export default function ManagerTargeting() {
   const [requestSubmitting, setRequestSubmitting] = useState(false);
 
   const [targetingProductId, setTargetingProductId] = useState("");
-  const [visibility, setVisibility] = useState<"PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED">(
-    "TARGETED",
-  );
+  const [visibility, setVisibility] = useState<ManagerProductVisibility>("TARGETED_USER");
   const [minCustomerTier, setMinCustomerTier] = useState<"" | "REGULAR" | "VIP" | "ULTRA_VIP">(
     "",
   );
-  const [targetUserIds, setTargetUserIds] = useState("");
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [visibilityNote, setVisibilityNote] = useState("");
+  const [targetCustomersLoading, setTargetCustomersLoading] = useState(false);
+  const [targetCustomersError, setTargetCustomersError] = useState("");
+  const [mediaDrafts, setMediaDrafts] = useState<Record<string, MediaVisibilityDraft>>({});
+  const [mediaSubmittingId, setMediaSubmittingId] = useState("");
+  const [mediaNotice, setMediaNotice] = useState("");
+  const [mediaError, setMediaError] = useState("");
 
   const [requestProductIds, setRequestProductIds] = useState<string[]>([]);
   const [requestedCommissionRate, setRequestedCommissionRate] = useState("");
   const [requestNote, setRequestNote] = useState("");
   const [productPreviewUrls, setProductPreviewUrls] = useState<Record<string, string>>({});
+  const deferredTargetingProductId = useDeferredValue(targetingProductId.trim());
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -236,6 +296,117 @@ export default function ManagerTargeting() {
     () => products.find((row) => row.id === targetingProductId) || null,
     [products, targetingProductId],
   );
+  const selectedTargetingProductLabel = selectedTargetingProduct
+    ? getProductLabel(selectedTargetingProduct)
+    : null;
+
+  useEffect(() => {
+    if (!selectedTargetingProduct) {
+      setMediaDrafts({});
+      setMediaNotice("");
+      setMediaError("");
+      setMediaSubmittingId("");
+      return;
+    }
+
+    setMediaDrafts(
+      Object.fromEntries(
+        selectedTargetingProduct.media
+          .filter((media): media is ManagerProductMediaReference & { id: string } => Boolean(media.id))
+          .map((media) => {
+            const visibilityPreset = deriveManagerMediaPreset(media) || "";
+            const targetUserIds = [...new Set(media.targetUsers.map((entry) => entry.userId))];
+
+            return [
+              media.id,
+              {
+                visibilityPreset,
+                minCustomerTier: media.minCustomerTier || "",
+                targetUserIds,
+              } satisfies MediaVisibilityDraft,
+            ];
+          }),
+      ),
+    );
+    setMediaNotice("");
+    setMediaError("");
+    setMediaSubmittingId("");
+  }, [selectedTargetingProduct]);
+
+  useEffect(() => {
+    const productId = deferredTargetingProductId;
+    if (!branchId || !productId) {
+      setSelectedCustomerIds([]);
+      setTargetCustomersError("");
+      setTargetCustomersLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTargetedCustomers = async () => {
+      setTargetCustomersLoading(true);
+      setTargetCustomersError("");
+
+      try {
+        const accessToken = await getAccessToken();
+        const firstPage = await getManagerCustomers({
+          accessToken,
+          branchId,
+          productId,
+          page: 1,
+          limit: 200,
+        });
+
+        const pageLoads: Array<ReturnType<typeof getManagerCustomers>> = [];
+        for (let page = 2; page <= firstPage.totalPages; page += 1) {
+          pageLoads.push(
+            getManagerCustomers({
+              accessToken,
+              branchId,
+              productId,
+              page,
+              limit: 200,
+            }),
+          );
+        }
+
+        const laterPages = pageLoads.length ? await Promise.all(pageLoads) : [];
+        const records = [
+          ...firstPage.records,
+          ...laterPages.flatMap((response) => response.records),
+        ];
+        const targetedIds = [...new Set(
+          records
+            .filter((customer) => customer.isTargetedForProduct)
+            .map((customer) => customer.userId),
+        )];
+
+        if (cancelled) {
+          return;
+        }
+
+        setSelectedCustomerIds(targetedIds);
+      } catch (caughtError) {
+        if (cancelled) {
+          return;
+        }
+
+        setSelectedCustomerIds([]);
+        setTargetCustomersError(getErrorMessage(caughtError));
+      } finally {
+        if (!cancelled) {
+          setTargetCustomersLoading(false);
+        }
+      }
+    };
+
+    void loadTargetedCustomers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, deferredTargetingProductId, getAccessToken]);
 
   const onSubmitTargeting = async () => {
     if (!branchId || !targetingProductId.trim()) {
@@ -243,25 +414,35 @@ export default function ManagerTargeting() {
       return;
     }
 
-    setTargetingSubmitting(true);
     setError("");
     setNotice("");
 
-    const userIds = parseUserIds(targetUserIds);
+    if (visibility === "USER_TIER" && !minCustomerTier) {
+      setError("Select a minimum customer tier for USER_TIER visibility.");
+      return;
+    }
+    if (visibility === "TARGETED_USER" && selectedCustomerIds.length === 0) {
+      setError("Select at least one customer for TARGETED_USER visibility.");
+      return;
+    }
+
+    const userIds = visibility === "TARGETED_USER" ? selectedCustomerIds : [];
+
+    setTargetingSubmitting(true);
 
     try {
       const accessToken = await getAccessToken();
-      await updateManagerProductTargeting({
+      const result = await updateManagerProductTargeting({
         accessToken,
         productId: targetingProductId.trim(),
         branchId,
         visibility,
-        minCustomerTier: minCustomerTier || undefined,
+        minCustomerTier: visibility === "USER_TIER" ? minCustomerTier || undefined : undefined,
         userIds,
         visibilityNote: visibilityNote || undefined,
       });
 
-      setNotice("Product targeting updated.");
+      setNotice(result.message || "Product targeting request submitted.");
       await loadProductsAndRequests(branchId);
     } catch (caughtError) {
       if (handleAccountAccessDeniedError(caughtError)) {
@@ -279,6 +460,80 @@ export default function ManagerTargeting() {
         ? current.filter((entry) => entry !== productId)
         : [...current, productId],
     );
+  };
+
+  const onUseProductAsTargetingInput = (product: ManagerProductSummary) => {
+    setTargetingProductId(product.id);
+    setVisibility(isManagerProductVisibility(product.visibility) ? product.visibility : "STAFF");
+    setMinCustomerTier(product.minCustomerTier || "");
+  };
+
+  const setMediaDraft = (
+    mediaId: string,
+    updater: (current: MediaVisibilityDraft) => MediaVisibilityDraft,
+  ) => {
+    setMediaDrafts((current) => {
+      const existing = current[mediaId] || {
+        visibilityPreset: "",
+        minCustomerTier: "",
+        targetUserIds: [],
+      };
+
+      return {
+        ...current,
+        [mediaId]: updater(existing),
+      };
+    });
+  };
+
+  const onSubmitMediaVisibility = async (media: ManagerProductMediaReference) => {
+    if (!selectedTargetingProduct || !media.id) {
+      setMediaError("Select a product and media record before updating media visibility.");
+      return;
+    }
+
+    const draft = mediaDrafts[media.id];
+    if (!draft?.visibilityPreset) {
+      setMediaError("Select a media visibility preset before saving.");
+      return;
+    }
+    if (draft.visibilityPreset === "USER_TIER" && !draft.minCustomerTier) {
+      setMediaError("Select a minimum customer tier for USER_TIER media visibility.");
+      return;
+    }
+    if (draft.visibilityPreset === "TARGETED_USER" && draft.targetUserIds.length === 0) {
+      setMediaError("Select at least one customer for TARGETED_USER media visibility.");
+      return;
+    }
+
+    setMediaSubmittingId(media.id);
+    setMediaError("");
+    setMediaNotice("");
+
+    try {
+      const accessToken = await getAccessToken();
+      const result = await updateManagerProductMediaVisibility({
+        accessToken,
+        productId: selectedTargetingProduct.id,
+        mediaId: media.id,
+        branchId,
+        visibilityPreset: draft.visibilityPreset,
+        minCustomerTier:
+          draft.visibilityPreset === "USER_TIER" ? draft.minCustomerTier || undefined : undefined,
+        userIds:
+          draft.visibilityPreset === "TARGETED_USER" ? draft.targetUserIds : undefined,
+      });
+
+      setMediaNotice(result.message || "Media visibility updated.");
+      await loadProductsAndRequests(branchId);
+    } catch (caughtError) {
+      if (handleAccountAccessDeniedError(caughtError)) {
+        return;
+      }
+      setMediaError(getErrorMessage(caughtError));
+    } finally {
+      setMediaSubmittingId("");
+    }
   };
 
   const onSubmitBranchRequest = async () => {
@@ -339,6 +594,10 @@ export default function ManagerTargeting() {
                 setBranchId(event.target.value);
                 setTargetingProductId("");
                 setRequestProductIds([]);
+                setSelectedCustomerIds([]);
+                setMinCustomerTier("");
+                setVisibility("TARGETED_USER");
+                setVisibilityNote("");
               }}
               className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
             >
@@ -379,10 +638,10 @@ export default function ManagerTargeting() {
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              Private Products Available For Branch Request
+              Manager-Visible Products Available For Branch Request
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Products available for branch selection requests.
+              Non-private products available for branch selection requests.
             </p>
           </div>
 
@@ -393,12 +652,12 @@ export default function ManagerTargeting() {
               </div>
             ) : products.length === 0 ? (
               <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">
-                No private products returned for the selected branch scope.
+                No manager-visible products returned for the selected branch scope.
               </div>
             ) : (
               products.map((product) => {
                 const requestDisabled = product.isSelectedForBranch;
-                const previewUrl = productPreviewUrls[product.id] || "";
+                const previewUrl = getProductPreviewUrl(product, productPreviewUrls);
                 return (
                   <div key={product.id} className="px-5 py-4 space-y-3">
                     <div className="flex items-start gap-4">
@@ -449,17 +708,7 @@ export default function ManagerTargeting() {
                       </label>
                       <button
                         type="button"
-                        onClick={() => {
-                          setTargetingProductId(product.id);
-                          setVisibility(
-                            product.visibility === "PRIVATE" ||
-                              product.visibility === "PUBLIC" ||
-                              product.visibility === "TOP_SHELF" ||
-                              product.visibility === "TARGETED"
-                              ? product.visibility
-                              : "TARGETED",
-                          );
-                        }}
+                        onClick={() => onUseProductAsTargetingInput(product)}
                         className="px-2.5 py-1.5 text-xs font-medium border border-emerald-200 dark:border-emerald-700/40 text-emerald-700 dark:text-emerald-300 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                       >
                         Use As Targeting Input
@@ -487,42 +736,59 @@ export default function ManagerTargeting() {
             {selectedTargetingProduct && (
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Quick-picked product:{" "}
-                {getProductLabel(selectedTargetingProduct)}
+                {selectedTargetingProductLabel}
+              </p>
+            )}
+            {selectedTargetingProduct && !selectedTargetingProduct.isSelectedForBranch && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                This product is visible to managers, but targeting updates usually require it to
+                already be active in the branch.
               </p>
             )}
             <select
               value={visibility}
-              onChange={(event) =>
-                setVisibility(
-                  event.target.value as "PRIVATE" | "PUBLIC" | "TOP_SHELF" | "TARGETED",
-                )
-              }
+              onChange={(event) => setVisibility(event.target.value as ManagerProductVisibility)}
               className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
             >
-              <option value="TARGETED">TARGETED</option>
               <option value="PRIVATE">PRIVATE</option>
+              <option value="STAFF">STAFF</option>
               <option value="PUBLIC">PUBLIC</option>
               <option value="TOP_SHELF">TOP_SHELF</option>
+              <option value="USER_TIER">USER_TIER</option>
+              <option value="TARGETED_USER">TARGETED_USER</option>
             </select>
-            <select
-              value={minCustomerTier}
-              onChange={(event) =>
-                setMinCustomerTier(event.target.value as "" | "REGULAR" | "VIP" | "ULTRA_VIP")
-              }
-              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-            >
-              <option value="">No tier minimum</option>
-              <option value="REGULAR">REGULAR</option>
-              <option value="VIP">VIP</option>
-              <option value="ULTRA_VIP">ULTRA_VIP</option>
-            </select>
-            <textarea
-              value={targetUserIds}
-              onChange={(event) => setTargetUserIds(event.target.value)}
-              placeholder="Customer user IDs, separated by commas or new lines"
-              rows={4}
-              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg resize-none"
-            />
+            {visibility === "USER_TIER" && (
+              <select
+                value={minCustomerTier}
+                onChange={(event) =>
+                  setMinCustomerTier(event.target.value as "" | "REGULAR" | "VIP" | "ULTRA_VIP")
+                }
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+              >
+                <option value="">Select tier minimum</option>
+                <option value="REGULAR">REGULAR</option>
+                <option value="VIP">VIP</option>
+                <option value="ULTRA_VIP">ULTRA_VIP</option>
+              </select>
+            )}
+            {visibility === "TARGETED_USER" && (
+              <ManagerCustomerPicker
+                branchId={branchId}
+                productId={targetingProductId.trim()}
+                selectedIds={selectedCustomerIds}
+                onChange={setSelectedCustomerIds}
+                getAccessToken={getAccessToken}
+                disabled={!branchId || !targetingProductId.trim()}
+              />
+            )}
+            {targetCustomersLoading && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Loading currently targeted customers for this product...
+              </p>
+            )}
+            {targetCustomersError && (
+              <p className="text-xs text-red-600 dark:text-red-300">{targetCustomersError}</p>
+            )}
             <input
               type="text"
               value={visibilityNote}
@@ -542,10 +808,174 @@ export default function ManagerTargeting() {
 
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Product Media Visibility
+            </h3>
+            {!selectedTargetingProduct ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Pick a product above to review and edit manager-accessible media visibility.
+              </p>
+            ) : selectedTargetingProduct.media.length === 0 ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                No manager-visible media returned for this product.
+              </p>
+            ) : (
+              <>
+                {!selectedTargetingProduct.isSelectedForBranch && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    This product is not marked as branch-selected in the catalog response. Media
+                    edits may still work if the branch currently holds the product, but the backend
+                    will enforce that rule.
+                  </p>
+                )}
+                {mediaNotice && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    {mediaNotice}
+                  </div>
+                )}
+                {mediaError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+                    {mediaError}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  {selectedTargetingProduct.media.map((media) => {
+                    const mediaId = media.id || "";
+                    const draft = mediaId
+                      ? mediaDrafts[mediaId] || {
+                          visibilityPreset: deriveManagerMediaPreset(media) || "",
+                          minCustomerTier: media.minCustomerTier || "",
+                          targetUserIds: [...new Set(media.targetUsers.map((entry) => entry.userId))],
+                        }
+                      : {
+                          visibilityPreset: deriveManagerMediaPreset(media) || "",
+                          minCustomerTier: media.minCustomerTier || "",
+                          targetUserIds: [...new Set(media.targetUsers.map((entry) => entry.userId))],
+                        };
+                    const currentPreset = deriveManagerMediaPreset(media);
+                    const mediaPreviewUrl = media.url || media.originalUrl || "";
+
+                    return (
+                      <div
+                        key={mediaId || `${media.slot || media.type || "media"}-${media.displayOrder ?? 0}`}
+                        className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-gray-700/60"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-400 dark:border-gray-700/60 dark:bg-gray-800/50 dark:text-gray-500">
+                            {mediaPreviewUrl && isImageMedia(media) ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={mediaPreviewUrl}
+                                alt={`${getMediaLabel(media)} preview`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span>{media.type || "Media"}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              {getMediaLabel(media)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Current preset: {currentPreset || "Unspecified"} · Audience:{" "}
+                              {media.audience || "-"}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Allowed roles: {media.allowedRoles.length ? media.allowedRoles.join(", ") : "-"} ·
+                              Sections:{" "}
+                              {media.visibilitySections.length ? media.visibilitySections.join(", ") : "-"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <select
+                          value={draft.visibilityPreset}
+                          onChange={(event) =>
+                            setMediaDraft(mediaId, (current) => ({
+                              ...current,
+                              visibilityPreset: event.target.value as MediaVisibilityPreset | "",
+                              minCustomerTier:
+                                event.target.value === "USER_TIER" ? current.minCustomerTier : "",
+                              targetUserIds:
+                                event.target.value === "TARGETED_USER" ? current.targetUserIds : [],
+                            }))
+                          }
+                          disabled={!mediaId || mediaSubmittingId === mediaId}
+                          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700/60 dark:bg-gray-800/50"
+                        >
+                          <option value="">Select media visibility</option>
+                          <option value="PUBLIC">PUBLIC</option>
+                          <option value="TOP_SHELF">TOP_SHELF</option>
+                          <option value="USER_TIER">USER_TIER</option>
+                          <option value="TARGETED_USER">TARGETED_USER</option>
+                          <option value="PRIVATE">PRIVATE</option>
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="MANAGER">MANAGER</option>
+                          <option value="SALES">SALES</option>
+                        </select>
+
+                        {draft.visibilityPreset === "USER_TIER" && (
+                          <select
+                            value={draft.minCustomerTier}
+                            onChange={(event) =>
+                              setMediaDraft(mediaId, (current) => ({
+                                ...current,
+                                minCustomerTier: event.target.value as "" | CustomerTier,
+                              }))
+                            }
+                            disabled={!mediaId || mediaSubmittingId === mediaId}
+                            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700/60 dark:bg-gray-800/50"
+                          >
+                            <option value="">Select tier minimum</option>
+                            <option value="REGULAR">REGULAR</option>
+                            <option value="VIP">VIP</option>
+                            <option value="ULTRA_VIP">ULTRA_VIP</option>
+                          </select>
+                        )}
+
+                        {draft.visibilityPreset === "TARGETED_USER" && (
+                          <ManagerCustomerPicker
+                            branchId={branchId}
+                            productId={selectedTargetingProduct.id}
+                            selectedIds={draft.targetUserIds}
+                            onChange={(nextIds) =>
+                              setMediaDraft(mediaId, (current) => ({
+                                ...current,
+                                targetUserIds: nextIds,
+                              }))
+                            }
+                            getAccessToken={getAccessToken}
+                            disabled={!mediaId || mediaSubmittingId === mediaId}
+                            label="Media Target Customers"
+                            helperText="Search customers and choose which users can access this specific media item."
+                            emptyStateLabel="No matching customers found for media targeting."
+                            annotateProductTargeting={false}
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => void onSubmitMediaVisibility(media)}
+                          disabled={!mediaId || mediaSubmittingId === mediaId}
+                          className="w-full rounded-lg bg-emerald-600 py-2 text-sm text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          {mediaSubmittingId === mediaId ? "Saving..." : "Save Media Visibility"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Branch Product Request
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Selected private products: {requestProductIds.length}
+              Selected manager-visible products: {requestProductIds.length}
             </p>
             <input
               type="number"
