@@ -287,59 +287,99 @@ export default function AdminBranches() {
           <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading branches...</div>
         ) : error ? (
           <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{error}</div>
+        ) : rows.length === 0 ? (
+          <div className="px-5 py-8 text-center text-gray-400 dark:text-gray-500 text-sm">No branches found.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                  <th className="px-5 py-3 font-medium">Branch</th>
-                  <th className="px-5 py-3 font-medium">City</th>
-                  <th className="px-5 py-3 font-medium">Primary Manager</th>
-                  <th className="px-5 py-3 font-medium">Users</th>
-                  <th className="px-5 py-3 font-medium">Inventory Value</th>
-                  <th className="px-5 py-3 font-medium">Successful Sales</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((branch) => (
-                  <tr
-                    key={branch.id}
-                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <td className="px-5 py-3">
-                      <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="group">
-                        <p className="font-medium text-gray-900 transition-colors group-hover:text-emerald-700 dark:text-gray-100 dark:group-hover:text-emerald-300">
-                          {branch.name || "Unnamed Branch"}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{branch.code || branch.id}</p>
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.city || "-"}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{getPrimaryManagerLabel(branch)}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.userCount ?? "-"}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{formatMoney(branch.inventoryValue)}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.successfulSalesCount ?? "-"}</td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(branch.status)}`}>
-                        {branch.status || "-"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDate(branch.updatedAt)}</td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
+                    <th className="px-5 py-3 font-medium">Branch</th>
+                    <th className="px-5 py-3 font-medium">City</th>
+                    <th className="px-5 py-3 font-medium">Primary Manager</th>
+                    <th className="px-5 py-3 font-medium">Users</th>
+                    <th className="px-5 py-3 font-medium">Inventory Value</th>
+                    <th className="px-5 py-3 font-medium">Successful Sales</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Updated</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {rows.map((branch) => (
+                    <tr
+                      key={branch.id}
+                      className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <td className="px-5 py-3">
+                        <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="group">
+                          <p className="font-medium text-gray-900 transition-colors group-hover:text-emerald-700 dark:text-gray-100 dark:group-hover:text-emerald-300">
+                            {branch.name || "Unnamed Branch"}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{branch.code || branch.id}</p>
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.city || "-"}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{getPrimaryManagerLabel(branch)}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.userCount ?? "-"}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{formatMoney(branch.inventoryValue)}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{branch.successfulSalesCount ?? "-"}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(branch.status)}`}>
+                          {branch.status || "-"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDate(branch.updatedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                      No branches found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+            {/* Mobile cards */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
+              {rows.map((branch) => (
+                <Link
+                  key={branch.id}
+                  href={`${dashboardBasePath}/branches/${branch.id}`}
+                  className="block px-4 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {branch.name || "Unnamed Branch"}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {[branch.code, branch.city].filter(Boolean).join(" · ") || branch.id}
+                      </p>
+                    </div>
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${statusBadge(branch.status)}`}>
+                      {branch.status || "-"}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Manager</span>
+                      <p className="text-gray-700 dark:text-gray-300 truncate">{getPrimaryManagerLabel(branch)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Users</span>
+                      <p className="text-gray-700 dark:text-gray-300">{branch.userCount ?? "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Inventory</span>
+                      <p className="text-gray-700 dark:text-gray-300">{formatMoney(branch.inventoryValue)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Updated</span>
+                      <p className="text-gray-700 dark:text-gray-300">{formatDate(branch.updatedAt)}</p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

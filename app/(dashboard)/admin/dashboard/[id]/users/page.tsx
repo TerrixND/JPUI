@@ -360,7 +360,7 @@ export default function AdminUsersPage() {
       />
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="grid gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))_180px]">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_180px]">
           <select
             value={draftFilters.role}
             onChange={(event) =>
@@ -442,42 +442,42 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Results
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{total}</p>
+          <p className="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">{total}</p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Active On Page
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <p className="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
             {counts.active}
           </p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Admins
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <p className="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
             {counts.admins}
           </p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Managers
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <p className="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
             {counts.managers}
           </p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 dark:border-gray-700/60 dark:bg-gray-900">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Sales
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <p className="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
             {counts.sales}
           </p>
         </div>

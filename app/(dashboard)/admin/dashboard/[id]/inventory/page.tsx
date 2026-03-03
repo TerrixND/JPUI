@@ -351,68 +351,97 @@ export default function AdminInventory() {
           <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading inventory requests...</div>
         ) : error ? (
           <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{error}</div>
+        ) : rows.length === 0 ? (
+          <div className="px-5 py-8 text-center text-gray-400 dark:text-gray-500 text-sm">No inventory requests found.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                  <th className="px-5 py-3 font-medium">Request</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Branch</th>
-                  <th className="px-5 py-3 font-medium">Product</th>
-                  <th className="px-5 py-3 font-medium">Requested By</th>
-                  <th className="px-5 py-3 font-medium">Appointment</th>
-                  <th className="px-5 py-3 font-medium">Created</th>
-                  <th className="px-5 py-3 font-medium">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((request) => (
-                  <tr
-                    key={request.id}
-                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <td className="px-5 py-3">
-                      <p className="font-mono text-xs text-gray-700 dark:text-gray-300">{request.id}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(request.status)}`}>
-                        {request.status || "-"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
-                      <p>{request.branch?.name || "-"}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{request.branch?.code || request.branchId || ""}</p>
-                    </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
-                      <p>{request.product?.name || "-"}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{request.product?.sku || request.productId || ""}</p>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {request.requestedByUser?.email || request.requestedByUserId || "-"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {formatDateTime(request.appointment?.appointmentDate)}
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
-                      {formatDateTime(request.createdAt)}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {request.appointmentItem?.requestedSource || request.fromLocation || "-"}
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
+                    <th className="px-5 py-3 font-medium">Request</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Branch</th>
+                    <th className="px-5 py-3 font-medium">Product</th>
+                    <th className="px-5 py-3 font-medium">Requested By</th>
+                    <th className="px-5 py-3 font-medium">Appointment</th>
+                    <th className="px-5 py-3 font-medium">Created</th>
+                    <th className="px-5 py-3 font-medium">Source</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {rows.map((request) => (
+                    <tr
+                      key={request.id}
+                      className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <td className="px-5 py-3">
+                        <p className="font-mono text-xs text-gray-700 dark:text-gray-300">{request.id}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(request.status)}`}>
+                          {request.status || "-"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                        <p>{request.branch?.name || "-"}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{request.branch?.code || request.branchId || ""}</p>
+                      </td>
+                      <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                        <p>{request.product?.name || "-"}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{request.product?.sku || request.productId || ""}</p>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {request.requestedByUser?.email || request.requestedByUserId || "-"}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {formatDateTime(request.appointment?.appointmentDate)}
+                      </td>
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
+                        {formatDateTime(request.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {request.appointmentItem?.requestedSource || request.fromLocation || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                      No inventory requests found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+            {/* Mobile cards */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
+              {rows.map((request) => (
+                <div key={request.id} className="px-4 py-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-mono text-xs text-gray-600 dark:text-gray-400 truncate flex-1">{request.id}</p>
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${statusStyle(request.status)}`}>
+                      {request.status || "-"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Branch</span>
+                      <p className="text-gray-700 dark:text-gray-300 truncate">{request.branch?.name || "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Product</span>
+                      <p className="text-gray-700 dark:text-gray-300 truncate">{request.product?.name || "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Requested By</span>
+                      <p className="text-gray-700 dark:text-gray-300 truncate">{request.requestedByUser?.email || request.requestedByUserId || "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 dark:text-gray-500">Created</span>
+                      <p className="text-gray-700 dark:text-gray-300">{formatDateTime(request.createdAt)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2">

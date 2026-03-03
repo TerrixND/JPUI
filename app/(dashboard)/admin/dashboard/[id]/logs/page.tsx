@@ -295,7 +295,7 @@ export default function AdminLogs() {
       />
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <input
             type="text"
             value={draftFilters.query}
@@ -413,55 +413,93 @@ export default function AdminLogs() {
         ) : auditError ? (
           <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{auditError}</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                  <th className="px-5 py-3 font-medium">Time</th>
-                  <th className="px-5 py-3 font-medium">Action</th>
-                  <th className="px-5 py-3 font-medium">Actor</th>
-                  <th className="px-5 py-3 font-medium">Target</th>
-                  <th className="px-5 py-3 font-medium">Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                      {formatDateTime(row.createdAt)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="inline-block px-2.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-mono">
-                        {row.action}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
-                      <p className="font-mono text-xs">{row.actorId || "-"}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{row.actorEmail || ""}</p>
-                    </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
-                      <p className="text-xs">{row.targetType || "-"}</p>
-                      <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{row.targetId || ""}</p>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300 max-w-md">
-                      <p className="break-words">{row.message || "-"}</p>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
+                    <th className="px-5 py-3 font-medium">Time</th>
+                    <th className="px-5 py-3 font-medium">Action</th>
+                    <th className="px-5 py-3 font-medium">Actor</th>
+                    <th className="px-5 py-3 font-medium">Target</th>
+                    <th className="px-5 py-3 font-medium">Message</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {auditRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        {formatDateTime(row.createdAt)}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="inline-block px-2.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-mono">
+                          {row.action}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                        <p className="font-mono text-xs">{row.actorId || "-"}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{row.actorEmail || ""}</p>
+                      </td>
+                      <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                        <p className="text-xs">{row.targetType || "-"}</p>
+                        <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{row.targetId || ""}</p>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 max-w-md">
+                        <p className="break-words">{row.message || "-"}</p>
+                      </td>
+                    </tr>
+                  ))}
 
-                {auditRows.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                      No audit logs found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  {auditRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
+                        No audit logs found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card view */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
+              {auditRows.map((row) => (
+                <div key={row.id} className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="inline-block px-2.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-mono">
+                      {row.action}
+                    </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {formatDateTime(row.createdAt)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Actor</p>
+                      <p className="text-gray-700 dark:text-gray-300 font-mono truncate">{row.actorEmail || row.actorId || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Target</p>
+                      <p className="text-gray-700 dark:text-gray-300 truncate">{row.targetType || "-"}</p>
+                    </div>
+                  </div>
+                  {row.message && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300 break-words">{row.message}</p>
+                  )}
+                </div>
+              ))}
+
+              {auditRows.length === 0 && (
+                <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                  No audit logs found.
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-end gap-2">
@@ -499,49 +537,89 @@ export default function AdminLogs() {
         ) : backupsError ? (
           <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{backupsError}</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                  <th className="px-5 py-3 font-medium">File Name</th>
-                  <th className="px-5 py-3 font-medium">Records</th>
-                  <th className="px-5 py-3 font-medium">Size</th>
-                  <th className="px-5 py-3 font-medium">Generated</th>
-                  <th className="px-5 py-3 font-medium text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backups.map((file) => (
-                  <tr key={file.fileName} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <td className="px-5 py-3">
-                      <span className="font-mono text-xs text-gray-700 dark:text-gray-300">{file.fileName}</span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{file.recordCount ?? "-"}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{formatBytes(file.sizeBytes)}</td>
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDateTime(file.generatedAt)}</td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void onDownloadBackup(file.fileName)}
-                        disabled={Boolean(downloadingFileName)}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {downloadingFileName === file.fileName ? "Downloading..." : "Download"}
-                      </button>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
+                    <th className="px-5 py-3 font-medium">File Name</th>
+                    <th className="px-5 py-3 font-medium">Records</th>
+                    <th className="px-5 py-3 font-medium">Size</th>
+                    <th className="px-5 py-3 font-medium">Generated</th>
+                    <th className="px-5 py-3 font-medium text-right">Action</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {backups.map((file) => (
+                    <tr key={file.fileName} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                      <td className="px-5 py-3">
+                        <span className="font-mono text-xs text-gray-700 dark:text-gray-300">{file.fileName}</span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{file.recordCount ?? "-"}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{formatBytes(file.sizeBytes)}</td>
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{formatDateTime(file.generatedAt)}</td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadBackup(file.fileName)}
+                          disabled={Boolean(downloadingFileName)}
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {downloadingFileName === file.fileName ? "Downloading..." : "Download"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
 
-                {backups.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                      No backup files found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  {backups.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
+                        No backup files found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card view */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
+              {backups.map((file) => (
+                <div key={file.fileName} className="p-4 space-y-2">
+                  <p className="font-mono text-xs text-gray-700 dark:text-gray-300 break-all">{file.fileName}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Records</p>
+                      <p className="text-gray-700 dark:text-gray-300 font-medium">{file.recordCount ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Size</p>
+                      <p className="text-gray-700 dark:text-gray-300 font-medium">{formatBytes(file.sizeBytes)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Generated</p>
+                      <p className="text-gray-700 dark:text-gray-300 font-medium">{formatDateTime(file.generatedAt)}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void onDownloadBackup(file.fileName)}
+                    disabled={Boolean(downloadingFileName)}
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-800 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingFileName === file.fileName ? "Downloading..." : "Download"}
+                  </button>
+                </div>
+              ))}
+
+              {backups.length === 0 && (
+                <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                  No backup files found.
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

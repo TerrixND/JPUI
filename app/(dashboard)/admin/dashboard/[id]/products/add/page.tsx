@@ -731,7 +731,7 @@ export default function AddProductPage() {
           treated as a successful approval submission.
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5">
           <SectionHeading>Basic Information</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

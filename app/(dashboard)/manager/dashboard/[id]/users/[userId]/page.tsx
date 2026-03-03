@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
@@ -32,7 +32,6 @@ const DURATION_PRESETS = [
   { value: "1h", label: "1 hour", hours: 1 },
   { value: "4h", label: "4 hours", hours: 4 },
   { value: "24h", label: "24 hours", hours: 24 },
-  { value: "72h", label: "72 hours", hours: 72 },
 ];
 
 const getErrorMessage = (value: unknown) =>
@@ -185,14 +184,6 @@ export default function ManagerUserDetailPage() {
     }
   }, [branchId, loadUser]);
 
-  const actionEndsAt = useMemo(() => {
-    const duration = DURATION_PRESETS.find((preset) => preset.value === durationPreset);
-    if (!duration) {
-      return null;
-    }
-    return new Date(Date.now() + duration.hours * 60 * 60 * 1000).toISOString();
-  }, [durationPreset]);
-
   const applyStatus = async () => {
     if (!user) {
       return;
@@ -238,6 +229,15 @@ export default function ManagerUserDetailPage() {
 
     try {
       const accessToken = await getAccessToken();
+      const duration = DURATION_PRESETS.find((preset) => preset.value === durationPreset);
+      if (!duration) {
+        throw new Error("Select a valid duration.");
+      }
+
+      const startsAt = new Date();
+      const endsAt = new Date(
+        startsAt.getTime() + duration.hours * 60 * 60 * 1000,
+      ).toISOString();
       const response =
         actionType === "RESTRICTION"
           ? await restrictManagerUser({
@@ -246,8 +246,8 @@ export default function ManagerUserDetailPage() {
               branchId,
               reason: reason.trim(),
               note: note.trim() || null,
-              startsAt: new Date().toISOString(),
-              endsAt: actionEndsAt || undefined,
+              startsAt: startsAt.toISOString(),
+              endsAt,
             })
           : await banManagerUser({
               accessToken,
@@ -255,8 +255,8 @@ export default function ManagerUserDetailPage() {
               branchId,
               reason: reason.trim(),
               note: note.trim() || null,
-              startsAt: new Date().toISOString(),
-              endsAt: actionEndsAt || undefined,
+              startsAt: startsAt.toISOString(),
+              endsAt,
             });
 
       setNotice(response.message || `${actionType} request submitted.`);
