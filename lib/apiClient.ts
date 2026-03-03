@@ -430,7 +430,17 @@ export type AdminActionBlock =
   | "APPROVAL_REVIEW"
   | "STAFF_RULE_MANAGE"
   | "LOG_DELETE";
-export type AdminApprovalActionType = "USER_STATUS_CHANGE" | "USER_RESTRICTION_UPSERT" | "USER_BAN";
+export type AdminApprovalActionType =
+  | "BRANCH_PRODUCT_SELECTION"
+  | "USER_STATUS_CHANGE"
+  | "USER_RESTRICTION_UPSERT"
+  | "USER_BAN"
+  | "PRODUCT_CREATE"
+  | "PRODUCT_UPDATE"
+  | "PRODUCT_VISIBILITY_UPDATE"
+  | "LOG_DELETE"
+  | "STAFF_RULE_CREATE"
+  | "STAFF_RULE_REVOKE";
 export type AdminApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type AdminApprovalDecision = "APPROVE" | "REJECT";
 
@@ -512,6 +522,26 @@ export type AdminUserDetail = {
 
 export type AdminApprovalRequestsResponse = AdminPageResponseMeta & {
   items: AdminApprovalRequest[];
+  raw: unknown;
+};
+
+export type AdminBranchProductRequestedProduct = {
+  id: string;
+  sku: string | null;
+  name: string | null;
+  saleRangeMin: number | null;
+  saleRangeMax: number | null;
+  raw: JsonRecord;
+};
+
+export type AdminBranchProductApprovalRequest = AdminApprovalRequest & {
+  branch: AdminBranchWithManagersRecord | null;
+  requestedProducts: AdminBranchProductRequestedProduct[];
+  requestedCommissionRate: number | null;
+};
+
+export type AdminBranchProductApprovalRequestsResponse = AdminPageResponseMeta & {
+  items: AdminBranchProductApprovalRequest[];
   raw: unknown;
 };
 
@@ -1902,6 +1932,54 @@ const normalizeAdminApprovalRequest = (value: unknown): AdminApprovalRequest | n
     requestedByUser: normalizeAdminUserEntityReference(row.requestedByUser),
     reviewedByUser: normalizeAdminUserEntityReference(row.reviewedByUser),
     raw: row,
+  };
+};
+
+const normalizeAdminBranchProductRequestedProduct = (
+  value: unknown,
+): AdminBranchProductRequestedProduct | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const saleRange = asRecord(row.saleRange);
+
+  return {
+    id,
+    sku: asNullableString(row.sku),
+    name: asNullableString(row.name),
+    saleRangeMin: asFiniteNumber(saleRange?.min),
+    saleRangeMax: asFiniteNumber(saleRange?.max),
+    raw: row,
+  };
+};
+
+const normalizeAdminBranchProductApprovalRequest = (
+  value: unknown,
+): AdminBranchProductApprovalRequest | null => {
+  const base = normalizeAdminApprovalRequest(value);
+  const row = asRecord(value);
+  if (!base || !row) {
+    return null;
+  }
+
+  const requestPayload = asRecord(base.requestPayload);
+
+  return {
+    ...base,
+    branch: normalizeAdminBranchRow(row.branch),
+    requestedProducts: Array.isArray(row.requestedProducts)
+      ? row.requestedProducts
+          .map((entry) => normalizeAdminBranchProductRequestedProduct(entry))
+          .filter((entry): entry is AdminBranchProductRequestedProduct => Boolean(entry))
+      : [],
+    requestedCommissionRate: asFiniteNumber(requestPayload?.requestedCommissionRate),
   };
 };
 
@@ -3844,6 +3922,64 @@ export const getAdminApprovalRequests = async ({
   };
 };
 
+export const getAdminBranchProductApprovalRequests = async ({
+  accessToken,
+  page,
+  limit,
+  status,
+  branchId,
+  requestedByUserId,
+}: {
+  accessToken: string;
+  page?: number;
+  limit?: number;
+  status?: AdminApprovalRequestStatus | string;
+  branchId?: string;
+  requestedByUserId?: string;
+}): Promise<AdminBranchProductApprovalRequestsResponse> => {
+  const query = new URLSearchParams();
+
+  if (page && page > 0) {
+    query.set("page", String(page));
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+  if (requestedByUserId) {
+    query.set("requestedByUserId", requestedByUserId.trim());
+  }
+
+  const queryString = query.toString();
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/branch-products/requests${queryString ? `?${queryString}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load branch product requests.",
+  });
+
+  const rows = extractPaginatedRows(payload)
+    .map((row) => normalizeAdminBranchProductApprovalRequest(row))
+    .filter((row): row is AdminBranchProductApprovalRequest => Boolean(row));
+
+  const root = asRecord(payload) ?? {};
+  const pagination = normalizeAuditPagination({
+    payload: root,
+    rowCount: rows.length,
+  });
+
+  return {
+    items: rows,
+    ...pagination,
+    raw: payload,
+  };
+};
+
 export const decideAdminApprovalRequest = async ({
   accessToken,
   requestId,
@@ -3875,6 +4011,46 @@ export const decideAdminApprovalRequest = async ({
       ...(overrides ?? {}),
     }),
     fallbackErrorMessage: "Failed to decide approval request.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const decideAdminBranchProductApprovalRequest = async ({
+  accessToken,
+  requestId,
+  decision,
+  decisionNote,
+  commissionRate,
+  productRates,
+}: {
+  accessToken: string;
+  requestId: string;
+  decision: AdminApprovalDecision | string;
+  decisionNote?: string;
+  commissionRate?: number;
+  productRates?: Array<{
+    productId: string;
+    rate: number;
+    note?: string;
+  }>;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/branch-products/requests/${encodeURIComponent(requestId)}/decision`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      decision: asString(decision).toUpperCase(),
+      ...(decisionNote ? { decisionNote: decisionNote.trim() } : {}),
+      ...(typeof commissionRate === "number" && Number.isFinite(commissionRate)
+        ? { commissionRate }
+        : {}),
+      ...(Array.isArray(productRates) && productRates.length > 0 ? { productRates } : {}),
+    }),
+    fallbackErrorMessage: "Failed to decide branch product request.",
   });
 
   return normalizeAdminActionResponse(200, response.payload, response.status);

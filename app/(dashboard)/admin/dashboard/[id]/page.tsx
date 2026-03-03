@@ -8,6 +8,7 @@ import supabase from "@/lib/supabase";
 import {
   getAdminAuditLogs,
   getAdminApprovalRequests,
+  getAdminBranchProductApprovalRequests,
   getAdminBranchAnalytics,
   getAdminInventoryProfitAnalytics,
   getAdminUsers,
@@ -116,7 +117,7 @@ function BranchRowSkeleton() {
 }
 
 export default function AdminDashboard() {
-  const { dashboardBasePath } = useRole();
+  const { dashboardBasePath, isMainAdmin } = useRole();
 
   const [profitSnapshot, setProfitSnapshot] = useState<Awaited<
     ReturnType<typeof getAdminInventoryProfitAnalytics>
@@ -185,7 +186,8 @@ export default function AdminDashboard() {
 
     try {
       const accessToken = await getAccessToken();
-      const [usersResult, branchesResult, pendingResult] = await Promise.allSettled([
+      const [usersResult, branchesResult, pendingResult, branchProductPendingResult] =
+        await Promise.allSettled([
         getAdminUsers({ accessToken, page: 1, limit: 1, accountStatus: "ACTIVE" }),
         getAdminBranchAnalytics({
           accessToken,
@@ -198,7 +200,15 @@ export default function AdminDashboard() {
           limit: 1,
           status: "PENDING",
         }),
-      ]);
+          isMainAdmin
+            ? getAdminBranchProductApprovalRequests({
+                accessToken,
+                page: 1,
+                limit: 1,
+                status: "PENDING",
+              })
+            : Promise.resolve(null),
+        ]);
 
       const nextCounts = { activeUsers: 0, branches: 0, pendingRequests: 0 };
       const countErrors: string[] = [];
@@ -225,6 +235,17 @@ export default function AdminDashboard() {
         countErrors.push(getErrorMessage(pendingResult.reason, "Failed to load pending requests count."));
       }
 
+      if (branchProductPendingResult.status === "fulfilled") {
+        nextCounts.pendingRequests += branchProductPendingResult.value?.total ?? 0;
+      } else if (isMainAdmin) {
+        countErrors.push(
+          getErrorMessage(
+            branchProductPendingResult.reason,
+            "Failed to load branch product request count.",
+          ),
+        );
+      }
+
       setCounts(nextCounts);
       setCountsError(countErrors.length ? countErrors.join(" ") : "");
     } catch (caughtError) {
@@ -236,7 +257,7 @@ export default function AdminDashboard() {
       setCountsLoading(false);
       setBranchLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, isMainAdmin]);
 
   const loadRecentActivity = useCallback(async () => {
     setActivityLoading(true);
