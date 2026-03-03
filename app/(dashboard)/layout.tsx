@@ -31,6 +31,9 @@ type DashboardAuthState = {
   userId: string | null;
   status: string | null;
   isMainAdmin: boolean;
+  isBranchAdmin: boolean;
+  email: string | null;
+  displayName: string | null;
   accountAccess: AccountAccessState | null;
   error: string;
 };
@@ -41,6 +44,9 @@ const initialAuthState: DashboardAuthState = {
   userId: null,
   status: null,
   isMainAdmin: false,
+  isBranchAdmin: false,
+  email: null,
+  displayName: null,
   accountAccess: null,
   error: "",
 };
@@ -447,6 +453,9 @@ export default function DashboardLayout({
             userId,
             status: me.status || null,
             isMainAdmin: me.isMainAdmin,
+            isBranchAdmin: me.isBranchAdmin,
+            email: me.email,
+            displayName: me.displayName,
             accountAccess: me.accountAccess,
             error: "",
           });
@@ -484,6 +493,9 @@ export default function DashboardLayout({
             userId: null,
             status: null,
             isMainAdmin: false,
+            isBranchAdmin: false,
+            email: null,
+            displayName: null,
             accountAccess: null,
             error: getErrorMessage(error),
           });
@@ -689,6 +701,9 @@ export default function DashboardLayout({
         role={authState.role}
         userId={authState.userId}
         isMainAdmin={authState.isMainAdmin}
+        isBranchAdmin={authState.isBranchAdmin}
+        email={authState.email}
+        displayName={authState.displayName}
         adminCapabilities={adminCapabilities}
         refreshAdminCapabilities={refreshAdminCapabilities}
       >

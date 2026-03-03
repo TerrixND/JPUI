@@ -270,8 +270,8 @@ export default function ManagerAppointments() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Appointments"
-        description="Approve branch appointments, then allocate possessions from the appointment product lines."
+        title="Appointment Status"
+        description="Review customer appointment requests, update status, and allocate possessions from the requested product lines."
         action={
           <div className="flex items-center gap-2">
             <select
@@ -323,7 +323,7 @@ export default function ManagerAppointments() {
         </div>
       ) : appointments.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-6 text-sm text-gray-500 dark:text-gray-400">
-          No pending appointments found for the selected branch scope.
+          No pending customer appointment requests found for the selected branch.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -58,10 +58,15 @@ function MoonIcon() {
 }
 
 export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
-  const { role, isMainAdmin, dashboardBasePath } = useRole();
+  const { role, isMainAdmin, isBranchAdmin, displayName, dashboardBasePath } = useRole();
   const { theme, toggleTheme } = useTheme();
   const badge = roleBadge[role] ?? roleBadge["salesperson"];
-  const roleLabel = isMainAdmin && role === "admin" ? "Main Admin" : role;
+  const roleLabel =
+    isMainAdmin && role === "admin"
+      ? "Main Admin"
+      : isBranchAdmin && role === "manager"
+        ? "Branch Admin"
+        : role;
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [activities, setActivities] = useState<AdminAuditLogRow[]>([]);
@@ -304,7 +309,7 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
             {signingOut ? "Signing Out..." : "Logout"}
           </button>
           <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-semibold lg:hidden">
-            {roleLabel[0].toUpperCase()}
+            {(displayName || roleLabel)[0]?.toUpperCase()}
           </div>
         </div>
       </div>

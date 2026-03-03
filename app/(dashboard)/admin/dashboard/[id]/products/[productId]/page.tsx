@@ -725,7 +725,7 @@ export default function ProductEditPage() {
     () =>
       form.visibility === "PRIVATE"
         ? (["ADMIN"] as RoleMediaVisibilityPreset[])
-        : ROLE_MEDIA_VISIBILITY_PRESETS,
+        : ROLE_MEDIA_VISIBILITY_PRESETS.filter(isRoleVisibilityPreset),
     [form.visibility],
   );
 

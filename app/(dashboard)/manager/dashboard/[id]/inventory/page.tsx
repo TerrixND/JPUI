@@ -1,63 +1,33 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
-  createManagerInventoryRequest,
   getManagerAnalyticsBranches,
-  getManagerPendingAppointments,
-  type ManagerInventoryRequestRecord,
-  type ManagerPendingAppointment,
+  getManagerProducts,
+  type ManagerProductSummary,
 } from "@/lib/managerApi";
+import {
+  formatManagerDateTime,
+  getManagerProductLabel,
+  getManagerProductPreviewUrl,
+  managerStatusBadge,
+} from "@/lib/managerDashboardUi";
 
 const getErrorMessage = (value: unknown) =>
   value instanceof Error ? value.message : "Unexpected error.";
 
-const formatDateTime = (value: string | null) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const statusStyle = (status: string | null) => {
-  switch (status) {
-    case "PENDING_MANAGER":
-    case "PENDING_MAIN":
-      return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
-    case "APPROVED":
-      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
-    case "REJECTED":
-      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
-    default:
-      return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400";
-  }
-};
-
-export default function ManagerInventory() {
+export default function ManagerInventoryPage() {
+  const { dashboardBasePath } = useRole();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [branchId, setBranchId] = useState("");
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
-  const [appointments, setAppointments] = useState<ManagerPendingAppointment[]>([]);
-  const [submittedRequests, setSubmittedRequests] = useState<ManagerInventoryRequestRecord[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [appointmentId, setAppointmentId] = useState("");
-  const [appointmentItemId, setAppointmentItemId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [manualProductId, setManualProductId] = useState("");
-  const [fromLocation, setFromLocation] = useState<"MAIN" | "BRANCH_POOL">("MAIN");
-  const [managerNote, setManagerNote] = useState("");
+  const [products, setProducts] = useState<ManagerProductSummary[]>([]);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -70,7 +40,7 @@ export default function ManagerInventory() {
     return accessToken;
   }, []);
 
-  const loadBranches = useCallback(async () => {
+  const loadBranchOptions = useCallback(async () => {
     const accessToken = await getAccessToken();
     const analytics = await getManagerAnalyticsBranches({ accessToken });
     const options = analytics.branches
@@ -83,13 +53,14 @@ export default function ManagerInventory() {
 
     setBranchOptions(options);
     setBranchId((current) => current || options[0]?.id || "");
+    return options[0]?.id || "";
   }, [getAccessToken]);
 
-  const loadPendingAppointments = useCallback(
+  const loadProducts = useCallback(
     async (nextBranchId?: string) => {
       const resolvedBranchId = nextBranchId || branchId;
       if (!resolvedBranchId) {
-        setAppointments([]);
+        setProducts([]);
         return;
       }
 
@@ -98,16 +69,16 @@ export default function ManagerInventory() {
 
       try {
         const accessToken = await getAccessToken();
-        const rows = await getManagerPendingAppointments({
+        const response = await getManagerProducts({
           accessToken,
           branchId: resolvedBranchId,
         });
-        setAppointments(rows);
+        setProducts(response.products);
       } catch (caughtError) {
         if (handleAccountAccessDeniedError(caughtError)) {
           return;
         }
-        setAppointments([]);
+        setProducts([]);
         setError(getErrorMessage(caughtError));
       } finally {
         setLoading(false);
@@ -121,124 +92,44 @@ export default function ManagerInventory() {
       setLoading(true);
       setError("");
       try {
-        await loadBranches();
+        const firstBranchId = await loadBranchOptions();
+        await loadProducts(firstBranchId);
       } catch (caughtError) {
         if (handleAccountAccessDeniedError(caughtError)) {
           return;
         }
         setBranchOptions([]);
-        setAppointments([]);
+        setProducts([]);
         setError(getErrorMessage(caughtError));
         setLoading(false);
       }
     };
 
     void bootstrap();
-  }, [loadBranches]);
+  }, [loadBranchOptions, loadProducts]);
 
   useEffect(() => {
     if (branchId) {
-      void loadPendingAppointments(branchId);
+      void loadProducts(branchId);
     }
-  }, [branchId, loadPendingAppointments]);
+  }, [branchId, loadProducts]);
 
-  const appointmentsForBranch = useMemo(
-    () => appointments.filter((row) => row.branchId === branchId),
-    [appointments, branchId],
+  const selectedProducts = useMemo(
+    () => products.filter((product) => product.isSelectedForBranch),
+    [products],
   );
-
-  const selectedAppointment = useMemo(
-    () => appointments.find((row) => row.id === appointmentId) || null,
-    [appointmentId, appointments],
-  );
-
-  const selectedAppointmentItems = useMemo(
-    () =>
-      (selectedAppointment?.items || [])
-        .map((item) => {
-          const resolvedProductId = item.productId || item.product?.id;
-          return {
-            id: item.id,
-            productId: resolvedProductId,
-            label:
-              [item.product?.sku, item.product?.name].filter(Boolean).join(" · ") ||
-              resolvedProductId ||
-              item.id,
-          };
-        }),
-    [selectedAppointment],
-  );
-
-  useEffect(() => {
-    if (selectedAppointmentItems.length === 1) {
-      setAppointmentItemId(selectedAppointmentItems[0].id);
-      if (selectedAppointmentItems[0].productId) {
-        setProductId(selectedAppointmentItems[0].productId);
-      }
-    }
-  }, [selectedAppointmentItems]);
-
-  const onSubmitRequest = async () => {
-    setError("");
-    setNotice("");
-
-    const resolvedProductId = manualProductId.trim() || productId;
-
-    if (!branchId || !appointmentId || !resolvedProductId) {
-      setError("Branch, appointment, and product are required.");
-      return;
-    }
-
-    setSubmitting(true);
-
-    try {
-      const accessToken = await getAccessToken();
-      const request = await createManagerInventoryRequest({
-        accessToken,
-        branchId,
-        appointmentId,
-        productId: resolvedProductId,
-        appointmentItemId: appointmentItemId || undefined,
-        fromLocation,
-        managerNote: managerNote || undefined,
-      });
-
-      if (request) {
-        setSubmittedRequests((current) => [request, ...current].slice(0, 30));
-      }
-
-      setNotice("Inventory request submitted to the current main-admin stage.");
-      setAppointmentItemId("");
-      setProductId("");
-      setManualProductId("");
-      setManagerNote("");
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
-      }
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Inventory Requests"
-        description="Create manager inventory pull requests for appointment fulfillment."
+        title="Inventory"
+        description="Branch-approved inventory products. Open each product to manage targeting visibility and salesperson commissions."
         action={
           <div className="flex items-center gap-2">
             <select
               value={branchId}
-              onChange={(event) => {
-                setBranchId(event.target.value);
-                setAppointmentId("");
-                setAppointmentItemId("");
-                setProductId("");
-                setManualProductId("");
-              }}
-              className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-lg"
+              onChange={(event) => setBranchId(event.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700/60 dark:bg-gray-900"
             >
               <option value="">Select branch</option>
               {branchOptions.map((branch) => (
@@ -250,10 +141,10 @@ export default function ManagerInventory() {
             <button
               type="button"
               onClick={() => {
-                void loadBranches();
-                void loadPendingAppointments(branchId);
+                void loadBranchOptions();
+                void loadProducts(branchId);
               }}
-              className="px-3 py-2 text-sm text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
             >
               Refresh
             </button>
@@ -261,177 +152,110 @@ export default function ManagerInventory() {
         }
       />
 
-      {notice && (
-        <div className="px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-700 dark:text-emerald-300">
-          {notice}
-        </div>
-      )}
-
-      {error && (
-        <div className="px-4 py-3 rounded-lg border border-red-200 dark:border-red-700/40 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
           {error}
         </div>
-      )}
+      ) : null}
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">New Request</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <select
-            value={branchId}
-            onChange={(event) => {
-              setBranchId(event.target.value);
-              setAppointmentId("");
-              setAppointmentItemId("");
-              setProductId("");
-              setManualProductId("");
-            }}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          >
-            <option value="">Select branch</option>
-            {branchOptions.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={appointmentId}
-            onChange={(event) => {
-              setAppointmentId(event.target.value);
-              setAppointmentItemId("");
-              setProductId("");
-              setManualProductId("");
-            }}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          >
-            <option value="">Select appointment</option>
-            {appointmentsForBranch.map((row) => (
-              <option key={row.id} value={row.id}>
-                {[row.id, row.customerName].filter(Boolean).join(" · ")}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={appointmentItemId}
-            onChange={(event) => {
-              const nextItemId = event.target.value;
-              setAppointmentItemId(nextItemId);
-              const nextItem = selectedAppointmentItems.find((row) => row.id === nextItemId);
-              setProductId(nextItem?.productId || "");
-            }}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          >
-            <option value="">Appointment item (optional)</option>
-            {selectedAppointmentItems.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            value={manualProductId}
-            onChange={(event) => setManualProductId(event.target.value)}
-            placeholder={productId ? `Resolved product: ${productId}` : "Manual product ID override"}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          />
-
-          <select
-            value={fromLocation}
-            onChange={(event) => setFromLocation(event.target.value as "MAIN" | "BRANCH_POOL")}
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          >
-            <option value="MAIN">MAIN</option>
-            <option value="BRANCH_POOL">BRANCH_POOL</option>
-          </select>
-
-          <input
-            type="text"
-            value={managerNote}
-            onChange={(event) => setManagerNote(event.target.value)}
-            placeholder="Manager note (optional)"
-            className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg"
-          />
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-64 animate-pulse rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900"
+            />
+          ))}
         </div>
-
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          If the appointment item already includes a product reference, it is resolved automatically.
-          Use the manual override only when the item payload does not include a usable product ID.
-        </p>
-
-        <button
-          type="button"
-          onClick={() => void onSubmitRequest()}
-          disabled={submitting || loading}
-          className="px-4 py-2 text-sm text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-        >
-          {submitting ? "Submitting..." : "Submit Inventory Request"}
-        </button>
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            Recent Submitted Requests (This Session)
-          </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Requests submitted during this session are listed below.
-          </p>
+      ) : selectedProducts.length === 0 ? (
+        <div className="rounded-2xl border border-gray-200 bg-white px-5 py-8 text-sm text-gray-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400">
+          No approved branch inventory products found for the selected branch.
         </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {selectedProducts.map((product) => {
+            const previewUrl = getManagerProductPreviewUrl(product);
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                <th className="px-5 py-3 font-medium">Request</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Branch</th>
-                <th className="px-5 py-3 font-medium">Appointment</th>
-                <th className="px-5 py-3 font-medium">Product</th>
-                <th className="px-5 py-3 font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submittedRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">
-                    No requests submitted in this session yet.
-                  </td>
-                </tr>
-              ) : (
-                submittedRequests.map((row) => (
-                  <tr key={row.id} className="border-b border-gray-50 dark:border-gray-800">
-                    <td className="px-5 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
-                      {row.id}
-                    </td>
-                    <td className="px-5 py-3">
+            return (
+              <div
+                key={product.id}
+                className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900"
+              >
+                <div className="aspect-[4/3] border-b border-gray-200 bg-gray-50 dark:border-gray-700/60 dark:bg-gray-800/40">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={previewUrl}
+                      alt={`${getManagerProductLabel(product)} preview`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+                      No preview
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4 p-5">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        {getManagerProductLabel(product)}
+                      </h2>
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle(
-                          row.status,
-                        )}`}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${managerStatusBadge(product.status)}`}
                       >
-                        {row.status || "PENDING"}
+                        {product.status || "UNKNOWN"}
                       </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{row.branchId || "-"}</td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {row.appointmentId || "-"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{row.productId || "-"}</td>
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
-                      {formatDateTime(row.createdAt)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      Visibility: {product.visibility || "-"} · Commission:{" "}
+                      {product.branchCommissionRate ?? 0}%
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                      Last updated {formatManagerDateTime(product.raw.updatedAt as string | null)}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-800/40">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Sale Min
+                      </p>
+                      <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
+                        {product.saleRangeMin ?? "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-800/40">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                        Sale Max
+                      </p>
+                      <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
+                        {product.saleRangeMax ?? "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Link
+                      href={`${dashboardBasePath}/inventory/${product.id}/targeting`}
+                      className="rounded-xl bg-amber-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+                    >
+                      Targeting & Visibility
+                    </Link>
+                    <Link
+                      href={`${dashboardBasePath}/inventory/${product.id}/commissions`}
+                      className="rounded-xl bg-gray-900 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                    >
+                      Commission Policy
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 }

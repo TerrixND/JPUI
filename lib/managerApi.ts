@@ -630,6 +630,24 @@ export type ManagerProductSummary = {
   previewImageUrl: string | null;
   previewImageMediaId: string | null;
   media: ManagerProductMediaReference[];
+  branchRequestState: {
+    totalRequests: number;
+    pendingCount: number;
+    approvedCount: number;
+    rejectedCount: number;
+    remainingRetries: number;
+    cooldownMinutes: number;
+    retryLimit: number;
+    cooldownActive: boolean;
+    cooldownEndsAt: string | null;
+    cooldownResolvedAt: string | null;
+    canRequest: boolean;
+    blockReason: string | null;
+    note: string | null;
+    lastRequestedAt: string | null;
+    lastRejectedAt: string | null;
+    lastApprovedAt: string | null;
+  } | null;
   raw: JsonRecord;
 };
 
@@ -646,6 +664,7 @@ const normalizeManagerProduct = (value: unknown): ManagerProductSummary | null =
 
   const saleRange = asRecord(row.saleRange);
   const projectedRange = asRecord(row.projectedBranchCommissionRange);
+  const branchRequestState = asRecord(row.branchRequestState);
   const preview = extractManagerProductPreview(row);
 
   return {
@@ -667,6 +686,26 @@ const normalizeManagerProduct = (value: unknown): ManagerProductSummary | null =
     previewImageUrl: preview.previewImageUrl,
     previewImageMediaId: preview.previewImageMediaId,
     media: preview.media,
+    branchRequestState: branchRequestState
+      ? {
+          totalRequests: asPositiveInt(branchRequestState.totalRequests) ?? 0,
+          pendingCount: asPositiveInt(branchRequestState.pendingCount) ?? 0,
+          approvedCount: asPositiveInt(branchRequestState.approvedCount) ?? 0,
+          rejectedCount: asPositiveInt(branchRequestState.rejectedCount) ?? 0,
+          remainingRetries: asPositiveInt(branchRequestState.remainingRetries) ?? 0,
+          cooldownMinutes: asPositiveInt(branchRequestState.cooldownMinutes) ?? 60,
+          retryLimit: asPositiveInt(branchRequestState.retryLimit) ?? 5,
+          cooldownActive: asBoolean(branchRequestState.cooldownActive),
+          cooldownEndsAt: asNullableString(branchRequestState.cooldownEndsAt),
+          cooldownResolvedAt: asNullableString(branchRequestState.cooldownResolvedAt),
+          canRequest: branchRequestState.canRequest !== false,
+          blockReason: asNullableString(branchRequestState.blockReason),
+          note: asNullableString(branchRequestState.note),
+          lastRequestedAt: asNullableString(branchRequestState.lastRequestedAt),
+          lastRejectedAt: asNullableString(branchRequestState.lastRejectedAt),
+          lastApprovedAt: asNullableString(branchRequestState.lastApprovedAt),
+        }
+      : null,
     raw: row,
   };
 };
@@ -1308,6 +1347,152 @@ export const getManagerPendingAppointments = async ({
     .filter((entry): entry is ManagerPendingAppointment => Boolean(entry));
 };
 
+export type ManagerAppointmentHistoryRecord = ManagerPendingAppointment & {
+  assignedSalesperson: {
+    id: string;
+    displayName: string | null;
+    user: {
+      id: string;
+      email: string | null;
+      status: string | null;
+    } | null;
+  } | null;
+  sales: Array<{
+    id: string;
+    productId: string | null;
+    amount: number | null;
+    currency: string | null;
+    status: string | null;
+    soldAt: string | null;
+    salesperson: {
+      id: string;
+      displayName: string | null;
+      user: {
+        id: string;
+        email: string | null;
+      } | null;
+    } | null;
+  }>;
+};
+
+const normalizeManagerAppointmentHistoryRecord = (
+  value: unknown,
+): ManagerAppointmentHistoryRecord | null => {
+  const base = normalizePendingAppointment(value);
+  const row = asRecord(value);
+  if (!base || !row) {
+    return null;
+  }
+
+  const assignedSales = asRecord(row.assignedSales);
+  const assignedSalesUser = asRecord(assignedSales?.user);
+  const sales = Array.isArray(row.sales)
+    ? row.sales
+        .map((entry) => asRecord(entry))
+        .map((sale) => {
+          const id = asString(sale?.id);
+          if (!id) {
+            return null;
+          }
+
+          const salesperson = asRecord(sale?.salesperson);
+          const salespersonUser = asRecord(salesperson?.user);
+          return {
+            id,
+            productId: asNullableString(sale?.productId),
+            amount: asFiniteNumberish(sale?.amount),
+            currency: asNullableString(sale?.currency),
+            status: asNullableString(sale?.status),
+            soldAt: asNullableString(sale?.soldAt),
+            salesperson: salesperson
+              ? {
+                  id: asString(salesperson.id),
+                  displayName: asNullableString(salesperson.displayName),
+                  user: salespersonUser
+                    ? {
+                        id: asString(salespersonUser.id),
+                        email: asNullableString(salespersonUser.email),
+                      }
+                    : null,
+                }
+              : null,
+          };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is {
+            id: string;
+            productId: string | null;
+            amount: number | null;
+            currency: string | null;
+            status: string | null;
+            soldAt: string | null;
+            salesperson: {
+              id: string;
+              displayName: string | null;
+              user: {
+                id: string;
+                email: string | null;
+              } | null;
+            } | null;
+          } => Boolean(entry),
+        )
+    : [];
+
+  return {
+    ...base,
+    assignedSalesperson: assignedSales
+      ? {
+          id: asString(assignedSales.id),
+          displayName: asNullableString(assignedSales.displayName),
+          user: assignedSalesUser
+            ? {
+                id: asString(assignedSalesUser.id),
+                email: asNullableString(assignedSalesUser.email),
+                status: asNullableString(assignedSalesUser.status),
+              }
+            : null,
+        }
+      : null,
+    sales,
+  };
+};
+
+export const getManagerAppointments = async ({
+  accessToken,
+  branchId,
+  status,
+  limit,
+}: {
+  accessToken: string;
+  branchId?: string;
+  status?: "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+  limit?: number;
+}): Promise<ManagerAppointmentHistoryRecord[]> => {
+  const query = new URLSearchParams();
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+  if (status) {
+    query.set("status", status);
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/appointments${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load appointments.",
+  });
+
+  return extractRows(payload)
+    .map((entry) => normalizeManagerAppointmentHistoryRecord(entry))
+    .filter((entry): entry is ManagerAppointmentHistoryRecord => Boolean(entry));
+};
+
 export type ManagerActionResponse = {
   statusCode: number;
   message: string | null;
@@ -1446,6 +1631,128 @@ export const updateManagerSalespersonStatus = async ({
     method: "PATCH",
     body,
     fallbackErrorMessage: "Failed to update salesperson status.",
+  });
+
+  return normalizeManagerActionResponse(200, payload);
+};
+
+export const updateManagerUserStatus = async ({
+  accessToken,
+  userId,
+  status,
+  reason,
+  branchId,
+}: {
+  accessToken: string;
+  userId: string;
+  status: "ACTIVE" | "RESTRICTED" | "BANNED" | "TERMINATED";
+  reason?: string;
+  branchId?: string;
+}): Promise<ManagerActionResponse> => {
+  const body: Record<string, unknown> = {
+    status,
+  };
+  if (reason) {
+    body.reason = reason.trim();
+  }
+  if (branchId) {
+    body.branchId = branchId.trim();
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/users/${encodeURIComponent(userId)}/status`,
+    method: "PATCH",
+    body,
+    fallbackErrorMessage: "Failed to update user status.",
+  });
+
+  return normalizeManagerActionResponse(200, payload);
+};
+
+export const restrictManagerUser = async ({
+  accessToken,
+  userId,
+  branchId,
+  reason,
+  note,
+  startsAt,
+  endsAt,
+}: {
+  accessToken: string;
+  userId: string;
+  branchId?: string;
+  reason: string;
+  note?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+}): Promise<ManagerActionResponse> => {
+  const body: Record<string, unknown> = {
+    reason: reason.trim(),
+  };
+  if (branchId) {
+    body.branchId = branchId.trim();
+  }
+  if (note !== undefined) {
+    body.note = note;
+  }
+  if (startsAt) {
+    body.startsAt = startsAt;
+  }
+  if (endsAt) {
+    body.endsAt = endsAt;
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/users/${encodeURIComponent(userId)}/restrictions`,
+    method: "POST",
+    body,
+    fallbackErrorMessage: "Failed to restrict user.",
+  });
+
+  return normalizeManagerActionResponse(200, payload);
+};
+
+export const banManagerUser = async ({
+  accessToken,
+  userId,
+  branchId,
+  reason,
+  note,
+  startsAt,
+  endsAt,
+}: {
+  accessToken: string;
+  userId: string;
+  branchId?: string;
+  reason: string;
+  note?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+}): Promise<ManagerActionResponse> => {
+  const body: Record<string, unknown> = {
+    reason: reason.trim(),
+  };
+  if (branchId) {
+    body.branchId = branchId.trim();
+  }
+  if (note !== undefined) {
+    body.note = note;
+  }
+  if (startsAt) {
+    body.startsAt = startsAt;
+  }
+  if (endsAt) {
+    body.endsAt = endsAt;
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/users/${encodeURIComponent(userId)}/ban`,
+    method: "POST",
+    body,
+    fallbackErrorMessage: "Failed to ban user.",
   });
 
   return normalizeManagerActionResponse(200, payload);
@@ -1990,6 +2297,76 @@ export const createManagerCommissionPolicy = async ({
     method: "POST",
     body,
     fallbackErrorMessage: "Failed to create commission policy.",
+  });
+
+  const root = asRecord(payload);
+  return (
+    normalizeManagerCommissionPolicy(payload) ||
+    normalizeManagerCommissionPolicy(root?.policy)
+  );
+};
+
+export const updateManagerCommissionPolicy = async ({
+  accessToken,
+  policyId,
+  salespersonUserId,
+  rate,
+  productTier,
+  productId,
+  activeFrom,
+  activeTo,
+  priority,
+  note,
+  isActive,
+}: {
+  accessToken: string;
+  policyId: string;
+  salespersonUserId?: string;
+  rate?: number;
+  productTier?: string | null;
+  productId?: string | null;
+  activeFrom?: string | null;
+  activeTo?: string | null;
+  priority?: number;
+  note?: string | null;
+  isActive?: boolean;
+}): Promise<ManagerCommissionPolicyRecord | null> => {
+  const body: Record<string, unknown> = {};
+
+  if (salespersonUserId !== undefined) {
+    body.salespersonUserId = salespersonUserId.trim();
+  }
+  if (rate !== undefined) {
+    body.rate = rate;
+  }
+  if (productTier !== undefined) {
+    body.productTier = productTier;
+  }
+  if (productId !== undefined) {
+    body.productId = productId;
+  }
+  if (activeFrom !== undefined) {
+    body.activeFrom = activeFrom;
+  }
+  if (activeTo !== undefined) {
+    body.activeTo = activeTo;
+  }
+  if (priority !== undefined) {
+    body.priority = priority;
+  }
+  if (note !== undefined) {
+    body.note = note;
+  }
+  if (isActive !== undefined) {
+    body.isActive = isActive;
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/commission-policies/${encodeURIComponent(policyId)}`,
+    method: "PATCH",
+    body,
+    fallbackErrorMessage: "Failed to update commission policy.",
   });
 
   const root = asRecord(payload);

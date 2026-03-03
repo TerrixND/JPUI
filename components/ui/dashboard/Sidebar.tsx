@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRole, Role } from "./RoleContext";
+import { useCallback, useEffect, useState } from "react";
+import supabase from "@/lib/supabase";
+import {
+  getAdminApprovalRequests,
+  getAdminBranchProductApprovalRequests,
+} from "@/lib/apiClient";
+import { useRole, type Role } from "./RoleContext";
 
 interface NavItem {
   label: string;
   pathSuffix: string;
   icon: string;
+  showRequestDot?: boolean;
 }
 
 const adminNav: NavItem[] = [
@@ -16,6 +23,7 @@ const adminNav: NavItem[] = [
   { label: "Users", pathSuffix: "users", icon: "users" },
   { label: "Branch Network", pathSuffix: "branches", icon: "building" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
+  { label: "Requests", pathSuffix: "requests", icon: "inbox", showRequestDot: true },
   { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
   { label: "Errors", pathSuffix: "errors", icon: "file" },
   { label: "Logs & Backups", pathSuffix: "logs", icon: "file" },
@@ -25,10 +33,11 @@ const adminNav: NavItem[] = [
 const managerNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Appointments", pathSuffix: "appointments", icon: "calendar" },
-  { label: "Sales Team", pathSuffix: "salespersons", icon: "users" },
+  { label: "Appointment History", pathSuffix: "appointment-history", icon: "history" },
+  { label: "Users", pathSuffix: "users", icon: "users" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Commissions", pathSuffix: "commissions", icon: "dollar" },
-  { label: "Products & Targeting", pathSuffix: "targeting", icon: "target" },
+  { label: "Products", pathSuffix: "products", icon: "box" },
   { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
 ];
 
@@ -125,23 +134,6 @@ function NavIcon({ icon }: { icon: string }) {
           />
         </svg>
       );
-    case "gear":
-      return (
-        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-          />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-        </svg>
-      );
     case "building":
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,12 +200,15 @@ function NavIcon({ icon }: { icon: string }) {
           />
         </svg>
       );
-    case "target":
+    case "inbox":
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" strokeWidth={2} />
-          <circle cx="12" cy="12" r="6" strokeWidth={2} />
-          <circle cx="12" cy="12" r="2" strokeWidth={2} />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M20 13V7a2 2 0 00-2-2H6a2 2 0 00-2 2v6m16 0l-2.586 5.172A2 2 0 0115.618 20H8.382a2 2 0 01-1.796-1.106L4 13m16 0h-4a2 2 0 01-2 2h-4a2 2 0 01-2-2H4"
+          />
         </svg>
       );
     default:
@@ -229,13 +224,66 @@ export default function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const { role, isMainAdmin, dashboardBasePath } = useRole();
+  const {
+    role,
+    isMainAdmin,
+    isBranchAdmin,
+    email,
+    displayName,
+    dashboardBasePath,
+  } = useRole();
+  const [hasPendingRequests, setHasPendingRequests] = useState(false);
   const baseRoleMeta = roleLabels[role];
   const roleMeta =
     role === "admin" && isMainAdmin
       ? { ...baseRoleMeta, label: "Main Admin" }
-      : baseRoleMeta;
+      : role === "manager" && isBranchAdmin
+        ? { ...baseRoleMeta, label: "Branch Admin" }
+        : baseRoleMeta;
   const normalizedPathname = normalizePath(pathname);
+
+  const loadPendingRequests = useCallback(async () => {
+    if (role !== "admin") {
+      setHasPendingRequests(false);
+      return;
+    }
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || "";
+      if (!accessToken) {
+        setHasPendingRequests(false);
+        return;
+      }
+
+      const [approvalRequests, branchProductRequests] = await Promise.all([
+        getAdminApprovalRequests({
+          accessToken,
+          status: "PENDING",
+          limit: 1,
+        }),
+        isMainAdmin
+          ? getAdminBranchProductApprovalRequests({
+              accessToken,
+              status: "PENDING",
+              limit: 1,
+            })
+          : Promise.resolve(null),
+      ]);
+
+      const pendingCount =
+        approvalRequests.total + (branchProductRequests?.total ?? 0);
+      setHasPendingRequests(pendingCount > 0);
+    } catch {
+      setHasPendingRequests(false);
+    }
+  }, [isMainAdmin, role]);
+
+  useEffect(() => {
+    void loadPendingRequests();
+  }, [loadPendingRequests]);
 
   return (
     <>
@@ -257,7 +305,6 @@ export default function Sidebar({
           lg:translate-x-0 lg:static lg:z-auto
         `}
       >
-        {/* Header */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700/60 shrink-0">
           <Link
             href={dashboardBasePath}
@@ -292,7 +339,6 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Role badge */}
         <div className="px-5 pt-4 pb-2">
           <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 dark:text-gray-500">
             Signed in as
@@ -305,7 +351,6 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Nav links */}
         <nav className="flex-1 px-4 py-3 space-y-0.5 overflow-y-auto">
           {navByRole[role].map((item) => {
             const href = buildHref(dashboardBasePath, item.pathSuffix);
@@ -334,29 +379,31 @@ export default function Sidebar({
                 <span className={isActive ? "text-emerald-600 dark:text-emerald-400" : ""}>
                   <NavIcon icon={item.icon} />
                 </span>
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.showRequestDot && hasPendingRequests ? (
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                ) : null}
                 {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Footer user info */}
         <div className="border-t border-gray-200 dark:border-gray-700/60 p-4 shrink-0">
           <div className="flex items-center gap-3">
             <div
               className={`w-9 h-9 rounded-full ${roleMeta.color} flex items-center justify-center text-white text-sm font-semibold ring-2 ring-white dark:ring-gray-800`}
             >
-              {roleMeta.label[0]}
+              {(displayName || roleMeta.label)[0]?.toUpperCase() || roleMeta.label[0]}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
-                {roleMeta.label} User
+                {displayName || `${roleMeta.label} User`}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                {role}@jadepalace.com
+                {email || "manager@jadepalace.com"}
               </p>
             </div>
           </div>

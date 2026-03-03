@@ -8,23 +8,16 @@ import { ADMIN_ACTION_BLOCKS } from "@/lib/adminAccessControl";
 import {
   createAdminUserBan,
   createAdminUserRestriction,
-  decideAdminBranchProductApprovalRequest,
-  decideAdminApprovalRequest,
-  getAdminBranchProductApprovalRequests,
-  getAdminApprovalRequests,
   getAdminUsers,
   handleAccountAccessDeniedError,
   type AdminAccountStatus,
   type AdminActionBlock,
-  type AdminBranchProductApprovalRequest,
-  type AdminApprovalRequest,
   type AdminRestrictionMode,
   type AdminUserListItem,
   type AdminUserRole,
 } from "@/lib/apiClient";
 import {
   accountStatusBadge,
-  approvalStatusBadge,
   formatDateTime,
   getPrimaryBranchName,
   getUserDisplayName,
@@ -63,16 +56,6 @@ type InlineRequestDraft = {
   adminActionBlocks: AdminActionBlock[];
 };
 
-type ApprovalDecisionDraft = {
-  decisionNote: string;
-  enableAutoApproveForFuture: boolean;
-};
-
-type BranchProductDecisionDraft = {
-  decisionNote: string;
-  commissionRate: string;
-};
-
 const initialFilters: Filters = {
   role: ALL_FILTER,
   status: ALL_FILTER,
@@ -87,21 +70,6 @@ const createInlineDraft = (): InlineRequestDraft => ({
   note: "",
   restrictionMode: "ACCOUNT",
   adminActionBlocks: [],
-});
-
-const createDecisionDraft = (): ApprovalDecisionDraft => ({
-  decisionNote: "",
-  enableAutoApproveForFuture: false,
-});
-
-const createBranchProductDecisionDraft = (
-  commissionRate: number | null = null,
-): BranchProductDecisionDraft => ({
-  decisionNote: "",
-  commissionRate:
-    typeof commissionRate === "number" && Number.isFinite(commissionRate)
-      ? String(commissionRate)
-      : "",
 });
 
 const ACTION_BLOCK_COPY: Record<AdminActionBlock, string> = {
@@ -125,23 +93,6 @@ const formatActionMessage = (
   }
 
   return response.message || `${label} applied successfully.`;
-};
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-const formatSaleRange = (min: number | null, max: number | null) => {
-  if (min === null && max === null) {
-    return "-";
-  }
-  if (min !== null && max !== null) {
-    return min === max ? money.format(min) : `${money.format(min)} - ${money.format(max)}`;
-  }
-
-  return money.format(min ?? max ?? 0);
 };
 
 const toLocalIsoString = (value: string) => {
@@ -184,7 +135,7 @@ const resolveTimeWindow = (draft: InlineRequestDraft) => {
 };
 
 export default function AdminUsersPage() {
-  const { dashboardBasePath, isMainAdmin, userId } = useRole();
+  const { dashboardBasePath, isMainAdmin } = useRole();
 
   const [rows, setRows] = useState<AdminUserListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,23 +152,6 @@ export default function AdminUsersPage() {
   const [inlineDrafts, setInlineDrafts] = useState<Record<string, InlineRequestDraft>>({});
   const [inlineMessages, setInlineMessages] = useState<Record<string, string>>({});
   const [inlineBusyByUserId, setInlineBusyByUserId] = useState<Record<string, boolean>>({});
-
-  const [approvalRows, setApprovalRows] = useState<AdminApprovalRequest[]>([]);
-  const [approvalLoading, setApprovalLoading] = useState(true);
-  const [approvalError, setApprovalError] = useState("");
-  const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDecisionDraft>>({});
-  const [approvalBusyId, setApprovalBusyId] = useState("");
-  const [approvalMessage, setApprovalMessage] = useState("");
-  const [branchProductRows, setBranchProductRows] = useState<AdminBranchProductApprovalRequest[]>(
-    [],
-  );
-  const [branchProductLoading, setBranchProductLoading] = useState(isMainAdmin);
-  const [branchProductError, setBranchProductError] = useState("");
-  const [branchProductDrafts, setBranchProductDrafts] = useState<
-    Record<string, BranchProductDecisionDraft>
-  >({});
-  const [branchProductBusyId, setBranchProductBusyId] = useState("");
-  const [branchProductMessage, setBranchProductMessage] = useState("");
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -269,81 +203,9 @@ export default function AdminUsersPage() {
     }
   }, [appliedFilters, getAccessToken, limit, page]);
 
-  const loadApprovalQueue = useCallback(async () => {
-    setApprovalLoading(true);
-    setApprovalError("");
-
-    try {
-      const accessToken = await getAccessToken();
-      const response = await getAdminApprovalRequests({
-        accessToken,
-        status: isMainAdmin ? "PENDING" : undefined,
-        requestedByUserId: isMainAdmin ? undefined : userId,
-        limit: 20,
-      });
-
-      setApprovalRows(response.items);
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
-      }
-
-      setApprovalRows([]);
-      setApprovalError(
-        caughtError instanceof Error ? caughtError.message : "Failed to load approval requests.",
-      );
-    } finally {
-      setApprovalLoading(false);
-    }
-  }, [getAccessToken, isMainAdmin, userId]);
-
-  const loadBranchProductQueue = useCallback(async () => {
-    if (!isMainAdmin) {
-      setBranchProductRows([]);
-      setBranchProductError("");
-      setBranchProductLoading(false);
-      return;
-    }
-
-    setBranchProductLoading(true);
-    setBranchProductError("");
-
-    try {
-      const accessToken = await getAccessToken();
-      const response = await getAdminBranchProductApprovalRequests({
-        accessToken,
-        status: "PENDING",
-        limit: 20,
-      });
-
-      setBranchProductRows(response.items);
-    } catch (caughtError) {
-      if (handleAccountAccessDeniedError(caughtError)) {
-        return;
-      }
-
-      setBranchProductRows([]);
-      setBranchProductError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Failed to load branch product requests.",
-      );
-    } finally {
-      setBranchProductLoading(false);
-    }
-  }, [getAccessToken, isMainAdmin]);
-
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
-
-  useEffect(() => {
-    void loadApprovalQueue();
-  }, [loadApprovalQueue]);
-
-  useEffect(() => {
-    void loadBranchProductQueue();
-  }, [loadBranchProductQueue]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -376,45 +238,12 @@ export default function AdminUsersPage() {
     (targetUserId: string) => inlineDrafts[targetUserId] || createInlineDraft(),
     [inlineDrafts],
   );
-  const getApprovalDraft = useCallback(
-    (requestId: string) => approvalDrafts[requestId] || createDecisionDraft(),
-    [approvalDrafts],
-  );
-  const getBranchProductDraft = useCallback(
-    (request: AdminBranchProductApprovalRequest) =>
-      branchProductDrafts[request.id] ||
-      createBranchProductDecisionDraft(request.requestedCommissionRate),
-    [branchProductDrafts],
-  );
 
   const updateInlineDraft = (targetUserId: string, patch: Partial<InlineRequestDraft>) => {
     setInlineDrafts((current) => ({
       ...current,
       [targetUserId]: {
         ...(current[targetUserId] || createInlineDraft()),
-        ...patch,
-      },
-    }));
-  };
-
-  const updateApprovalDraft = (requestId: string, patch: Partial<ApprovalDecisionDraft>) => {
-    setApprovalDrafts((current) => ({
-      ...current,
-      [requestId]: {
-        ...(current[requestId] || createDecisionDraft()),
-        ...patch,
-      },
-    }));
-  };
-
-  const updateBranchProductDraft = (
-    request: AdminBranchProductApprovalRequest,
-    patch: Partial<BranchProductDecisionDraft>,
-  ) => {
-    setBranchProductDrafts((current) => ({
-      ...current,
-      [request.id]: {
-        ...(current[request.id] || createBranchProductDecisionDraft(request.requestedCommissionRate)),
         ...patch,
       },
     }));
@@ -491,7 +320,7 @@ export default function AdminUsersPage() {
           }));
         }
 
-        await Promise.all([loadUsers(), loadApprovalQueue(), loadBranchProductQueue()]);
+        await loadUsers();
       } catch (caughtError) {
         const message =
           caughtError instanceof Error
@@ -509,94 +338,7 @@ export default function AdminUsersPage() {
         }));
       }
     },
-    [getAccessToken, getInlineDraft, loadApprovalQueue, loadBranchProductQueue, loadUsers],
-  );
-
-  const decideRequest = useCallback(
-    async (request: AdminApprovalRequest, decision: "APPROVE" | "REJECT") => {
-      const draft = getApprovalDraft(request.id);
-      setApprovalBusyId(request.id);
-      setApprovalMessage("");
-
-      try {
-        const accessToken = await getAccessToken();
-        const response = await decideAdminApprovalRequest({
-          accessToken,
-          requestId: request.id,
-          decision,
-          decisionNote: draft.decisionNote.trim() || undefined,
-          enableAutoApproveForFuture:
-            decision === "APPROVE" ? draft.enableAutoApproveForFuture : undefined,
-        });
-
-        setApprovalMessage(formatActionMessage(`Request ${decision.toLowerCase()}`, response));
-        await Promise.all([loadUsers(), loadApprovalQueue(), loadBranchProductQueue()]);
-      } catch (caughtError) {
-        setApprovalMessage(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Failed to decide the approval request.",
-        );
-      } finally {
-        setApprovalBusyId("");
-      }
-    },
-    [getAccessToken, getApprovalDraft, loadApprovalQueue, loadBranchProductQueue, loadUsers],
-  );
-
-  const decideBranchProductRequest = useCallback(
-    async (
-      request: AdminBranchProductApprovalRequest,
-      decision: "APPROVE" | "REJECT",
-    ) => {
-      const draft = getBranchProductDraft(request);
-      setBranchProductBusyId(request.id);
-      setBranchProductMessage("");
-
-      try {
-        const accessToken = await getAccessToken();
-        const normalizedRate = draft.commissionRate.trim();
-        const parsedRate = normalizedRate ? Number(normalizedRate) : null;
-
-        if (
-          decision === "APPROVE" &&
-          !normalizedRate &&
-          request.requestedCommissionRate === null
-        ) {
-          throw new Error("Commission rate is required to approve this branch product request.");
-        }
-
-        if (
-          normalizedRate &&
-          (!Number.isFinite(parsedRate) || parsedRate === null || parsedRate < 0 || parsedRate > 100)
-        ) {
-          throw new Error("Commission rate must be a number between 0 and 100.");
-        }
-
-        const response = await decideAdminBranchProductApprovalRequest({
-          accessToken,
-          requestId: request.id,
-          decision,
-          decisionNote: draft.decisionNote.trim() || undefined,
-          commissionRate:
-            typeof parsedRate === "number" && Number.isFinite(parsedRate) ? parsedRate : undefined,
-        });
-
-        setBranchProductMessage(
-          formatActionMessage(`Branch product request ${decision.toLowerCase()}`, response),
-        );
-        await Promise.all([loadUsers(), loadApprovalQueue(), loadBranchProductQueue()]);
-      } catch (caughtError) {
-        setBranchProductMessage(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Failed to decide the branch product request.",
-        );
-      } finally {
-        setBranchProductBusyId("");
-      }
-    },
-    [getAccessToken, getBranchProductDraft, loadApprovalQueue, loadBranchProductQueue, loadUsers],
+    [getAccessToken, getInlineDraft, loadUsers],
   );
 
   const totalStart = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -608,7 +350,7 @@ export default function AdminUsersPage() {
         title="Users"
         description={
           isMainAdmin
-            ? "Main admin opens full user settings and reviews pending approvals."
+            ? "Main admin opens full user settings from the user list."
             : "Admin accounts use inline restriction and ban request flows from the user list."
         }
       />
@@ -1059,319 +801,6 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {isMainAdmin ? (
-        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                Branch Product Requests
-              </h2>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Review manager-submitted branch product selections and assign the commission rate
-                used for approval.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                void loadBranchProductQueue();
-              }}
-              className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-            >
-              Refresh Requests
-            </button>
-          </div>
-
-          {branchProductLoading ? (
-            <div className="space-y-3 px-5 py-5">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-28 animate-pulse rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/60 dark:bg-gray-800/40"
-                />
-              ))}
-            </div>
-          ) : branchProductError ? (
-            <div className="px-5 py-6 text-sm text-red-600 dark:text-red-300">
-              {branchProductError}
-            </div>
-          ) : branchProductRows.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-gray-500 dark:text-gray-400">
-              No pending branch product requests.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {branchProductRows.map((request) => {
-                const draft = getBranchProductDraft(request);
-                const isPending = request.status === "PENDING";
-
-                return (
-                  <div key={request.id} className="px-5 py-4">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                            {request.actionType}
-                          </p>
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${approvalStatusBadge(request.status)}`}
-                          >
-                            {request.status}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                          Branch: {request.branch?.name || request.branch?.code || "-"}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          Requester:{" "}
-                          {request.requestedByUser?.email || request.requestedByUserId || "-"}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          Requested commission:{" "}
-                          {request.requestedCommissionRate !== null
-                            ? `${request.requestedCommissionRate}%`
-                            : "Not provided"}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                          Created {formatDateTime(request.createdAt)}
-                        </p>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {request.requestedProducts.map((product) => (
-                            <div
-                              key={product.id}
-                              className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-300"
-                            >
-                              <p className="font-semibold text-gray-800 dark:text-gray-100">
-                                {product.name || product.sku || product.id}
-                              </p>
-                              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                                Sale range:{" "}
-                                {formatSaleRange(product.saleRangeMin, product.saleRangeMax)}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {isPending ? (
-                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
-                          <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                            Commission Rate
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={draft.commissionRate}
-                            onChange={(event) =>
-                              updateBranchProductDraft(request, {
-                                commissionRate: event.target.value,
-                              })
-                            }
-                            placeholder={
-                              request.requestedCommissionRate !== null
-                                ? `Use requested ${request.requestedCommissionRate}% or override`
-                                : "Required if not provided by manager"
-                            }
-                            className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
-                          />
-
-                          <label className="mt-3 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                            Decision Note
-                          </label>
-                          <textarea
-                            value={draft.decisionNote}
-                            onChange={(event) =>
-                              updateBranchProductDraft(request, {
-                                decisionNote: event.target.value,
-                              })
-                            }
-                            rows={3}
-                            placeholder="Optional note for the decision trail"
-                            className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
-                          />
-
-                          <div className="mt-4 flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void decideBranchProductRequest(request, "APPROVE");
-                              }}
-                              disabled={branchProductBusyId === request.id}
-                              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {branchProductBusyId === request.id ? "Saving..." : "Approve"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void decideBranchProductRequest(request, "REJECT");
-                              }}
-                              disabled={branchProductBusyId === request.id}
-                              className="flex-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {branchProductBusyId === request.id ? "Saving..." : "Reject"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {branchProductMessage ? (
-            <div className="border-t border-gray-200 px-5 py-4 text-sm text-emerald-700 dark:border-gray-700/60 dark:text-emerald-300">
-              {branchProductMessage}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              {isMainAdmin ? "Approval Queue" : "My Submitted Requests"}
-            </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {isMainAdmin
-                ? "Approve or reject non-branch-product requests here. Branch product requests use the dedicated section above."
-                : "Recent approval requests submitted by your admin account."}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              void loadApprovalQueue();
-            }}
-            className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            Refresh Queue
-          </button>
-        </div>
-
-        {approvalLoading ? (
-          <div className="space-y-3 px-5 py-5">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-14 animate-pulse rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/60 dark:bg-gray-800/40"
-              />
-            ))}
-          </div>
-        ) : approvalError ? (
-          <div className="px-5 py-6 text-sm text-red-600 dark:text-red-300">{approvalError}</div>
-        ) : approvalRows.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-gray-500 dark:text-gray-400">
-            No approval requests found.
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {approvalRows.map((request) => {
-              const draft = getApprovalDraft(request.id);
-              const isPending = request.status === "PENDING";
-
-              return (
-                <div key={request.id} className="px-5 py-4">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          {request.actionType}
-                        </p>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${approvalStatusBadge(request.status)}`}
-                        >
-                          {request.status}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        Target: {request.targetUser?.email || request.targetUserId}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Requester: {request.requestedByUser?.email || request.requestedByUserId || "-"}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Reason: {request.requestReason || "-"}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                        Created {formatDateTime(request.createdAt)}
-                      </p>
-                    </div>
-
-                    {isMainAdmin && isPending ? (
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
-                        <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                          Decision Note
-                        </label>
-                        <textarea
-                          value={draft.decisionNote}
-                          onChange={(event) =>
-                            updateApprovalDraft(request.id, {
-                              decisionNote: event.target.value,
-                            })
-                          }
-                          rows={3}
-                          placeholder="Optional note for the decision trail"
-                          className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
-                        />
-                        <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={draft.enableAutoApproveForFuture}
-                            onChange={(event) =>
-                              updateApprovalDraft(request.id, {
-                                enableAutoApproveForFuture: event.target.checked,
-                              })
-                            }
-                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                          />
-                          Enable auto-approve for future requests
-                        </label>
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void decideRequest(request, "APPROVE");
-                            }}
-                            disabled={approvalBusyId === request.id}
-                            className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {approvalBusyId === request.id ? "Saving..." : "Approve"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void decideRequest(request, "REJECT");
-                            }}
-                            disabled={approvalBusyId === request.id}
-                            className="flex-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {approvalBusyId === request.id ? "Saving..." : "Reject"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {approvalMessage ? (
-          <div className="border-t border-gray-200 px-5 py-4 text-sm text-emerald-700 dark:border-gray-700/60 dark:text-emerald-300">
-            {approvalMessage}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }

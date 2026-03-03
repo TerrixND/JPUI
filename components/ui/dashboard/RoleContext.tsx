@@ -14,6 +14,9 @@ interface RoleContextType {
   role: Role;
   userId: string;
   isMainAdmin: boolean;
+  isBranchAdmin: boolean;
+  email: string | null;
+  displayName: string | null;
   dashboardBasePath: string;
   adminCapabilities: AdminCapabilityState;
   isAdminActionBlocked: (action: AdminActionBlock) => boolean;
@@ -29,6 +32,9 @@ export function RoleProvider({
   role,
   userId,
   isMainAdmin,
+  isBranchAdmin,
+  email,
+  displayName,
   adminCapabilities,
   refreshAdminCapabilities,
 }: {
@@ -36,6 +42,9 @@ export function RoleProvider({
   role: Role;
   userId: string;
   isMainAdmin: boolean;
+  isBranchAdmin?: boolean;
+  email?: string | null;
+  displayName?: string | null;
   adminCapabilities?: AdminCapabilityState;
   refreshAdminCapabilities?: () => Promise<void>;
 }) {
@@ -46,6 +55,9 @@ export function RoleProvider({
       role,
       userId,
       isMainAdmin,
+      isBranchAdmin: isBranchAdmin === true,
+      email: email ?? null,
+      displayName: displayName ?? null,
       dashboardBasePath: getDashboardBasePath(role, userId),
       adminCapabilities: normalizedAdminCapabilities,
       isAdminActionBlocked: (action: AdminActionBlock) =>
@@ -55,6 +67,9 @@ export function RoleProvider({
     }),
     [
       isMainAdmin,
+      isBranchAdmin,
+      email,
+      displayName,
       normalizedAdminCapabilities,
       refreshAdminCapabilities,
       role,

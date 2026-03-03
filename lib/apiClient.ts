@@ -407,6 +407,10 @@ export type UserMeResponse = {
   status: string | null;
   isSetup: boolean;
   isMainAdmin: boolean;
+  displayName: string | null;
+  isBranchAdmin: boolean;
+  branchMemberships: AdminUserBranchMembership[];
+  permissions: JsonRecord | null;
   accountAccess: AccountAccessState | null;
   raw: unknown;
 };
@@ -525,12 +529,20 @@ export type AdminApprovalRequestsResponse = AdminPageResponseMeta & {
   raw: unknown;
 };
 
+export type AdminBranchProductRequestControl = {
+  cooldownMinutes: number;
+  retryLimit: number;
+  cooldownResolvedAt: string | null;
+  note: string | null;
+};
+
 export type AdminBranchProductRequestedProduct = {
   id: string;
   sku: string | null;
   name: string | null;
   saleRangeMin: number | null;
   saleRangeMax: number | null;
+  requestControl: AdminBranchProductRequestControl | null;
   raw: JsonRecord;
 };
 
@@ -589,6 +601,20 @@ export type AdminBranchWithManagersRecord = {
 export type AdminBranchesWithManagersResponse = AdminPageResponseMeta & {
   items: AdminBranchWithManagersRecord[];
   raw: unknown;
+};
+
+export type AdminBranchProductRequestControlRecord = {
+  id: string;
+  branchId: string;
+  productId: string;
+  cooldownMinutes: number;
+  retryLimit: number;
+  cooldownResolvedAt: string | null;
+  note: string | null;
+  updatedByUserId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  raw: JsonRecord;
 };
 
 export type AdminBranchNetworkRecord = AdminBranchWithManagersRecord & {
@@ -1782,6 +1808,39 @@ const normalizeAdminUserReference = (value: unknown): AdminInventoryRequestUser 
   };
 };
 
+const normalizeAdminUserBranchMembership = (
+  value: unknown,
+): AdminUserBranchMembership | null => {
+  const membership = asRecord(value);
+  if (!membership) {
+    return null;
+  }
+
+  const membershipId = asString(membership.id);
+  const branchId = asString(membership.branchId);
+  if (!membershipId || !branchId) {
+    return null;
+  }
+
+  const branch = asRecord(membership.branch);
+  return {
+    id: membershipId,
+    branchId,
+    memberRole: asNullableString(membership.memberRole),
+    isPrimary: membership.isPrimary === true,
+    assignedAt: asNullableString(membership.assignedAt),
+    endedAt: asNullableString(membership.endedAt),
+    branch: branch
+      ? {
+          id: asString(branch.id) || branchId,
+          code: asNullableString(branch.code),
+          name: asNullableString(branch.name),
+          status: asNullableString(branch.status),
+        }
+      : null,
+  };
+};
+
 const normalizeAdminUserRow = (value: unknown): AdminUserListItem | null => {
   const row = asRecord(value);
   if (!row) {
@@ -1796,32 +1855,7 @@ const normalizeAdminUserRow = (value: unknown): AdminUserListItem | null => {
   const customerProfile = asRecord(row.customerProfile);
   const branchMemberships = Array.isArray(row.branchMemberships)
     ? row.branchMemberships
-        .map((membership) => asRecord(membership))
-        .map((membership) => {
-          const membershipId = asString(membership?.id);
-          const branchId = asString(membership?.branchId);
-          if (!membershipId || !branchId) {
-            return null;
-          }
-
-          const branch = asRecord(membership?.branch);
-          return {
-            id: membershipId,
-            branchId,
-            memberRole: asNullableString(membership?.memberRole),
-            isPrimary: membership?.isPrimary === true,
-            assignedAt: asNullableString(membership?.assignedAt),
-            endedAt: asNullableString(membership?.endedAt),
-            branch: branch
-              ? {
-                  id: asString(branch.id) || branchId,
-                  code: asNullableString(branch.code),
-                  name: asNullableString(branch.name),
-                  status: asNullableString(branch.status),
-                }
-              : null,
-          } satisfies AdminUserBranchMembership;
-        })
+        .map((membership) => normalizeAdminUserBranchMembership(membership))
         .filter((membership): membership is AdminUserBranchMembership => Boolean(membership))
     : [];
 
@@ -1949,6 +1983,7 @@ const normalizeAdminBranchProductRequestedProduct = (
   }
 
   const saleRange = asRecord(row.saleRange);
+  const requestControl = asRecord(row.requestControl);
 
   return {
     id,
@@ -1956,6 +1991,44 @@ const normalizeAdminBranchProductRequestedProduct = (
     name: asNullableString(row.name),
     saleRangeMin: asFiniteNumber(saleRange?.min),
     saleRangeMax: asFiniteNumber(saleRange?.max),
+    requestControl: requestControl
+      ? {
+          cooldownMinutes: asPositiveInt(requestControl.cooldownMinutes) ?? 60,
+          retryLimit: asPositiveInt(requestControl.retryLimit) ?? 5,
+          cooldownResolvedAt: asNullableString(requestControl.cooldownResolvedAt),
+          note: asNullableString(requestControl.note),
+        }
+      : null,
+    raw: row,
+  };
+};
+
+const normalizeAdminBranchProductRequestControlRecord = (
+  value: unknown,
+): AdminBranchProductRequestControlRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  const branchId = asString(row.branchId);
+  const productId = asString(row.productId);
+  if (!id || !branchId || !productId) {
+    return null;
+  }
+
+  return {
+    id,
+    branchId,
+    productId,
+    cooldownMinutes: asPositiveInt(row.cooldownMinutes) ?? 60,
+    retryLimit: asPositiveInt(row.retryLimit) ?? 5,
+    cooldownResolvedAt: asNullableString(row.cooldownResolvedAt),
+    note: asNullableString(row.note),
+    updatedByUserId: asNullableString(row.updatedByUserId),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
     raw: row,
   };
 };
@@ -3457,6 +3530,14 @@ export const getUserMe = async ({
     });
 
     const root = asRecord(payload) ?? {};
+    const branchMemberships = Array.isArray(root.branchMemberships)
+      ? root.branchMemberships
+          .map((entry) => normalizeAdminUserBranchMembership(entry))
+          .filter((entry): entry is AdminUserBranchMembership => Boolean(entry))
+      : [];
+    const permissions = asRecord(root.permissions);
+    const permissionProfile = asRecord(permissions?.profile);
+    const managerType = asString(permissionProfile?.managerType).toUpperCase();
 
     return {
       id: asNullableString(root.id),
@@ -3466,6 +3547,13 @@ export const getUserMe = async ({
       status: asNullableString(root.status),
       isSetup: root.isSetup === true,
       isMainAdmin: root.isMainAdmin === true,
+      displayName: asNullableString(root.displayName),
+      isBranchAdmin:
+        managerType === "BRANCH_ADMIN" ||
+        (asString(root.role).toUpperCase() === "MANAGER" &&
+          branchMemberships.some((membership) => membership.isPrimary)),
+      branchMemberships,
+      permissions,
       accountAccess:
         normalizeAccountAccess(root.accountAccess) ??
         normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
@@ -3977,6 +4065,57 @@ export const getAdminBranchProductApprovalRequests = async ({
     items: rows,
     ...pagination,
     raw: payload,
+  };
+};
+
+export const updateAdminBranchProductRequestControl = async ({
+  accessToken,
+  branchId,
+  productId,
+  cooldownMinutes,
+  retryLimit,
+  resolveCooldown,
+  note,
+}: {
+  accessToken: string;
+  branchId: string;
+  productId: string;
+  cooldownMinutes?: number | null;
+  retryLimit?: number | null;
+  resolveCooldown?: boolean;
+  note?: string | null;
+}): Promise<{
+  message: string | null;
+  code: string | null;
+  record: AdminBranchProductRequestControlRecord | null;
+  raw: unknown;
+}> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/branch-products/request-controls`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      branchId: branchId.trim(),
+      productId: productId.trim(),
+      ...(cooldownMinutes !== undefined ? { cooldownMinutes } : {}),
+      ...(retryLimit !== undefined ? { retryLimit } : {}),
+      ...(typeof resolveCooldown === "boolean" ? { resolveCooldown } : {}),
+      ...(note !== undefined ? { note } : {}),
+    }),
+    fallbackErrorMessage: "Failed to update branch product request controls.",
+  });
+
+  const root = asRecord(response.payload) ?? {};
+  return {
+    message: asNullableString(root.message),
+    code: asNullableString(root.code),
+    record:
+      normalizeAdminBranchProductRequestControlRecord(root.record) ||
+      normalizeAdminBranchProductRequestControlRecord(response.payload),
+    raw: response.payload,
   };
 };
 
