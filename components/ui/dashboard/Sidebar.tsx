@@ -8,6 +8,7 @@ import {
   getAdminApprovalRequests,
   getAdminBranchProductApprovalRequests,
 } from "@/lib/apiClient";
+import { getManagerBranchApprovalRequests } from "@/lib/managerApi";
 import { useRole, type Role } from "./RoleContext";
 
 interface NavItem {
@@ -35,6 +36,7 @@ const managerNav: NavItem[] = [
   { label: "Appointments", pathSuffix: "appointments", icon: "calendar" },
   { label: "Appointment History", pathSuffix: "appointment-history", icon: "history" },
   { label: "Users", pathSuffix: "users", icon: "users" },
+  { label: "Requests", pathSuffix: "requests", icon: "inbox", showRequestDot: true },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Commissions", pathSuffix: "commissions", icon: "dollar" },
   { label: "Products", pathSuffix: "products", icon: "box" },
@@ -243,7 +245,7 @@ export default function Sidebar({
   const normalizedPathname = normalizePath(pathname);
 
   const loadPendingRequests = useCallback(async () => {
-    if (role !== "admin") {
+    if (role !== "admin" && role !== "manager") {
       setHasPendingRequests(false);
       return;
     }
@@ -258,24 +260,34 @@ export default function Sidebar({
         return;
       }
 
-      const [approvalRequests, branchProductRequests] = await Promise.all([
-        getAdminApprovalRequests({
-          accessToken,
-          status: "PENDING",
-          limit: 1,
-        }),
-        isMainAdmin
-          ? getAdminBranchProductApprovalRequests({
-              accessToken,
-              status: "PENDING",
-              limit: 1,
-            })
-          : Promise.resolve(null),
-      ]);
+      if (role === "admin") {
+        const [approvalRequests, branchProductRequests] = await Promise.all([
+          getAdminApprovalRequests({
+            accessToken,
+            status: "PENDING",
+            limit: 1,
+          }),
+          isMainAdmin
+            ? getAdminBranchProductApprovalRequests({
+                accessToken,
+                status: "PENDING",
+                limit: 1,
+              })
+            : Promise.resolve(null),
+        ]);
 
-      const pendingCount =
-        approvalRequests.total + (branchProductRequests?.total ?? 0);
-      setHasPendingRequests(pendingCount > 0);
+        const pendingCount =
+          approvalRequests.total + (branchProductRequests?.total ?? 0);
+        setHasPendingRequests(pendingCount > 0);
+        return;
+      }
+
+      const response = await getManagerBranchApprovalRequests({
+        accessToken,
+        status: "PENDING",
+        limit: 1,
+      });
+      setHasPendingRequests(response.count > 0);
     } catch {
       setHasPendingRequests(false);
     }

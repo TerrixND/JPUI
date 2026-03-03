@@ -1530,6 +1530,190 @@ const normalizeManagerActionResponse = (
   };
 };
 
+export type ManagerBranchApprovalRequestUser = {
+  id: string;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  raw: JsonRecord;
+};
+
+export type ManagerBranchApprovalRequestRecord = {
+  id: string;
+  actionType: string | null;
+  status: string | null;
+  targetUserId: string;
+  requestedByUserId: string | null;
+  reviewedByUserId: string | null;
+  requestReason: string | null;
+  decisionNote: string | null;
+  requestPayload: JsonRecord | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  decidedAt: string | null;
+  targetUser: ManagerBranchApprovalRequestUser | null;
+  requestedByUser: ManagerBranchApprovalRequestUser | null;
+  reviewedByUser: ManagerBranchApprovalRequestUser | null;
+  raw: JsonRecord;
+};
+
+export type ManagerBranchApprovalViewerScope =
+  | "BRANCH_ADMIN"
+  | "MANAGED_BRANCHES"
+  | "SELF";
+
+export type ManagerBranchApprovalRequestsResponse = {
+  branchId: string | null;
+  count: number;
+  viewerScope: ManagerBranchApprovalViewerScope | null;
+  canDecide: boolean;
+  canViewAllManagedBranchRequests: boolean;
+  records: ManagerBranchApprovalRequestRecord[];
+  raw: unknown;
+};
+
+const normalizeManagerBranchApprovalRequestUser = (
+  value: unknown,
+): ManagerBranchApprovalRequestUser | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+    status: asNullableString(row.status),
+    raw: row,
+  };
+};
+
+const normalizeManagerBranchApprovalRequest = (
+  value: unknown,
+): ManagerBranchApprovalRequestRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  const targetUserId = asString(row.targetUserId);
+  if (!id || !targetUserId) {
+    return null;
+  }
+
+  return {
+    id,
+    actionType: asNullableString(row.actionType),
+    status: asNullableString(row.status),
+    targetUserId,
+    requestedByUserId: asNullableString(row.requestedByUserId),
+    reviewedByUserId: asNullableString(row.reviewedByUserId),
+    requestReason: asNullableString(row.requestReason),
+    decisionNote: asNullableString(row.decisionNote),
+    requestPayload: asRecord(row.requestPayload),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    decidedAt: asNullableString(row.decidedAt),
+    targetUser: normalizeManagerBranchApprovalRequestUser(row.targetUser),
+    requestedByUser: normalizeManagerBranchApprovalRequestUser(row.requestedByUser),
+    reviewedByUser: normalizeManagerBranchApprovalRequestUser(row.reviewedByUser),
+    raw: row,
+  };
+};
+
+export const getManagerBranchApprovalRequests = async ({
+  accessToken,
+  branchId,
+  status,
+  limit,
+}: {
+  accessToken: string;
+  branchId?: string;
+  status?: string;
+  limit?: number;
+}): Promise<ManagerBranchApprovalRequestsResponse> => {
+  const query = new URLSearchParams();
+  if (branchId) {
+    query.set("branchId", branchId.trim());
+  }
+  if (status) {
+    query.set("status", asString(status).toUpperCase());
+  }
+  if (limit && limit > 0) {
+    query.set("limit", String(limit));
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/approval-requests${query.toString() ? `?${query.toString()}` : ""}`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load manager approval requests.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const viewerScope = asString(root.viewerScope).toUpperCase();
+  const records = extractRows(payload)
+    .map((entry) => normalizeManagerBranchApprovalRequest(entry))
+    .filter((entry): entry is ManagerBranchApprovalRequestRecord => Boolean(entry));
+
+  return {
+    branchId: asNullableString(root.branchId),
+    count: asPositiveInt(root.count) ?? records.length,
+    viewerScope:
+      viewerScope === "BRANCH_ADMIN" ||
+      viewerScope === "MANAGED_BRANCHES" ||
+      viewerScope === "SELF"
+        ? viewerScope
+        : null,
+    canDecide: asBoolean(root.canDecide),
+    canViewAllManagedBranchRequests: asBoolean(root.canViewAllManagedBranchRequests),
+    records,
+    raw: payload,
+  };
+};
+
+export const decideManagerBranchApprovalRequest = async ({
+  accessToken,
+  requestId,
+  decision,
+  decisionNote,
+  doNotAskAgainForAction,
+}: {
+  accessToken: string;
+  requestId: string;
+  decision: "APPROVE" | "REJECT";
+  decisionNote?: string;
+  doNotAskAgainForAction?: boolean;
+}): Promise<ManagerActionResponse> => {
+  const body: Record<string, unknown> = {
+    decision,
+  };
+
+  if (decisionNote !== undefined) {
+    body.note = decisionNote;
+  }
+  if (doNotAskAgainForAction !== undefined) {
+    body.doNotAskAgainForAction = doNotAskAgainForAction;
+  }
+
+  const payload = await fetchManagerJson({
+    accessToken,
+    path: `/approval-requests/${encodeURIComponent(requestId)}/decision`,
+    method: "PATCH",
+    body,
+    fallbackErrorMessage: "Failed to decide manager approval request.",
+  });
+
+  return normalizeManagerActionResponse(200, payload);
+};
+
 export const approveManagerAppointment = async ({
   accessToken,
   appointmentId,
