@@ -20,7 +20,11 @@ import {
   accountStatusBadge,
   formatDateTime,
   getPrimaryBranchName,
+  getUserRoleContextLabel,
+  getUserRoleLabel,
   getUserDisplayName,
+  hasEditablePermissionControls,
+  permissionEditabilityBadge,
   roleBadge,
 } from "@/lib/adminUiHelpers";
 import supabase from "@/lib/supabase";
@@ -511,6 +515,10 @@ export default function AdminUsersPage() {
               const draft = getInlineDraft(row.id);
               const isProtectedTarget = row.isMainAdmin && !isMainAdmin;
               const inlineMessage = inlineMessages[row.id];
+              const permissionBadge = permissionEditabilityBadge(row.role, row.isMainAdmin);
+              const canEditPermissions = hasEditablePermissionControls(row.role, row.isMainAdmin);
+              const roleLabel = getUserRoleLabel(row);
+              const roleContext = getUserRoleContextLabel(row);
 
               return (
                 <div key={row.id} className="px-5 py-4">
@@ -523,19 +531,34 @@ export default function AdminUsersPage() {
                         <span
                           className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${roleBadge(row.role, row.isMainAdmin)}`}
                         >
-                          {row.isMainAdmin ? "MAIN ADMIN" : row.role || "-"}
+                          {roleLabel}
                         </span>
+                        {roleContext ? (
+                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {roleContext}
+                          </span>
+                        ) : null}
                         <span
                           className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${accountStatusBadge(row.status)}`}
                         >
                           {row.status || "-"}
                         </span>
+                        {isMainAdmin ? (
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${permissionBadge.className}`}
+                          >
+                            {permissionBadge.label}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
                         {row.email || row.id}
                       </p>
                       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                        Branch: {getPrimaryBranchName(row)} • Updated {formatDateTime(row.updatedAt)}
+                        {roleContext ? `Managed Branch: ${roleContext}` : `Branch: ${getPrimaryBranchName(row)}`} • Updated {formatDateTime(row.updatedAt)}
+                        {isMainAdmin
+                          ? ` • ${canEditPermissions ? "Open user settings to edit role permissions." : "Role permission editor not available for this account."}`
+                          : ""}
                       </p>
                     </div>
 

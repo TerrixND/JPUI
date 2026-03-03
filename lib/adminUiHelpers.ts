@@ -4,6 +4,7 @@ import type {
   AdminBranchWithManagersRecord,
   AdminUserDetail,
   AdminUserListItem,
+  StaffRuleManagerType,
 } from "./apiClient";
 
 const asRecord = (value: unknown) =>
@@ -12,6 +13,48 @@ const asRecord = (value: unknown) =>
     : null;
 
 const asString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const readManagerType = (
+  input:
+    | null
+    | Pick<AdminUserListItem, "role" | "raw">
+    | Pick<AdminUserDetail, "role" | "managerProfile" | "raw">,
+): StaffRuleManagerType | null => {
+  if (!input) {
+    return null;
+  }
+
+  if (String(input.role || "").trim().toUpperCase() !== "MANAGER") {
+    return null;
+  }
+
+  const rootSources = [
+    "managerProfile" in input ? asRecord(input.managerProfile) : null,
+    asRecord(input.raw),
+    asRecord(asRecord(input.raw)?.permissions),
+    asRecord(asRecord(asRecord(input.raw)?.permissions)?.profile),
+    asRecord(asRecord(asRecord(input.raw)?.permissions)?.configuredPermissions),
+  ];
+
+  const nestedSources = rootSources.flatMap((source) => [
+    source,
+    asRecord(source?.manager),
+    asRecord(source?.permissions),
+  ]);
+
+  for (const source of nestedSources) {
+    const managerType = String(source?.managerType || "").trim().toUpperCase();
+    if (
+      managerType === "STANDALONE" ||
+      managerType === "BRANCH_MANAGER" ||
+      managerType === "BRANCH_ADMIN"
+    ) {
+      return managerType as StaffRuleManagerType;
+    }
+  }
+
+  return null;
+};
 
 export const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
@@ -110,6 +153,71 @@ export const getPrimaryBranchName = (
   return first?.branch?.name || "-";
 };
 
+export const getUserRoleLabel = (
+  user:
+    | null
+    | Pick<AdminUserListItem, "role" | "isMainAdmin" | "raw" | "branchMemberships">
+    | Pick<AdminUserDetail, "role" | "isMainAdmin" | "managerProfile" | "raw" | "branchMemberships">,
+) => {
+  if (!user) {
+    return "-";
+  }
+
+  if (user.isMainAdmin) {
+    return "Main Admin";
+  }
+
+  const normalizedRole = String(user.role || "").trim().toUpperCase();
+  if (normalizedRole === "MANAGER") {
+    const managerType = readManagerType(user);
+    if (managerType === "BRANCH_ADMIN") {
+      return "Branch Admin";
+    }
+    if (managerType === "BRANCH_MANAGER") {
+      return "Branch Manager";
+    }
+    if (managerType === "STANDALONE") {
+      return "Standalone Manager";
+    }
+    return "Manager";
+  }
+
+  if (normalizedRole === "ADMIN") {
+    return "Admin";
+  }
+  if (normalizedRole === "SALES") {
+    return "Sales";
+  }
+  if (normalizedRole === "CUSTOMER") {
+    return "Customer";
+  }
+
+  return normalizedRole || "-";
+};
+
+export const getUserRoleContextLabel = (
+  user:
+    | null
+    | Pick<AdminUserListItem, "role" | "isMainAdmin" | "raw" | "branchMemberships">
+    | Pick<AdminUserDetail, "role" | "isMainAdmin" | "managerProfile" | "raw" | "branchMemberships">,
+) => {
+  if (!user) {
+    return "";
+  }
+
+  if (user.isMainAdmin) {
+    return "";
+  }
+
+  const managerType = readManagerType(user);
+  if (managerType === "BRANCH_ADMIN" || managerType === "BRANCH_MANAGER") {
+    const branchName = getPrimaryBranchName(user);
+    return branchName !== "-" ? branchName : "";
+  }
+
+  return "";
+};
+
 export const getPrimaryManagerLabel = (branch: AdminBranchWithManagersRecord) => {
   const manager =
     branch.primaryManager ||
@@ -162,6 +270,45 @@ export const roleBadge = (role: string | null | undefined, isMainAdmin?: boolean
     return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
   }
   return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300";
+};
+
+export const hasEditablePermissionControls = (
+  role: string | null | undefined,
+  isMainAdmin?: boolean,
+) => {
+  if (isMainAdmin) {
+    return false;
+  }
+
+  const normalized = String(role || "").trim().toUpperCase();
+  return normalized === "ADMIN" || normalized === "MANAGER" || normalized === "SALES";
+};
+
+export const permissionEditabilityBadge = (
+  role: string | null | undefined,
+  isMainAdmin?: boolean,
+) => {
+  if (isMainAdmin) {
+    return {
+      label: "Protected Permissions",
+      className:
+        "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200 dark:bg-fuchsia-900/20 dark:text-fuchsia-300 dark:ring-fuchsia-700/50",
+    };
+  }
+
+  if (hasEditablePermissionControls(role, false)) {
+    return {
+      label: "Editable Permissions",
+      className:
+        "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-700/50",
+    };
+  }
+
+  return {
+    label: "No Permission Editor",
+    className:
+      "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700/60",
+  };
 };
 
 export const approvalStatusBadge = (status: string | null | undefined) => {

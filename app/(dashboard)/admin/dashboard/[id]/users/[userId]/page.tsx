@@ -17,14 +17,19 @@ import {
   updateAdminUserStatus,
   type AdminActionBlock,
   type AdminUserDetail,
+  type StaffRuleManagerCapabilities,
+  type StaffRuleManagerType,
   type StaffRuleVisibilityRole,
 } from "@/lib/apiClient";
 import {
   ACCOUNT_STATUS_OPTIONS,
   ADMIN_CAPABILITY_DEFINITIONS,
   ADMIN_VISIBILITY_ROLE_OPTIONS,
+  MANAGER_CAPABILITY_DEFINITIONS,
+  MANAGER_TYPE_OPTIONS,
   PRODUCT_ACTION_TYPE_OPTIONS,
   type AdminCapabilityKey,
+  type ManagerCapabilityKey,
 } from "@/lib/adminUiConfig";
 import {
   accountStatusBadge,
@@ -35,13 +40,21 @@ import {
   getUserEmail,
   getUserLineId,
   getUserPhone,
+  getUserRoleContextLabel,
+  getUserRoleLabel,
+  permissionEditabilityBadge,
   roleBadge,
 } from "@/lib/adminUiHelpers";
 
 type PermissionDraft = {
   visibilityRole: StaffRuleVisibilityRole;
-  capabilities: Record<AdminCapabilityKey, boolean>;
-  autoApprove: Partial<Record<AdminCapabilityKey, boolean>>;
+  adminCapabilities: Record<AdminCapabilityKey, boolean>;
+  adminAutoApprove: Partial<Record<AdminCapabilityKey, boolean>>;
+  managerType: StaffRuleManagerType;
+  managerCapabilities: StaffRuleManagerCapabilities;
+  salesCommissionRate: string;
+  salesCommissionPriority: string;
+  salesCommissionNote: string;
 };
 
 type ActionType = (typeof PRODUCT_ACTION_TYPE_OPTIONS)[number];
@@ -76,26 +89,102 @@ const DURATION_PRESET_HOURS: Record<string, number> = {
   "24h": 24,
 };
 
-const emptyCapabilities = () =>
+const ADMIN_APPROVAL_POLICY_BY_CAPABILITY: Partial<
+  Record<AdminCapabilityKey, string>
+> = {
+  canCreateProducts: "PRODUCT_CREATE",
+  canEditProducts: "PRODUCT_EDIT",
+  canManageProductVisibility: "PRODUCT_VISIBILITY",
+  canManageStaffRules: "STAFF_RULE_MANAGE",
+  canRestrictUsers: "USER_RESTRICT",
+  canBanUsers: "USER_BAN",
+  canDeleteLogs: "LOG_DELETE",
+};
+
+const emptyAdminCapabilities = () =>
   Object.fromEntries(
     ADMIN_CAPABILITY_DEFINITIONS.map((item) => [item.key, false]),
   ) as Record<AdminCapabilityKey, boolean>;
+
+const emptyManagerCapabilities = (): StaffRuleManagerCapabilities =>
+  Object.fromEntries(
+    MANAGER_CAPABILITY_DEFINITIONS.map((item) => [item.key, false]),
+  ) as StaffRuleManagerCapabilities;
 
 const asRecord = (value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 
+const readVisibilityRole = (
+  candidates: Array<Record<string, unknown> | null>,
+  fallback: StaffRuleVisibilityRole,
+) => {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const normalized = String(candidate.visibilityRole || "").trim().toUpperCase();
+    if (normalized === "ADMIN" || normalized === "MANAGER" || normalized === "SALES") {
+      return normalized as StaffRuleVisibilityRole;
+    }
+  }
+
+  return fallback;
+};
+
+const normalizeManagerCapabilities = (
+  managerType: StaffRuleManagerType,
+  capabilities: StaffRuleManagerCapabilities,
+) => {
+  const next: StaffRuleManagerCapabilities = { ...capabilities };
+
+  next.canRequestManagerRestrictions = next.canRequestManagerRestrictions === true;
+  next.canRequestManagerBans =
+    next.canRequestManagerRestrictions === true && next.canRequestManagerBans === true;
+
+  if (managerType !== "BRANCH_ADMIN") {
+    next.canRestrictSubordinates = false;
+    next.canBanSubordinates = false;
+    next.canLimitSubordinatePermissions = false;
+  } else {
+    next.canCreateStaffRules = true;
+    next.canApproveRequests = true;
+    next.canRequestProductsFromAdmin = true;
+    next.canRestrictSubordinates = next.canRestrictSubordinates !== false;
+    next.canBanSubordinates =
+      next.canRestrictSubordinates === true && next.canBanSubordinates !== false;
+    next.canLimitSubordinatePermissions =
+      next.canCreateStaffRules === true && next.canLimitSubordinatePermissions !== false;
+  }
+
+  if (next.canRestrictSubordinates !== true) {
+    next.canBanSubordinates = false;
+  }
+  if (next.canCreateStaffRules !== true) {
+    next.canLimitSubordinatePermissions = false;
+  }
+
+  return next;
+};
+
 const readPermissionDraft = (detail: AdminUserDetail | null): PermissionDraft => {
+  const role = String(detail?.role || "").trim().toUpperCase();
+  const defaultVisibilityRole: StaffRuleVisibilityRole =
+    role === "ADMIN" ? "ADMIN" : role === "MANAGER" ? "MANAGER" : "SALES";
   const base: PermissionDraft = {
-    visibilityRole:
-      detail?.role === "ADMIN"
-        ? "ADMIN"
-        : detail?.role === "MANAGER"
-          ? "MANAGER"
-          : "SALES",
-    capabilities: emptyCapabilities(),
-    autoApprove: {},
+    visibilityRole: defaultVisibilityRole,
+    adminCapabilities: emptyAdminCapabilities(),
+    adminAutoApprove: {},
+    managerType: "BRANCH_MANAGER",
+    managerCapabilities: normalizeManagerCapabilities(
+      "BRANCH_MANAGER",
+      emptyManagerCapabilities(),
+    ),
+    salesCommissionRate: "",
+    salesCommissionPriority: "",
+    salesCommissionNote: "",
   };
 
   if (!detail) {
@@ -105,93 +194,132 @@ const readPermissionDraft = (detail: AdminUserDetail | null): PermissionDraft =>
   if (detail.isMainAdmin) {
     return {
       visibilityRole: "ADMIN",
-      capabilities: Object.fromEntries(
+      adminCapabilities: Object.fromEntries(
         ADMIN_CAPABILITY_DEFINITIONS.map((item) => [item.key, true]),
       ) as Record<AdminCapabilityKey, boolean>,
-      autoApprove: Object.fromEntries(
+      adminAutoApprove: Object.fromEntries(
         ADMIN_CAPABILITY_DEFINITIONS
           .filter((item) => item.approval !== "Main admin approval")
           .map((item) => [item.key, true]),
       ) as Partial<Record<AdminCapabilityKey, boolean>>,
+      managerType: "BRANCH_ADMIN",
+      managerCapabilities: normalizeManagerCapabilities(
+        "BRANCH_ADMIN",
+        Object.fromEntries(
+          MANAGER_CAPABILITY_DEFINITIONS.map((item) => [item.key, true]),
+        ) as StaffRuleManagerCapabilities,
+      ),
+      salesCommissionRate: "",
+      salesCommissionPriority: "100",
+      salesCommissionNote: "",
     };
   }
 
-  const candidates = [
-    detail.raw,
-    asRecord(detail.raw)?.permissions,
-    asRecord(detail.raw)?.permission,
-    detail.adminProfile,
-    asRecord(detail.adminProfile)?.permissions,
-    asRecord(detail.managerProfile)?.permissions,
-    asRecord(detail.salespersonProfile)?.permissions,
+  const rawPermissions = asRecord(asRecord(detail.raw)?.permissions);
+  const configuredPermissions = asRecord(rawPermissions?.configuredPermissions);
+  const profilePermissions = asRecord(rawPermissions?.profile);
+  const roleScopedCandidates: Array<Record<string, unknown> | null> = [
+    configuredPermissions,
+    profilePermissions,
+    asRecord(configuredPermissions?.admin),
+    asRecord(configuredPermissions?.manager),
+    asRecord(configuredPermissions?.sales),
+    asRecord(profilePermissions?.admin),
+    asRecord(profilePermissions?.manager),
+    asRecord(profilePermissions?.sales),
+    asRecord(detail.adminProfile),
+    asRecord(detail.managerProfile),
+    asRecord(detail.salespersonProfile),
+    asRecord(asRecord(detail.adminProfile)?.permissions),
+    asRecord(asRecord(detail.managerProfile)?.permissions),
+    asRecord(asRecord(detail.salespersonProfile)?.permissions),
   ];
 
-  let visibilityRole = base.visibilityRole;
+  base.visibilityRole = readVisibilityRole(roleScopedCandidates, base.visibilityRole);
 
-  for (const candidate of candidates) {
-    const record = asRecord(candidate);
-    if (!record) {
-      continue;
-    }
-
-    const visibilitySources = [
-      record.visibilityRole,
-      asRecord(record.admin)?.visibilityRole,
-      asRecord(record.manager)?.visibilityRole,
-    ];
-
-    for (const visibilityValue of visibilitySources) {
-      const normalized = String(visibilityValue || "").trim().toUpperCase();
-      if (normalized === "ADMIN" || normalized === "MANAGER" || normalized === "SALES") {
-        visibilityRole = normalized as StaffRuleVisibilityRole;
-        break;
-      }
-    }
-
-    const capabilitySources = [
-      record.capabilities,
-      asRecord(record.admin)?.capabilities,
-      asRecord(record.manager)?.capabilities,
-    ];
-
-    for (const source of capabilitySources) {
-      const capabilityRecord = asRecord(source);
+  if (role === "ADMIN") {
+    for (const candidate of roleScopedCandidates) {
+      const capabilityRecord = asRecord(candidate?.capabilities);
       if (!capabilityRecord) {
         continue;
       }
 
       for (const item of ADMIN_CAPABILITY_DEFINITIONS) {
         if (typeof capabilityRecord[item.key] === "boolean") {
-          base.capabilities[item.key] = capabilityRecord[item.key] as boolean;
+          base.adminCapabilities[item.key] = capabilityRecord[item.key] as boolean;
         }
       }
     }
 
-    const autoApproveSources = [
-      record.autoApprove,
-      record.autoApproval,
-      asRecord(record.approvals)?.autoApprove,
-    ];
-
-    for (const source of autoApproveSources) {
-      const autoRecord = asRecord(source);
-      if (!autoRecord) {
+    for (const candidate of roleScopedCandidates) {
+      const approvalPolicyRecord = asRecord(candidate?.approvalPolicy) ?? asRecord(candidate?.approvals);
+      if (!approvalPolicyRecord) {
         continue;
       }
 
       for (const item of ADMIN_CAPABILITY_DEFINITIONS) {
-        if (typeof autoRecord[item.key] === "boolean") {
-          base.autoApprove[item.key] = autoRecord[item.key] as boolean;
+        const policyKey = ADMIN_APPROVAL_POLICY_BY_CAPABILITY[item.key];
+        if (!policyKey) {
+          continue;
         }
+
+        const policyItem = asRecord(approvalPolicyRecord[policyKey]);
+        if (typeof policyItem?.autoApprove === "boolean") {
+          base.adminAutoApprove[item.key] = policyItem.autoApprove as boolean;
+        }
+      }
+    }
+  } else if (role === "MANAGER") {
+    for (const candidate of roleScopedCandidates) {
+      const normalizedManagerType = String(candidate?.managerType || "").trim().toUpperCase();
+      if (
+        normalizedManagerType === "STANDALONE" ||
+        normalizedManagerType === "BRANCH_MANAGER" ||
+        normalizedManagerType === "BRANCH_ADMIN"
+      ) {
+        base.managerType = normalizedManagerType as StaffRuleManagerType;
+        break;
+      }
+    }
+
+    for (const candidate of roleScopedCandidates) {
+      const capabilityRecord = asRecord(candidate?.capabilities);
+      if (!capabilityRecord) {
+        continue;
+      }
+
+      for (const item of MANAGER_CAPABILITY_DEFINITIONS) {
+        if (typeof capabilityRecord[item.key] === "boolean") {
+          base.managerCapabilities[item.key] = capabilityRecord[item.key] as boolean;
+        }
+      }
+    }
+
+    base.managerCapabilities = normalizeManagerCapabilities(
+      base.managerType,
+      base.managerCapabilities,
+    );
+  } else if (role === "SALES") {
+    for (const candidate of roleScopedCandidates) {
+      const commissionRecord = asRecord(candidate?.commission);
+      const rateValue = commissionRecord?.rate ?? candidate?.commissionRate ?? candidate?.rate;
+      const priorityValue =
+        commissionRecord?.priority ?? candidate?.commissionPriority ?? candidate?.priority;
+      const noteValue = commissionRecord?.note ?? candidate?.commissionNote ?? candidate?.note;
+
+      if (rateValue !== undefined && rateValue !== null && rateValue !== "") {
+        base.salesCommissionRate = String(rateValue);
+      }
+      if (priorityValue !== undefined && priorityValue !== null && priorityValue !== "") {
+        base.salesCommissionPriority = String(priorityValue);
+      }
+      if (typeof noteValue === "string" && noteValue.trim()) {
+        base.salesCommissionNote = noteValue.trim();
       }
     }
   }
 
-  return {
-    visibilityRole,
-    capabilities: base.capabilities,
-    autoApprove: base.autoApprove,
-  };
+  return base;
 };
 
 function SectionCard({
@@ -321,12 +449,22 @@ export default function AdminUserDetailPage() {
     () => (detail ? getPrimaryBranchName(detail) : "-"),
     [detail],
   );
-  const canEditPermissions = detail?.role === "ADMIN" || detail?.isMainAdmin;
+  const roleLabel = useMemo(() => getUserRoleLabel(detail), [detail]);
+  const roleContext = useMemo(() => getUserRoleContextLabel(detail), [detail]);
+  const permissionRole = String(detail?.role || "").trim().toUpperCase();
+  const permissionBadge = useMemo(
+    () => permissionEditabilityBadge(detail?.role, detail?.isMainAdmin),
+    [detail],
+  );
+  const canEditPermissions =
+    Boolean(detail) &&
+    detail?.isMainAdmin !== true &&
+    (permissionRole === "ADMIN" || permissionRole === "MANAGER" || permissionRole === "SALES");
 
-  const onToggleCapability = (key: AdminCapabilityKey, checked: boolean) => {
+  const onToggleAdminCapability = (key: AdminCapabilityKey, checked: boolean) => {
     setPermissionDraft((current) => {
       const nextCapabilities = {
-        ...current.capabilities,
+        ...current.adminCapabilities,
         [key]: checked,
       };
 
@@ -334,15 +472,36 @@ export default function AdminUserDetailPage() {
         nextCapabilities.canEditProducts = true;
       }
 
-      if (key === "canEditProducts" && !checked && current.capabilities.canCreateProducts) {
+      if (key === "canEditProducts" && !checked && current.adminCapabilities.canCreateProducts) {
         nextCapabilities.canCreateProducts = false;
       }
 
       return {
         ...current,
-        capabilities: nextCapabilities,
+        adminCapabilities: nextCapabilities,
       };
     });
+  };
+
+  const onChangeManagerType = (managerType: StaffRuleManagerType) => {
+    setPermissionDraft((current) => ({
+      ...current,
+      managerType,
+      managerCapabilities: normalizeManagerCapabilities(
+        managerType,
+        current.managerCapabilities,
+      ),
+    }));
+  };
+
+  const onToggleManagerCapability = (key: ManagerCapabilityKey, checked: boolean) => {
+    setPermissionDraft((current) => ({
+      ...current,
+      managerCapabilities: normalizeManagerCapabilities(current.managerType, {
+        ...current.managerCapabilities,
+        [key]: checked,
+      }),
+    }));
   };
 
   const toggleActionBlock = (block: AdminActionBlock) => {
@@ -393,14 +552,60 @@ export default function AdminUserDetailPage() {
 
     try {
       const accessToken = await getAccessToken();
+      let permissionsPayload: Record<string, unknown>;
+
+      if (permissionRole === "ADMIN") {
+        const approvalPolicy = Object.fromEntries(
+          Object.entries(ADMIN_APPROVAL_POLICY_BY_CAPABILITY).map(
+            ([capabilityKey, actionKey]) => [
+              actionKey,
+              {
+                requiresMainAdminApproval: true,
+                autoApprove:
+                  permissionDraft.adminAutoApprove[capabilityKey as AdminCapabilityKey] === true,
+              },
+            ],
+          ),
+        );
+
+        permissionsPayload = {
+          role: "ADMIN",
+          visibilityRole: permissionDraft.visibilityRole,
+          capabilities: permissionDraft.adminCapabilities,
+          approvalPolicy,
+        };
+      } else if (permissionRole === "MANAGER") {
+        permissionsPayload = {
+          role: "MANAGER",
+          managerType: permissionDraft.managerType,
+          visibilityRole: permissionDraft.visibilityRole,
+          capabilities: permissionDraft.managerCapabilities,
+        };
+      } else if (permissionRole === "SALES") {
+        const rate = permissionDraft.salesCommissionRate.trim();
+        const priority = permissionDraft.salesCommissionPriority.trim();
+        const note = permissionDraft.salesCommissionNote.trim();
+
+        permissionsPayload = {
+          role: "SALES",
+          ...(rate
+            ? {
+                commission: {
+                  rate: Number(rate),
+                  ...(priority ? { priority: Number(priority) } : {}),
+                  ...(note ? { note } : {}),
+                },
+              }
+            : {}),
+        };
+      } else {
+        throw new Error("This role does not have editable permissions in this screen.");
+      }
+
       const response = await updateAdminUserPermissions({
         accessToken,
         userId: detail.id,
-        permissions: {
-          visibilityRole: permissionDraft.visibilityRole,
-          capabilities: permissionDraft.capabilities,
-          autoApprove: permissionDraft.autoApprove,
-        },
+        permissions: permissionsPayload,
       });
 
       setUiMessage(formatActionMessage("Permissions update", response));
@@ -610,7 +815,7 @@ export default function AdminUserDetailPage() {
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadge(detail.role, detail.isMainAdmin)}`}
               >
-                {detail.isMainAdmin ? "MAIN ADMIN" : detail.role || "-"}
+                {roleLabel}
               </span>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${accountStatusBadge(detail.status)}`}
@@ -620,6 +825,11 @@ export default function AdminUserDetailPage() {
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                 {primaryBranch}
               </span>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${permissionBadge.className}`}
+              >
+                {permissionBadge.label}
+              </span>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -628,7 +838,9 @@ export default function AdminUserDetailPage() {
               <InfoField label="Phone" value={getUserPhone(detail)} />
               <InfoField label="Line ID" value={getUserLineId(detail)} />
               <InfoField label="User ID" value={detail.id} mono />
-              <InfoField label="Role" value={detail.isMainAdmin ? "MAIN ADMIN" : detail.role || "-"} />
+              <InfoField label="Role" value={roleLabel} />
+              <InfoField label="Branch Scope" value={roleContext || primaryBranch} />
+              <InfoField label="Permission Access" value={permissionBadge.label} />
               <InfoField label="Joined At" value={formatDateTime(detail.createdAt)} />
               <InfoField label="Last Updated" value={formatDateTime(detail.updatedAt)} />
             </div>
@@ -669,52 +881,158 @@ export default function AdminUserDetailPage() {
       >
         {!detail ? null : canEditPermissions ? (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                  Visibility Role
-                </label>
-                <select
-                  value={permissionDraft.visibilityRole}
-                  onChange={(event) =>
-                    setPermissionDraft((current) => ({
-                      ...current,
-                      visibilityRole: event.target.value as StaffRuleVisibilityRole,
-                    }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
-                >
-                  {ADMIN_VISIBILITY_ROLE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+            {permissionRole === "ADMIN" ? (
+              <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                    Visibility Role
+                  </label>
+                  <select
+                    value={permissionDraft.visibilityRole}
+                    onChange={(event) =>
+                      setPermissionDraft((current) => ({
+                        ...current,
+                        visibilityRole: event.target.value as StaffRuleVisibilityRole,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                  >
+                    {ADMIN_VISIBILITY_ROLE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
 
-                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
-                  Auto-approve flags are sent together with the capability profile so the backend
-                  can keep future approval behavior aligned with this user.
+                  <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
+                    Capability flags and admin approval policy are saved together in this form.
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {ADMIN_CAPABILITY_DEFINITIONS.map((capability) => {
+                    const supportsAutoApprove =
+                      capability.approval === "Optional auto approval";
+                    return (
+                      <div
+                        key={capability.key}
+                        className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {capability.label}
+                              </p>
+                              <span className="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                {capability.approval}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                              {capability.helper}
+                            </p>
+                          </div>
+
+                          <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-200 dark:ring-gray-700/60">
+                            <input
+                              type="checkbox"
+                              checked={permissionDraft.adminCapabilities[capability.key]}
+                              onChange={(event) =>
+                                onToggleAdminCapability(capability.key, event.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Enabled
+                          </label>
+                        </div>
+
+                        {supportsAutoApprove ? (
+                          <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={permissionDraft.adminAutoApprove[capability.key] === true}
+                              onChange={(event) =>
+                                setPermissionDraft((current) => ({
+                                  ...current,
+                                  adminAutoApprove: {
+                                    ...current.adminAutoApprove,
+                                    [capability.key]: event.target.checked,
+                                  },
+                                }))
+                              }
+                              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Auto approve after first approved action
+                          </label>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
+            ) : null}
 
-              <div className="grid gap-3">
-                {ADMIN_CAPABILITY_DEFINITIONS.map((capability) => {
-                  const supportsAutoApprove = capability.approval === "Optional auto approval";
-                  return (
+            {permissionRole === "MANAGER" ? (
+              <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+                <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Manager Type
+                    </label>
+                    <select
+                      value={permissionDraft.managerType}
+                      onChange={(event) =>
+                        onChangeManagerType(event.target.value as StaffRuleManagerType)
+                      }
+                      className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      {MANAGER_TYPE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Visibility Role
+                    </label>
+                    <select
+                      value={permissionDraft.visibilityRole}
+                      onChange={(event) =>
+                        setPermissionDraft((current) => ({
+                          ...current,
+                          visibilityRole: event.target.value as StaffRuleVisibilityRole,
+                        }))
+                      }
+                      className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      {ADMIN_VISIBILITY_ROLE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-700/50 dark:bg-blue-900/20 dark:text-blue-200">
+                    Branch-admin manager types must retain staff-rule creation, request approval,
+                    and product-request capability. The form keeps those backend requirements aligned.
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {MANAGER_CAPABILITY_DEFINITIONS.map((capability) => (
                     <div
                       key={capability.key}
                       className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                              {capability.label}
-                            </p>
-                            <span className="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                              {capability.approval}
-                            </span>
-                          </div>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {capability.label}
+                          </p>
                           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             {capability.helper}
                           </p>
@@ -723,40 +1041,98 @@ export default function AdminUserDetailPage() {
                         <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-200 dark:ring-gray-700/60">
                           <input
                             type="checkbox"
-                            checked={permissionDraft.capabilities[capability.key]}
+                            checked={permissionDraft.managerCapabilities[capability.key] === true}
                             onChange={(event) =>
-                              onToggleCapability(capability.key, event.target.checked)
+                              onToggleManagerCapability(capability.key, event.target.checked)
                             }
                             className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                           />
                           Enabled
                         </label>
                       </div>
-
-                      {supportsAutoApprove ? (
-                        <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={permissionDraft.autoApprove[capability.key] === true}
-                            onChange={(event) =>
-                              setPermissionDraft((current) => ({
-                                ...current,
-                                autoApprove: {
-                                  ...current.autoApprove,
-                                  [capability.key]: event.target.checked,
-                                },
-                              }))
-                            }
-                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                          />
-                          Auto approve after first approved action
-                        </label>
-                      ) : null}
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
+
+            {permissionRole === "SALES" ? (
+              <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Sales Permission Scope
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Sales users do not have toggleable capability flags in this screen. Their
+                    editable permission payload is the commission override profile.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Commission Rate %
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={permissionDraft.salesCommissionRate}
+                      onChange={(event) =>
+                        setPermissionDraft((current) => ({
+                          ...current,
+                          salesCommissionRate: event.target.value,
+                        }))
+                      }
+                      className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                      placeholder="Leave blank to clear custom commission"
+                    />
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Leave blank to remove the stored sales commission override.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Priority
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="1"
+                      value={permissionDraft.salesCommissionPriority}
+                      onChange={(event) =>
+                        setPermissionDraft((current) => ({
+                          ...current,
+                          salesCommissionPriority: event.target.value,
+                        }))
+                      }
+                      className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                    />
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40 md:col-span-2">
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                      Commission Note
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={permissionDraft.salesCommissionNote}
+                      onChange={(event) =>
+                        setPermissionDraft((current) => ({
+                          ...current,
+                          salesCommissionNote: event.target.value,
+                        }))
+                      }
+                      className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                      placeholder="Optional context for this commission override"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40">
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -807,8 +1183,7 @@ export default function AdminUserDetailPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-6 text-sm text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/20 dark:text-gray-400">
-            This user is not an admin account. Manager and sales permission editing will be
-            finalized through the updated onboarding and staff rule endpoints.
+            This account does not expose editable permission controls in this screen.
           </div>
         )}
       </SectionCard>

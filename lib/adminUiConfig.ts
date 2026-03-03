@@ -1,6 +1,8 @@
 import type {
   AdminAccountStatus,
   CustomerTier,
+  StaffRuleManagerCapabilities,
+  StaffRuleManagerType,
   StaffRuleVisibilityRole,
 } from "./apiClient";
 
@@ -20,6 +22,14 @@ export type AdminCapabilityDefinition = {
   label: string;
   helper: string;
   approval: "Main admin approval" | "Optional auto approval" | "Direct";
+};
+
+export type ManagerCapabilityKey = keyof StaffRuleManagerCapabilities;
+
+export type ManagerCapabilityDefinition = {
+  key: ManagerCapabilityKey;
+  label: string;
+  helper: string;
 };
 
 export const ADMIN_VISIBILITY_ROLE_OPTIONS: StaffRuleVisibilityRole[] = [
@@ -82,6 +92,55 @@ export const ADMIN_CAPABILITY_DEFINITIONS: AdminCapabilityDefinition[] = [
     label: "Ban Users",
     helper: "Apply timed bans. Permanent termination remains a main admin action.",
     approval: "Main admin approval",
+  },
+];
+
+export const MANAGER_TYPE_OPTIONS: StaffRuleManagerType[] = [
+  "STANDALONE",
+  "BRANCH_MANAGER",
+  "BRANCH_ADMIN",
+];
+
+export const MANAGER_CAPABILITY_DEFINITIONS: ManagerCapabilityDefinition[] = [
+  {
+    key: "canCreateStaffRules",
+    label: "Create Staff Rules",
+    helper: "Create and manage staff onboarding rules inside the manager branch scope.",
+  },
+  {
+    key: "canApproveRequests",
+    label: "Approve Requests",
+    helper: "View branch moderation requests across managed branches when this capability is enabled.",
+  },
+  {
+    key: "canRequestProductsFromAdmin",
+    label: "Request Products From Admin",
+    helper: "Submit branch product selection requests to main admin.",
+  },
+  {
+    key: "canRequestManagerRestrictions",
+    label: "Request Manager Restrictions",
+    helper: "Submit manager-restriction requests for branch-admin review.",
+  },
+  {
+    key: "canRequestManagerBans",
+    label: "Request Manager Bans",
+    helper: "Submit manager-ban requests for branch-admin review.",
+  },
+  {
+    key: "canRestrictSubordinates",
+    label: "Restrict Subordinates",
+    helper: "Restrict subordinate sales users directly when the manager type allows it.",
+  },
+  {
+    key: "canBanSubordinates",
+    label: "Ban Subordinates",
+    helper: "Ban subordinate sales users directly when the manager type allows it.",
+  },
+  {
+    key: "canLimitSubordinatePermissions",
+    label: "Limit Subordinate Permissions",
+    helper: "Control subordinate permission changes when staff-rule management is enabled.",
   },
 ];
 
