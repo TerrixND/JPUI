@@ -6,14 +6,17 @@ import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
+  type AdminAuthCardAction,
   decideAdminApprovalRequest,
   decideAdminBranchProductApprovalRequest,
   getAdminApprovalRequests,
   getAdminBranchProductApprovalRequests,
   handleAccountAccessDeniedError,
+  startAdminApprovalRequestAuthCardOtp,
   updateAdminBranchProductRequestControl,
   type AdminApprovalRequest,
   type AdminBranchProductApprovalRequest,
+  verifyAdminApprovalRequestAuthCardOtp,
 } from "@/lib/apiClient";
 import {
   approvalStatusBadge,
@@ -36,10 +39,82 @@ type RequestControlDraft = {
   note: string;
 };
 
+type AuthCardRequestPayload = {
+  productId: string;
+  authCardAction: AdminAuthCardAction;
+  reason: string | null;
+};
+
+type ApprovalOtpModalState = {
+  requestId: string;
+  action: AdminAuthCardAction;
+  productId: string;
+  challengeId: string;
+  maskedEmail: string;
+  otp: string;
+  verified: boolean;
+  busy: "send" | "verify" | "approve" | "";
+  error: string;
+  info: string;
+};
+
 const createDecisionDraft = (): ApprovalDecisionDraft => ({
   decisionNote: "",
   enableAutoApproveForFuture: false,
 });
+
+const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
+
+const getAuthCardActionLabel = (action: AdminAuthCardAction) => {
+  switch (action) {
+    case "REGENERATE":
+      return "Regenerate Card";
+    case "REPLACE":
+      return "Replace Card";
+    case "REVOKE":
+      return "Revoke Card";
+    default:
+      return action;
+  }
+};
+
+const getAuthCardRequestPayload = (
+  request: AdminApprovalRequest,
+): AuthCardRequestPayload | null => {
+  const payload =
+    request.requestPayload && typeof request.requestPayload === "object" && !Array.isArray(request.requestPayload)
+      ? (request.requestPayload as Record<string, unknown>)
+      : null;
+
+  const approvalScope =
+    typeof payload?.approvalScope === "string" ? payload.approvalScope.trim() : "";
+  const approvalFlow =
+    typeof payload?.approvalFlow === "string" ? payload.approvalFlow.trim() : "";
+  const productId = typeof payload?.productId === "string" ? payload.productId.trim() : "";
+  const authCardAction =
+    typeof payload?.authCardAction === "string" ? payload.authCardAction.trim().toUpperCase() : "";
+
+  if (
+    request.actionType !== "PRODUCT_UPDATE" ||
+    approvalScope !== "PRODUCT_AUTH_CARD" ||
+    approvalFlow !== "ADMIN_PRODUCT_AUTH_CARD" ||
+    !productId ||
+    (authCardAction !== "REGENERATE" &&
+      authCardAction !== "REPLACE" &&
+      authCardAction !== "REVOKE")
+  ) {
+    return null;
+  }
+
+  return {
+    productId,
+    authCardAction: authCardAction as AdminAuthCardAction,
+    reason:
+      typeof payload?.reason === "string" && payload.reason.trim()
+        ? payload.reason.trim()
+        : null,
+  };
+};
 
 const createBranchProductDecisionDraft = (
   commissionRate: number | null = null,
@@ -83,6 +158,7 @@ export default function AdminRequestsPage() {
   const [approvalBusyId, setApprovalBusyId] = useState("");
   const [approvalMessage, setApprovalMessage] = useState("");
   const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDecisionDraft>>({});
+  const [approvalOtpModal, setApprovalOtpModal] = useState<ApprovalOtpModalState | null>(null);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -147,15 +223,23 @@ export default function AdminRequestsPage() {
     void loadRequests();
   }, [loadRequests]);
 
-  const getApprovalDraft = (requestId: string) =>
-    approvalDrafts[requestId] || createDecisionDraft();
+  const getApprovalDraft = useCallback(
+    (requestId: string) => approvalDrafts[requestId] || createDecisionDraft(),
+    [approvalDrafts],
+  );
 
-  const getBranchProductDraft = (request: AdminBranchProductApprovalRequest) =>
-    branchProductDrafts[request.id] ||
-    createBranchProductDecisionDraft(request.requestedCommissionRate);
+  const getBranchProductDraft = useCallback(
+    (request: AdminBranchProductApprovalRequest) =>
+      branchProductDrafts[request.id] ||
+      createBranchProductDecisionDraft(request.requestedCommissionRate),
+    [branchProductDrafts],
+  );
 
-  const getControlDraft = (request: AdminBranchProductApprovalRequest) =>
-    requestControlDrafts[request.id] || createRequestControlDraft(request);
+  const getControlDraft = useCallback(
+    (request: AdminBranchProductApprovalRequest) =>
+      requestControlDrafts[request.id] || createRequestControlDraft(request),
+    [requestControlDrafts],
+  );
 
   const updateApprovalDraft = (requestId: string, patch: Partial<ApprovalDecisionDraft>) => {
     setApprovalDrafts((current) => ({
@@ -193,8 +277,166 @@ export default function AdminRequestsPage() {
     }));
   };
 
+  const updateApprovalOtpModal = useCallback((patch: Partial<ApprovalOtpModalState>) => {
+    setApprovalOtpModal((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const openApprovalOtpModal = useCallback((request: AdminApprovalRequest, payload: AuthCardRequestPayload) => {
+    setApprovalMessage("");
+    setApprovalOtpModal({
+      requestId: request.id,
+      action: payload.authCardAction,
+      productId: payload.productId,
+      challengeId: "",
+      maskedEmail: "",
+      otp: "",
+      verified: false,
+      busy: "",
+      error: "",
+      info: "",
+    });
+  }, []);
+
+  const closeApprovalOtpModal = useCallback(() => {
+    setApprovalOtpModal(null);
+  }, []);
+
+  const sendApprovalOtp = useCallback(async () => {
+    if (!approvalOtpModal) {
+      return;
+    }
+
+    updateApprovalOtpModal({
+      busy: "send",
+      error: "",
+      info: "",
+      verified: false,
+      otp: "",
+      challengeId: "",
+      maskedEmail: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await startAdminApprovalRequestAuthCardOtp({
+        accessToken,
+        requestId: approvalOtpModal.requestId,
+      });
+
+      updateApprovalOtpModal({
+        busy: "",
+        challengeId: response.challenge?.id || "",
+        maskedEmail: response.challenge?.maskedEmail || "",
+        info: response.message || "Verification code sent.",
+      });
+    } catch (caughtError) {
+      updateApprovalOtpModal({
+        busy: "",
+        error:
+          caughtError instanceof Error ? caughtError.message : "Failed to send verification code.",
+      });
+    }
+  }, [approvalOtpModal, getAccessToken, updateApprovalOtpModal]);
+
+  const verifyApprovalOtp = useCallback(async () => {
+    if (!approvalOtpModal?.challengeId) {
+      updateApprovalOtpModal({
+        error: "Send a verification code first.",
+      });
+      return;
+    }
+
+    updateApprovalOtpModal({
+      busy: "verify",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await verifyAdminApprovalRequestAuthCardOtp({
+        accessToken,
+        requestId: approvalOtpModal.requestId,
+        challengeId: approvalOtpModal.challengeId,
+        otp: approvalOtpModal.otp,
+      });
+
+      updateApprovalOtpModal({
+        busy: "",
+        verified: true,
+        info: response.message || "Verification code confirmed.",
+      });
+    } catch (caughtError) {
+      updateApprovalOtpModal({
+        busy: "",
+        verified: false,
+        error:
+          caughtError instanceof Error ? caughtError.message : "Failed to verify code.",
+      });
+    }
+  }, [approvalOtpModal, getAccessToken, updateApprovalOtpModal]);
+
+  const confirmApprovalWithOtp = useCallback(async () => {
+    if (!approvalOtpModal?.verified || !approvalOtpModal.challengeId) {
+      updateApprovalOtpModal({
+        error: "Verify the email code before approving this request.",
+      });
+      return;
+    }
+
+    const request = approvalRows.find((row) => row.id === approvalOtpModal.requestId);
+    if (!request) {
+      updateApprovalOtpModal({
+        error: "Approval request could not be found.",
+      });
+      return;
+    }
+
+    const draft = getApprovalDraft(request.id);
+    setApprovalBusyId(request.id);
+    updateApprovalOtpModal({
+      busy: "approve",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await decideAdminApprovalRequest({
+        accessToken,
+        requestId: request.id,
+        decision: "APPROVE",
+        decisionNote: draft.decisionNote.trim() || undefined,
+        enableAutoApproveForFuture: draft.enableAutoApproveForFuture,
+        otpChallengeId: approvalOtpModal.challengeId,
+      });
+
+      setApprovalMessage(
+        response.message || "Authenticity card request approved successfully.",
+      );
+      setApprovalOtpModal(null);
+      await loadRequests();
+    } catch (caughtError) {
+      updateApprovalOtpModal({
+        busy: "",
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to approve authenticity card request.",
+      });
+    } finally {
+      setApprovalBusyId("");
+    }
+  }, [approvalOtpModal, approvalRows, getAccessToken, getApprovalDraft, loadRequests, updateApprovalOtpModal]);
+
   const decideApproval = useCallback(
     async (request: AdminApprovalRequest, decision: "APPROVE" | "REJECT") => {
+      const authCardPayload = getAuthCardRequestPayload(request);
+      if (decision === "APPROVE" && authCardPayload && isMainAdmin) {
+        openApprovalOtpModal(request, authCardPayload);
+        return;
+      }
+
       const draft = getApprovalDraft(request.id);
       setApprovalBusyId(request.id);
       setApprovalMessage("");
@@ -224,7 +466,7 @@ export default function AdminRequestsPage() {
         setApprovalBusyId("");
       }
     },
-    [getAccessToken, loadRequests, approvalDrafts],
+    [getAccessToken, getApprovalDraft, isMainAdmin, loadRequests, openApprovalOtpModal],
   );
 
   const decideBranchProduct = useCallback(
@@ -277,7 +519,7 @@ export default function AdminRequestsPage() {
         setBranchProductBusyId("");
       }
     },
-    [branchProductDrafts, getAccessToken, loadRequests],
+    [getAccessToken, getBranchProductDraft, loadRequests],
   );
 
   const saveRequestControl = useCallback(
@@ -335,7 +577,7 @@ export default function AdminRequestsPage() {
         setRequestControlBusyKey("");
       }
     },
-    [getAccessToken, loadRequests, requestControlDrafts],
+    [getAccessToken, getControlDraft, loadRequests],
   );
 
   return (
@@ -612,6 +854,7 @@ export default function AdminRequestsPage() {
             {approvalRows.map((request) => {
               const draft = getApprovalDraft(request.id);
               const isPending = request.status === "PENDING" && isMainAdmin;
+              const authCardPayload = getAuthCardRequestPayload(request);
 
               return (
                 <div key={request.id} className="grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -635,6 +878,16 @@ export default function AdminRequestsPage() {
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                       Reason: {request.requestReason || "-"}
                     </p>
+                    {authCardPayload ? (
+                      <>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          Card Action: {getAuthCardActionLabel(authCardPayload.authCardAction)}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          Product ID: {authCardPayload.productId}
+                        </p>
+                      </>
+                    ) : null}
                     <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                       Created {formatDateTime(request.createdAt)}
                     </p>
@@ -675,7 +928,11 @@ export default function AdminRequestsPage() {
                           disabled={approvalBusyId === request.id}
                           className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                         >
-                          {approvalBusyId === request.id ? "Saving..." : "Approve"}
+                          {approvalBusyId === request.id
+                            ? "Saving..."
+                            : authCardPayload
+                              ? "Approve With OTP"
+                              : "Approve"}
                         </button>
                         <button
                           type="button"
@@ -702,6 +959,130 @@ export default function AdminRequestsPage() {
           </div>
         ) : null}
       </section>
+
+      {approvalOtpModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700/60 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {getAuthCardActionLabel(approvalOtpModal.action)}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Main admin OTP confirmation is required before approving this authenticity card action.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeApprovalOtpModal}
+                disabled={approvalOtpModal.busy === "approve"}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-300">
+                <p>Product ID: {approvalOtpModal.productId}</p>
+                <p className="mt-1">Action: {getAuthCardActionLabel(approvalOtpModal.action)}</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Email Verification
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {approvalOtpModal.maskedEmail
+                        ? `Code sent to ${approvalOtpModal.maskedEmail}`
+                        : "Send a 6 digit OTP to the main admin email address."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void sendApprovalOtp();
+                    }}
+                    disabled={approvalOtpModal.busy === "send" || approvalOtpModal.busy === "approve"}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                  >
+                    {approvalOtpModal.busy === "send"
+                      ? "Sending..."
+                      : approvalOtpModal.challengeId
+                        ? "Resend OTP"
+                        : "Send OTP"}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={approvalOtpModal.otp}
+                    onChange={(event) =>
+                      updateApprovalOtpModal({
+                        otp: normalizeOtpInput(event.target.value),
+                        verified: false,
+                      })
+                    }
+                    placeholder="6 digit code"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void verifyApprovalOtp();
+                    }}
+                    disabled={
+                      approvalOtpModal.busy === "verify" ||
+                      approvalOtpModal.busy === "approve" ||
+                      approvalOtpModal.otp.length !== 6 ||
+                      !approvalOtpModal.challengeId
+                    }
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {approvalOtpModal.busy === "verify" ? "Verifying..." : "Verify OTP"}
+                  </button>
+                </div>
+              </div>
+
+              {approvalOtpModal.error ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300">
+                  {approvalOtpModal.error}
+                </div>
+              ) : null}
+
+              {approvalOtpModal.info ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  {approvalOtpModal.info}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeApprovalOtpModal}
+                  disabled={approvalOtpModal.busy === "approve"}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void confirmApprovalWithOtp();
+                  }}
+                  disabled={!approvalOtpModal.verified || approvalOtpModal.busy === "approve"}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {approvalOtpModal.busy === "approve" ? "Approving..." : "Approve Request"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -203,8 +203,8 @@ export default function AdminBranches() {
         description="Overview of all branches in your network with analytics and status."
       />
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select
             value={draftFilters.status}
             onChange={(event) =>
@@ -271,14 +271,14 @@ export default function AdminBranches() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         {stats.map((item) => (
           <StatCard key={item.label} {...item} />
         ))}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Branches</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">{rows.length} branch row(s)</p>
         </div>
@@ -295,15 +295,15 @@ export default function AdminBranches() {
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                    <th className="px-5 py-3 font-medium">Branch</th>
-                    <th className="px-5 py-3 font-medium">City</th>
-                    <th className="px-5 py-3 font-medium">Primary Manager</th>
-                    <th className="px-5 py-3 font-medium">Users</th>
-                    <th className="px-5 py-3 font-medium">Inventory Value</th>
-                    <th className="px-5 py-3 font-medium">Successful Sales</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Updated</th>
+                  <tr className="text-left text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/40">
+                    <th className="px-5 py-3 font-semibold">Branch</th>
+                    <th className="px-5 py-3 font-semibold">City</th>
+                    <th className="px-5 py-3 font-semibold">Primary Manager</th>
+                    <th className="px-5 py-3 font-semibold">Users</th>
+                    <th className="px-5 py-3 font-semibold">Inventory Value</th>
+                    <th className="px-5 py-3 font-semibold">Successful Sales</th>
+                    <th className="px-5 py-3 font-semibold">Status</th>
+                    <th className="px-5 py-3 font-semibold">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,12 +338,12 @@ export default function AdminBranches() {
             </div>
 
             {/* Mobile cards */}
-            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
               {rows.map((branch) => (
                 <Link
                   key={branch.id}
                   href={`${dashboardBasePath}/branches/${branch.id}`}
-                  className="block px-4 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+                  className="block px-4 sm:px-5 py-4 hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">

@@ -272,8 +272,10 @@ type Tab = "details" | "ownership" | "certificate";
 
 export default function ProductDetailClientComponent({
   product,
+  showActions = true,
 }: {
   product: Product;
+  showActions?: boolean;
 }) {
   const mediaItems = useMemo(
     () => (Array.isArray(product.media) ? product.media : []),
@@ -608,12 +610,14 @@ export default function ProductDetailClientComponent({
                           </span>
                         }
                       />
-                      <InfoRow
-                        label="Acquired"
-                        value={formatDateShort(
-                          product.currentOwnership.acquiredAt,
-                        )}
-                      />
+                      {hasDisplayValue(product.currentOwnership.acquiredAt) && (
+                        <InfoRow
+                          label="Acquired"
+                          value={formatDateShort(
+                            product.currentOwnership.acquiredAt as string,
+                          )}
+                        />
+                      )}
                     </div>
                   ) : (
                     <p className="text-stone-400 text-sm font-sans">
@@ -732,14 +736,16 @@ export default function ProductDetailClientComponent({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3 pt-1">
-              <button className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold shadow-sm">
-                Reserve Item
-              </button>
-              <button className="flex-1 border border-stone-200 hover:border-stone-400 text-stone-500 hover:text-stone-700 text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold">
-                Add to Cart
-              </button>
-            </div>
+            {showActions ? (
+              <div className="flex gap-3 pt-1">
+                <button className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold shadow-sm">
+                  Reserve Item
+                </button>
+                <button className="flex-1 border border-stone-200 hover:border-stone-400 text-stone-500 hover:text-stone-700 text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold">
+                  Add to Cart
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -20,7 +20,7 @@ export default function StatCard({
   href,
 }: StatCardProps) {
   const content = (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5 flex items-start gap-3 sm:gap-4 transition-all duration-150 hover:shadow-md dark:hover:shadow-black/20 group">
+    <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex items-start gap-3 sm:gap-4 transition-all duration-150 hover:shadow-md dark:hover:shadow-black/20 group">
       <div className={`shrink-0 p-2 sm:p-2.5 rounded-lg ${accent}`}>{icon}</div>
       <div className="min-w-0 flex-1">
         <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors">

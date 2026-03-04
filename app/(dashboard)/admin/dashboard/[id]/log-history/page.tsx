@@ -270,8 +270,8 @@ export default function AdminLogHistoryPage() {
       />
 
       {/* ───── stat cards ───── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3 flex items-start gap-3">
           <div className="shrink-0 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
             <ArchiveIcon className="w-4 h-4" />
           </div>
@@ -285,7 +285,7 @@ export default function AdminLogHistoryPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3 flex items-start gap-3">
           <div className="shrink-0 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
             <TableRowsIcon className="w-4 h-4" />
           </div>
@@ -299,7 +299,7 @@ export default function AdminLogHistoryPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3 flex items-start gap-3">
           <div className="shrink-0 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
             <AlertTriangleIcon className="w-4 h-4" />
           </div>
@@ -315,7 +315,7 @@ export default function AdminLogHistoryPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3 flex items-start gap-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3 flex items-start gap-3">
           <div className="shrink-0 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
             <GaugeIcon className="w-4 h-4" />
           </div>
@@ -327,7 +327,7 @@ export default function AdminLogHistoryPage() {
       </div>
 
       {/* ───── collapsible filters ───── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
         <button
           type="button"
           onClick={() => setShowFilters((prev) => !prev)}
@@ -346,7 +346,7 @@ export default function AdminLogHistoryPage() {
 
         {showFilters && (
           <div className="px-5 pb-4 pt-0 space-y-4 border-t border-gray-100 dark:border-gray-700/40">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-4">
               <div>
                 <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                   Type
@@ -418,8 +418,8 @@ export default function AdminLogHistoryPage() {
       )}
 
       {/* ───── snapshot files table / cards ───── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Snapshot Files</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">{loading ? "..." : `${rows.length} row(s)`}</p>
         </div>
@@ -458,15 +458,15 @@ export default function AdminLogHistoryPage() {
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                  <th className="px-5 py-3 font-medium">Snapshot</th>
-                  <th className="px-5 py-3 font-medium">Category</th>
-                  <th className="px-5 py-3 font-medium">Updated</th>
-                  <th className="px-5 py-3 font-medium">Size</th>
-                  <th className="px-5 py-3 font-medium">Records</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Summary</th>
-                  <th className="px-5 py-3 font-medium text-right">JSON</th>
+                <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/40">
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Snapshot</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Category</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Updated</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Size</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Records</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Status</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Summary</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-right">JSON</th>
                 </tr>
               </thead>
               <tbody>
@@ -534,13 +534,13 @@ export default function AdminLogHistoryPage() {
 
         {/* mobile / tablet card view */}
         {!loading && rows.length > 0 && (
-          <div className="lg:hidden divide-y divide-gray-100">
+          <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
             {rows.map((item) => {
               const isExpanded = expandedFileName === item.fileName;
               const recordCount = getSnapshotRecordCount(item);
 
               return (
-                <div key={item.fileName} className="px-4 py-4 space-y-3">
+                <div key={item.fileName} className="px-4 sm:px-5 py-4 space-y-3 hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-xs text-gray-800 dark:text-gray-200 truncate">{item.fileName}</p>

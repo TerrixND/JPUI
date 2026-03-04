@@ -12,14 +12,16 @@ import {
   isAuthBlockedError,
   bootstrapAdmin,
   clearPendingSetupPayload,
+  completePendingSetupForSession,
   precheckSignup,
   resolveOnboardingMode,
   setupUser,
   storePendingSetupPayload,
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
+import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
 
 const languages = [
@@ -43,6 +45,9 @@ const languages = [
 
 const SignupPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
+  const loginHref = buildAuthRouteWithReturnTo("/login", returnTo);
 
   const [fullName, setFullName] = useState<string>("");
   const [city, setCity] = useState<string>("");
@@ -108,6 +113,11 @@ const SignupPage = () => {
           await setupUser(data.session.access_token, profilePayload);
         }
 
+        await completePendingSetupForSession({
+          accessToken: data.session.access_token,
+          email: data.session.user?.email || normalizedEmail,
+        });
+
         try {
           await getUserMe({
             accessToken: data.session.access_token,
@@ -127,7 +137,7 @@ const SignupPage = () => {
         }
 
         clearPendingSetupPayload();
-        router.replace("/");
+        router.replace(returnTo);
         router.refresh();
         return;
       }
@@ -272,7 +282,7 @@ const SignupPage = () => {
         <p className="text-[13px] text-slate-800 mt-3">
           Already have an account?{" "}
           <Link
-            href={"/login"}
+            href={loginHref}
             className="font-medium text-emerald-600 underline"
           >
             Login

@@ -454,3 +454,30 @@ export const bootstrapAdmin = async (
   accessToken: string,
   payload: SetupUserPayload = {},
 ) => callOnboardingEndpoint(BOOTSTRAP_ADMIN_ENDPOINT, accessToken, payload);
+
+export const completePendingSetupForSession = async ({
+  accessToken,
+  email,
+}: {
+  accessToken: string;
+  email?: string | null;
+}) => {
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (!accessToken || !normalizedEmail) {
+    return false;
+  }
+
+  const pendingSetupProfile = getPendingSetupProfileForEmail(normalizedEmail);
+  if (!pendingSetupProfile) {
+    return false;
+  }
+
+  if (pendingSetupProfile.onboardingMode === "bootstrap-admin") {
+    await bootstrapAdmin(accessToken, pendingSetupProfile.payload);
+  } else {
+    await setupUser(accessToken, pendingSetupProfile.payload);
+  }
+
+  clearPendingSetupPayload();
+  return true;
+};

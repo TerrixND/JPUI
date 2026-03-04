@@ -10,17 +10,21 @@ import MediaUploader, { type MediaFile } from "@/components/ui/dashboard/MediaUp
 import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
 import {
+  type AdminAuthCardAction,
   ApiClientError,
   deleteAdminMedia,
   getAdminBranchMembers,
   getAdminBranchesWithManagers,
   updateAdminProduct,
   getAdminProductDetail,
+  startAdminProductAuthCardOtp,
+  submitAdminProductAuthCardAction,
   type AdminProductRecord,
   type CustomerTier,
   getAdminMediaUrl,
   type AdminMediaUrlResponse,
   type MediaVisibilityPreset,
+  verifyAdminProductAuthCardOtp,
 } from "@/lib/apiClient";
 import {
   CUSTOMER_TIER_OPTIONS as MEDIA_CUSTOMER_TIER_OPTIONS,
@@ -204,6 +208,18 @@ type EditForm = {
   saleMaxPrice: string;
 };
 
+type AuthCardActionModalState = {
+  action: AdminAuthCardAction;
+  reason: string;
+  challengeId: string;
+  maskedEmail: string;
+  otp: string;
+  verified: boolean;
+  busy: "send" | "verify" | "submit" | "";
+  error: string;
+  info: string;
+};
+
 type AllocationRow = {
   id: string;
   targetType: "BRANCH" | "USER";
@@ -265,6 +281,7 @@ const TIER_OPTIONS = ["STANDARD", "VIP", "ULTRA_RARE"] as const;
 const STATUS_OPTIONS = ["AVAILABLE", "PENDING", "BUSY", "SOLD"] as const;
 const PRODUCT_CUSTOMER_TIER_OPTIONS = ["", "REGULAR", "VIP", "ULTRA_VIP"] as const;
 const SOURCE_TYPE_OPTIONS = ["OWNED", "CONSIGNED"] as const;
+const AUTH_CARD_ACTION_OPTIONS: AdminAuthCardAction[] = ["REGENERATE", "REPLACE", "REVOKE"];
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -313,6 +330,21 @@ const toDisplayMoney = (value: number | null | undefined) => {
 };
 
 const toDisplayText = (value: string | null | undefined) => value || "";
+
+const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
+
+const getAuthCardActionLabel = (action: AdminAuthCardAction) => {
+  switch (action) {
+    case "REGENERATE":
+      return "Regenerate Card";
+    case "REPLACE":
+      return "Replace Card";
+    case "REVOKE":
+      return "Revoke Card";
+    default:
+      return action;
+  }
+};
 
 const toInputDateValue = (value: string | null | undefined) => {
   if (!value) {
@@ -674,7 +706,7 @@ function ExistingMediaCard({
 export default function ProductEditPage() {
   const params = useParams();
   const router = useRouter();
-  const { dashboardBasePath, isAdminActionBlocked } = useRole();
+  const { dashboardBasePath, isAdminActionBlocked, role } = useRole();
   const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
   const productDeleteBlocked = isAdminActionBlocked("PRODUCT_DELETE");
   const productEditTooltip = getAdminActionRestrictionTooltip("PRODUCT_EDIT");
@@ -708,11 +740,14 @@ export default function ProductEditPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [lookupError, setLookupError] = useState("");
   const [mediaHint, setMediaHint] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const refreshingMediaIdsRef = useRef<Set<string>>(new Set());
+  const [browserOrigin, setBrowserOrigin] = useState("");
+  const [authCardModal, setAuthCardModal] = useState<AuthCardActionModalState | null>(null);
 
   const totalAllocationRate = useMemo(() => {
     return allocations.reduce((sum, row) => {
@@ -742,6 +777,26 @@ export default function ProductEditPage() {
         : ROLE_MEDIA_VISIBILITY_PRESETS.filter(isRoleVisibilityPreset),
     [form.visibility],
   );
+  const showAuthenticityUrl = role === "admin";
+  const authenticityUrl = useMemo(() => {
+    const authenticityPath =
+      typeof productRecord?.authenticityPath === "string"
+        ? productRecord.authenticityPath.trim()
+        : "";
+
+    if (!authenticityPath) {
+      return "";
+    }
+
+    return browserOrigin ? `${browserOrigin}${authenticityPath}` : authenticityPath;
+  }, [browserOrigin, productRecord?.authenticityPath]);
+  const hasActiveAuthenticityCard = productRecord?.authCardStatus === "ACTIVE";
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBrowserOrigin(window.location.origin);
+    }
+  }, []);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -761,6 +816,162 @@ export default function ProductEditPage() {
 
     return accessToken;
   }, []);
+
+  const refreshProductRecord = useCallback(async () => {
+    const accessToken = await getAccessToken();
+    const updatedProduct = await getAdminProductDetail({
+      accessToken,
+      productId,
+    });
+
+    setProductRecord(updatedProduct);
+  }, [getAccessToken, productId]);
+
+  const openAuthCardModal = useCallback((action: AdminAuthCardAction) => {
+    setNotice("");
+    setError("");
+    setAuthCardModal({
+      action,
+      reason: "",
+      challengeId: "",
+      maskedEmail: "",
+      otp: "",
+      verified: false,
+      busy: "",
+      error: "",
+      info: "",
+    });
+  }, []);
+
+  const updateAuthCardModal = useCallback((patch: Partial<AuthCardActionModalState>) => {
+    setAuthCardModal((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const closeAuthCardModal = useCallback(() => {
+    setAuthCardModal(null);
+  }, []);
+
+  const sendAuthCardOtp = useCallback(async () => {
+    if (!authCardModal) {
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "send",
+      error: "",
+      info: "",
+      verified: false,
+      otp: "",
+      challengeId: "",
+      maskedEmail: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await startAdminProductAuthCardOtp({
+        accessToken,
+        productId,
+        action: authCardModal.action,
+      });
+
+      updateAuthCardModal({
+        busy: "",
+        challengeId: response.challenge?.id || "",
+        maskedEmail: response.challenge?.maskedEmail || "",
+        info: response.message || "Verification code sent.",
+      });
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to send verification code.",
+      });
+    }
+  }, [authCardModal, getAccessToken, productId, updateAuthCardModal]);
+
+  const verifyAuthCardOtp = useCallback(async () => {
+    if (!authCardModal?.challengeId) {
+      updateAuthCardModal({
+        error: "Send a verification code first.",
+      });
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "verify",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await verifyAdminProductAuthCardOtp({
+        accessToken,
+        productId,
+        action: authCardModal.action,
+        challengeId: authCardModal.challengeId,
+        otp: authCardModal.otp,
+      });
+
+      updateAuthCardModal({
+        busy: "",
+        verified: true,
+        info: response.message || "Verification code confirmed.",
+      });
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        verified: false,
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to verify code.",
+      });
+    }
+  }, [authCardModal, getAccessToken, productId, updateAuthCardModal]);
+
+  const submitAuthCardAction = useCallback(async () => {
+    if (!authCardModal?.challengeId || !authCardModal.verified) {
+      updateAuthCardModal({
+        error: "Verify the email code before confirming this action.",
+      });
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "submit",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await submitAdminProductAuthCardAction({
+        accessToken,
+        productId,
+        action: authCardModal.action,
+        challengeId: authCardModal.challengeId,
+        reason: authCardModal.reason,
+      });
+
+      await refreshProductRecord();
+      setNotice(
+        response.message ||
+          `${getAuthCardActionLabel(authCardModal.action)} submitted successfully.`,
+      );
+      setAuthCardModal(null);
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to confirm authenticity card action.",
+      });
+    }
+  }, [authCardModal, getAccessToken, productId, refreshProductRecord, updateAuthCardModal]);
 
   const fetchAdminMediaById = useCallback(
     async (accessToken: string, mediaId: string) => {
@@ -929,6 +1140,7 @@ export default function ProductEditPage() {
     const bootstrap = async () => {
       setLoading(true);
       setError("");
+      setNotice("");
       setLookupError("");
       setMediaHint("");
       setNotFound(false);
@@ -1237,6 +1449,7 @@ export default function ProductEditPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNotice("");
 
     if (productEditBlocked) {
       setError(productEditTooltip);
@@ -1598,11 +1811,107 @@ export default function ProductEditPage() {
           </div>
         )}
 
+        {notice && (
+          <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 rounded-lg text-sm text-emerald-700 dark:text-emerald-300">
+            {notice}
+          </div>
+        )}
+
         {lookupError && (
           <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm text-amber-700 dark:text-amber-300">
             {lookupError}
           </div>
         )}
+
+        {showAuthenticityUrl ? (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
+            <SectionHeading>Authenticity URL</SectionHeading>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div>
+                <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Generated URL
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={authenticityUrl}
+                  placeholder="Authenticity URL unavailable"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">
+                    Card Status
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={productRecord?.authCardStatus || ""}
+                    placeholder="Unavailable"
+                    className={inputCls}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-gray-700 dark:text-gray-300 mb-1.5">
+                    Card Serial
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={productRecord?.authCardSerial || ""}
+                    placeholder="Not assigned"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {AUTH_CARD_ACTION_OPTIONS.map((action) => {
+                  const requiresActiveCard =
+                    action === "REVOKE" || action === "REPLACE";
+                  const disabled =
+                    productEditBlocked ||
+                    (requiresActiveCard && !hasActiveAuthenticityCard);
+
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      onClick={() => openAuthCardModal(action)}
+                      disabled={disabled}
+                      title={
+                        disabled
+                          ? productEditBlocked
+                            ? productEditTooltip
+                            : "This action requires an active authenticity card."
+                          : undefined
+                      }
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-800/50"
+                    >
+                      {getAuthCardActionLabel(action)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {authenticityUrl ? (
+                <a
+                  href={authenticityUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 transition-colors"
+                >
+                  Open Authenticity Page
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Core Details</SectionHeading>
@@ -2493,6 +2802,144 @@ export default function ProductEditPage() {
           </button>
         </div>
       </form>
+
+      {authCardModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700/60 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {getAuthCardActionLabel(authCardModal.action)}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Confirm this product card action with your admin email OTP first.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAuthCardModal}
+                disabled={authCardModal.busy === "submit"}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[12px] text-gray-700 dark:text-gray-300">
+                  Reason
+                </label>
+                <textarea
+                  value={authCardModal.reason}
+                  onChange={(event) =>
+                    updateAuthCardModal({
+                      reason: event.target.value,
+                    })
+                  }
+                  rows={3}
+                  className={inputCls}
+                  placeholder="Optional note for this card action"
+                />
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Email Verification
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {authCardModal.maskedEmail
+                        ? `Code sent to ${authCardModal.maskedEmail}`
+                        : "Send a 6 digit OTP to your admin email."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void sendAuthCardOtp();
+                    }}
+                    disabled={authCardModal.busy === "send" || authCardModal.busy === "submit"}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                  >
+                    {authCardModal.busy === "send"
+                      ? "Sending..."
+                      : authCardModal.challengeId
+                        ? "Resend OTP"
+                        : "Send OTP"}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={authCardModal.otp}
+                    onChange={(event) =>
+                      updateAuthCardModal({
+                        otp: normalizeOtpInput(event.target.value),
+                        verified: false,
+                      })
+                    }
+                    placeholder="6 digit code"
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void verifyAuthCardOtp();
+                    }}
+                    disabled={
+                      authCardModal.busy === "verify" ||
+                      authCardModal.busy === "submit" ||
+                      authCardModal.otp.length !== 6 ||
+                      !authCardModal.challengeId
+                    }
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {authCardModal.busy === "verify" ? "Verifying..." : "Verify OTP"}
+                  </button>
+                </div>
+              </div>
+
+              {authCardModal.error ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300">
+                  {authCardModal.error}
+                </div>
+              ) : null}
+
+              {authCardModal.info ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  {authCardModal.info}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeAuthCardModal}
+                  disabled={authCardModal.busy === "submit"}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void submitAuthCardAction();
+                  }}
+                  disabled={!authCardModal.verified || authCardModal.busy === "submit"}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {authCardModal.busy === "submit"
+                    ? "Submitting..."
+                    : getAuthCardActionLabel(authCardModal.action)}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

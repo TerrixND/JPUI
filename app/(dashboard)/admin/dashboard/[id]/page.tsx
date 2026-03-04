@@ -93,7 +93,7 @@ const getPrimaryManagerLabel = (branch: AdminBranchNetworkRecord) => {
 
 function StatSkeleton() {
   return (
-    <div className="animate-pulse bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5 flex flex-col gap-3">
+    <div className="animate-pulse bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
         <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700" />
@@ -111,7 +111,7 @@ function BranchRowSkeleton() {
         <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
         <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded w-1/4" />
       </div>
-      <div className="h-5 w-14 bg-gray-100 dark:bg-gray-700 rounded-full hidden sm:block" />
+      <div className="h-5 w-14 bg-gray-100 dark:bg-gray-700 rounded-full hidden md:block" />
     </div>
   );
 }
@@ -351,7 +351,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {stats.map((s) =>
           s.value === null ? (
             <StatSkeleton key={s.label} />
@@ -359,7 +359,7 @@ export default function AdminDashboard() {
             <Link
               key={s.label}
               href={s.href}
-              className="relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 sm:p-5 flex flex-col gap-2 overflow-hidden transition-all hover:shadow-md dark:hover:shadow-black/20 group"
+              className="relative bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex flex-col gap-2 overflow-hidden transition-all hover:shadow-md dark:hover:shadow-black/20 group"
             >
               {/* Colored top accent bar */}
               <div className={`absolute top-0 left-0 right-0 h-0.5 ${s.bar}`} />
@@ -379,7 +379,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Projected Inventory Profit */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden transition-colors">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden transition-colors">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-700/40">
@@ -405,7 +405,7 @@ export default function AdminDashboard() {
 
         {profitLoading && (
           <div className="p-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse space-y-2">
                   <div className="h-2.5 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -434,7 +434,7 @@ export default function AdminDashboard() {
 
         {!profitLoading && !profitError && t && (
           <div className="p-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
               <div>
                 <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Tracked Products</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 mt-1.5">{t.productCount.toLocaleString()}</p>
@@ -494,9 +494,9 @@ export default function AdminDashboard() {
       </div>
 
       {/* Branch Network + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Branch Network */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden flex flex-col transition-colors">
+        <div className="md:col-span-2 bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden flex flex-col transition-colors">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center gap-2.5 shrink-0">
             <div className="p-1.5 rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-700/40">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -505,7 +505,7 @@ export default function AdminDashboard() {
             </div>
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Branch Network</h2>
             {!countsLoading && (
-              <span className="ml-auto text-[11px] text-gray-400 dark:text-gray-500 hidden sm:inline">
+              <span className="ml-auto text-[11px] text-gray-400 dark:text-gray-500 hidden md:inline">
                 {counts.branches} {counts.branches === 1 ? "branch" : "branches"}
               </span>
             )}
@@ -529,7 +529,7 @@ export default function AdminDashboard() {
           ) : (
             <>
               {/* Desktop table */}
-              <div className="hidden sm:block overflow-x-auto flex-1">
+              <div className="hidden md:block overflow-x-auto flex-1">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wider bg-gray-50/60 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700/40">
@@ -572,7 +572,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Mobile cards */}
-              <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/40">
+              <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
                 {branchRows.map((branch) => (
                   <div key={branch.id} className="px-4 py-3.5 flex items-center gap-3">
                     <Link href={`${dashboardBasePath}/branches/${branch.id}`} className="flex flex-1 items-center gap-3 min-w-0">
@@ -620,7 +620,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden flex flex-col transition-colors">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden flex flex-col transition-colors">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center gap-2.5 shrink-0">
             <div className="p-1.5 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-700/40">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -7,11 +7,8 @@ import NewArrivals from "@/components/ui/NewArrivals";
 import OurProcess from "@/components/ui/OurProcess";
 
 import {
-  bootstrapAdmin,
-  clearPendingSetupPayload,
-  getPendingSetupProfileForEmail,
+  completePendingSetupForSession,
   isAuthBlockedError,
-  setupUser,
 } from "@/lib/setupUser";
 import {
   forceLogoutToBlockedPage,
@@ -52,18 +49,12 @@ const HomePage = () => {
 
         if (!session?.access_token) return;
 
-        const email = session.user?.email || "";
-        const pendingSetupProfile = email
-          ? getPendingSetupProfileForEmail(email)
-          : null;
+        const didCompletePendingSetup = await completePendingSetupForSession({
+          accessToken: session.access_token,
+          email: session.user?.email,
+        });
 
-        if (!pendingSetupProfile) return;
-
-        if (pendingSetupProfile.onboardingMode === "bootstrap-admin") {
-          await bootstrapAdmin(session.access_token, pendingSetupProfile.payload);
-        } else {
-          await setupUser(session.access_token, pendingSetupProfile.payload);
-        }
+        if (!didCompletePendingSetup) return;
 
         try {
           await getUserMe({
@@ -82,8 +73,6 @@ const HomePage = () => {
 
           throw accountError;
         }
-
-        clearPendingSetupPayload();
       } catch (error) {
         if (isAuthBlockedError(error)) {
           await supabase.auth.signOut().catch(() => undefined);

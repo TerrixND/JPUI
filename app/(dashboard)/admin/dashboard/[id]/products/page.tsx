@@ -7,12 +7,16 @@ import AdminCustomerPicker from "@/components/ui/dashboard/AdminCustomerPicker";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import {
+  type AdminAuthCardAction,
   ApiClientError,
   deleteAdminProduct,
   getAdminInventoryProfitAnalytics,
   getAdminMediaUrl,
   getAdminProducts,
+  startAdminProductAuthCardOtp,
+  submitAdminProductAuthCardAction,
   updateAdminProductQuickVisibility,
+  verifyAdminProductAuthCardOtp,
   type AdminProductRecord,
 } from "@/lib/apiClient";
 import { getAdminActionRestrictionTooltip } from "@/lib/adminAccessControl";
@@ -73,6 +77,27 @@ type ProductMeta = {
   targetUserIds: string[];
 };
 
+type ProductAuthenticityMeta = {
+  authenticityPath: string | null;
+  authenticityToken: string | null;
+  authCardStatus: string | null;
+  authCardSerial: string | null;
+};
+
+type AuthCardActionModalState = {
+  productId: string;
+  productLabel: string;
+  action: AdminAuthCardAction;
+  reason: string;
+  challengeId: string;
+  maskedEmail: string;
+  otp: string;
+  verified: boolean;
+  busy: "send" | "verify" | "submit" | "";
+  error: string;
+  info: string;
+};
+
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -117,6 +142,23 @@ const parseTargetUserIds = (value: string) =>
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+const AUTH_CARD_ACTION_OPTIONS: AdminAuthCardAction[] = ["REGENERATE", "REPLACE", "REVOKE"];
+
+const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
+
+const getAuthCardActionLabel = (action: AdminAuthCardAction) => {
+  switch (action) {
+    case "REGENERATE":
+      return "Regenerate Card";
+    case "REPLACE":
+      return "Replace Card";
+    case "REVOKE":
+      return "Revoke Card";
+    default:
+      return action;
+  }
+};
 
 const hasMediaReference = (product: AdminProductRecord) =>
   (Array.isArray(product.media) ? product.media : []).some((mediaRef) => {
@@ -206,7 +248,7 @@ function EmptyBoxIcon({ className }: { className?: string }) {
 }
 
 export default function AdminProducts() {
-  const { dashboardBasePath, isAdminActionBlocked } = useRole();
+  const { dashboardBasePath, isAdminActionBlocked, role } = useRole();
   const productCreateBlocked = isAdminActionBlocked("PRODUCT_CREATE");
   const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
   const productVisibilityBlocked = isAdminActionBlocked("PRODUCT_VISIBILITY_MANAGE");
@@ -225,6 +267,9 @@ export default function AdminProducts() {
   const [analytics, setAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [mediaByProductId, setMediaByProductId] = useState<Record<string, ProductImageRef>>({});
   const [productMetaById, setProductMetaById] = useState<Record<string, ProductMeta>>({});
+  const [authenticityByProductId, setAuthenticityByProductId] = useState<
+    Record<string, ProductAuthenticityMeta>
+  >({});
   const [quickVisibilityProductId, setQuickVisibilityProductId] = useState<string | null>(null);
   const [quickVisibilityChoice, setQuickVisibilityChoice] = useState("");
   const [quickVisibilityTargetTier, setQuickVisibilityTargetTier] = useState("");
@@ -234,6 +279,16 @@ export default function AdminProducts() {
   const [quickVisibilityMessage, setQuickVisibilityMessage] = useState("");
   const [savingQuickVisibility, setSavingQuickVisibility] = useState(false);
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
+  const [browserOrigin, setBrowserOrigin] = useState("");
+  const [authCardModal, setAuthCardModal] = useState<AuthCardActionModalState | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBrowserOrigin(window.location.origin);
+    }
+  }, []);
+
+  const showAuthenticityUrl = role === "admin";
 
   useEffect(() => {
     setProductsNotice(consumeAdminProductsFlash());
@@ -345,6 +400,7 @@ export default function AdminProducts() {
 
       const mediaMap: Record<string, ProductImageRef> = {};
       const productMetaMap: Record<string, ProductMeta> = {};
+      const authenticityMap: Record<string, ProductAuthenticityMeta> = {};
       for (const product of productRows) {
         const resolvedImage = toProductImageRef(product);
         if (resolvedImage) {
@@ -362,10 +418,30 @@ export default function AdminProducts() {
             ? product.targetUserIds.filter((value): value is string => typeof value === "string")
             : [],
         };
+
+        authenticityMap[product.id] = {
+          authenticityPath:
+            typeof product.authenticityPath === "string"
+              ? product.authenticityPath
+              : null,
+          authenticityToken:
+            typeof product.authenticityToken === "string"
+              ? product.authenticityToken
+              : null,
+          authCardStatus:
+            typeof product.authCardStatus === "string"
+              ? product.authCardStatus
+              : null,
+          authCardSerial:
+            typeof product.authCardSerial === "string"
+              ? product.authCardSerial
+              : null,
+        };
       }
 
       setMediaByProductId(mediaMap);
       setProductMetaById(productMetaMap);
+      setAuthenticityByProductId(authenticityMap);
       setAnalytics(analyticsData);
 
       if (productRows.length > 0) {
@@ -388,10 +464,24 @@ export default function AdminProducts() {
       setAnalytics(null);
       setMediaByProductId({});
       setProductMetaById({});
+      setAuthenticityByProductId({});
     } finally {
       setLoading(false);
     }
   }, [getAccessToken, includeSold]);
+
+  const toAuthenticityUrl = useCallback(
+    (authenticityPath: string | null | undefined) => {
+      const normalizedPath =
+        typeof authenticityPath === "string" ? authenticityPath.trim() : "";
+      if (!normalizedPath) {
+        return "";
+      }
+
+      return browserOrigin ? `${browserOrigin}${normalizedPath}` : normalizedPath;
+    },
+    [browserOrigin],
+  );
 
   useEffect(() => {
     void loadData();
@@ -453,6 +543,159 @@ export default function AdminProducts() {
     setQuickVisibilityNote(selectedQuickMeta?.visibilityNote || "");
     setQuickVisibilityReason("");
   }, [quickVisibilityChoices, selectedQuickMeta, selectedQuickProduct]);
+
+  const openAuthCardModal = useCallback(
+    (item: InventoryProduct, action: AdminAuthCardAction) => {
+      setError("");
+      setProductsNotice(null);
+      setAuthCardModal({
+        productId: item.id,
+        productLabel: item.name || item.sku || item.id,
+        action,
+        reason: "",
+        challengeId: "",
+        maskedEmail: "",
+        otp: "",
+        verified: false,
+        busy: "",
+        error: "",
+        info: "",
+      });
+    },
+    [],
+  );
+
+  const updateAuthCardModal = useCallback((patch: Partial<AuthCardActionModalState>) => {
+    setAuthCardModal((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const closeAuthCardModal = useCallback(() => {
+    setAuthCardModal(null);
+  }, []);
+
+  const sendAuthCardOtp = useCallback(async () => {
+    if (!authCardModal) {
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "send",
+      error: "",
+      info: "",
+      verified: false,
+      otp: "",
+      challengeId: "",
+      maskedEmail: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await startAdminProductAuthCardOtp({
+        accessToken,
+        productId: authCardModal.productId,
+        action: authCardModal.action,
+      });
+
+      updateAuthCardModal({
+        busy: "",
+        challengeId: response.challenge?.id || "",
+        maskedEmail: response.challenge?.maskedEmail || "",
+        info: response.message || "Verification code sent.",
+      });
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to send verification code.",
+      });
+    }
+  }, [authCardModal, getAccessToken, updateAuthCardModal]);
+
+  const verifyAuthCardOtp = useCallback(async () => {
+    if (!authCardModal?.challengeId) {
+      updateAuthCardModal({
+        error: "Send a verification code first.",
+      });
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "verify",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await verifyAdminProductAuthCardOtp({
+        accessToken,
+        productId: authCardModal.productId,
+        action: authCardModal.action,
+        challengeId: authCardModal.challengeId,
+        otp: authCardModal.otp,
+      });
+
+      updateAuthCardModal({
+        busy: "",
+        verified: true,
+        info: response.message || "Verification code confirmed.",
+      });
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        verified: false,
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to verify code.",
+      });
+    }
+  }, [authCardModal, getAccessToken, updateAuthCardModal]);
+
+  const submitAuthCardAction = useCallback(async () => {
+    if (!authCardModal?.challengeId || !authCardModal.verified) {
+      updateAuthCardModal({
+        error: "Verify the email code before confirming this action.",
+      });
+      return;
+    }
+
+    updateAuthCardModal({
+      busy: "submit",
+      error: "",
+      info: "",
+    });
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await submitAdminProductAuthCardAction({
+        accessToken,
+        productId: authCardModal.productId,
+        action: authCardModal.action,
+        challengeId: authCardModal.challengeId,
+        reason: authCardModal.reason,
+      });
+
+      await loadData();
+      setProductsNotice({
+        tone: response.statusCode === 202 ? "info" : "success",
+        message:
+          response.message ||
+          `${getAuthCardActionLabel(authCardModal.action)} submitted successfully.`,
+      });
+      setAuthCardModal(null);
+    } catch (caughtError) {
+      updateAuthCardModal({
+        busy: "",
+        error:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to confirm authenticity card action.",
+      });
+    }
+  }, [authCardModal, getAccessToken, loadData, updateAuthCardModal]);
 
   const handleDeleteProduct = useCallback(
     async (product: InventoryProduct) => {
@@ -610,7 +853,7 @@ export default function AdminProducts() {
 
       {productsNotice && (
         <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
+          className={`rounded-2xl border px-4 py-3 text-sm ${
             productsNotice.tone === "error"
               ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300"
               : productsNotice.tone === "info"
@@ -623,7 +866,7 @@ export default function AdminProducts() {
       )}
 
       {(productCreateBlocked || productEditBlocked || productDeleteBlocked) && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           Some product write actions are currently restricted.
         </div>
       )}
@@ -658,16 +901,16 @@ export default function AdminProducts() {
       {loading && (
         <div className="space-y-4">
           {/* stat skeleton */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-2">
+              <div key={i} className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 space-y-2">
                 <div className="h-3 w-20 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
                 <div className="h-6 w-28 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
               </div>
             ))}
           </div>
           {/* table skeleton */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+          <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60">
               <div className="h-4 w-32 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
             </div>
@@ -691,7 +934,7 @@ export default function AdminProducts() {
 
       {/* ───── error state ───── */}
       {!loading && error && (
-        <div className="flex items-start gap-3 px-4 py-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl">
+        <div className="flex items-start gap-3 px-4 py-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-2xl">
           <AlertTriangleIcon className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-red-800 dark:text-red-200">Failed to load products</p>
@@ -711,7 +954,7 @@ export default function AdminProducts() {
         <>
           {/* media hint */}
           {mediaHint && (
-            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl">
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-2xl">
               <svg className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -719,13 +962,13 @@ export default function AdminProducts() {
             </div>
           )}
 
-          <div className="rounded-xl border border-blue-200 dark:border-blue-700/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+          <div className="rounded-2xl border border-blue-200 dark:border-blue-700/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
             Quick visibility now calls the dedicated admin route directly. A `202` response is
             treated as a successful submission pending main admin approval.
           </div>
 
           {selectedQuickProduct && (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-5">
+            <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-white dark:bg-gray-800/80 shadow-sm dark:shadow-none p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -747,10 +990,10 @@ export default function AdminProducts() {
                 </button>
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_280px] lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                  <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                         Current Visibility
                       </p>
@@ -758,7 +1001,7 @@ export default function AdminProducts() {
                         {toVisibilityLabel(selectedQuickMeta?.visibility)}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                    <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                         Product Tier
                       </p>
@@ -766,7 +1009,7 @@ export default function AdminProducts() {
                         {selectedQuickMeta?.tier || "-"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                    <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                         Customer Tier
                       </p>
@@ -774,7 +1017,7 @@ export default function AdminProducts() {
                         {selectedQuickMeta?.minCustomerTier || "None"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
+                    <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                         Visibility Note
                       </p>
@@ -791,7 +1034,7 @@ export default function AdminProducts() {
                     <select
                       value={quickVisibilityChoice}
                       onChange={(event) => setQuickVisibilityChoice(event.target.value)}
-                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                      className="mt-2 w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 bg-white dark:bg-gray-800/80 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
                     >
                       {quickVisibilityChoices.map((choice) => (
                         <option key={choice.value} value={choice.value}>
@@ -814,7 +1057,7 @@ export default function AdminProducts() {
                       <select
                         value={quickVisibilityTargetTier}
                         onChange={(event) => setQuickVisibilityTargetTier(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                        className="mt-2 w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 bg-white dark:bg-gray-800/80 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
                       >
                         <option value="">Select tier</option>
                         <option value="REGULAR">REGULAR</option>
@@ -843,7 +1086,7 @@ export default function AdminProducts() {
                       value={quickVisibilityNote}
                       onChange={(event) => setQuickVisibilityNote(event.target.value)}
                       placeholder="Optional visibility note"
-                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                      className="mt-2 w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 bg-white dark:bg-gray-800/80 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
                     />
                   </div>
 
@@ -856,12 +1099,12 @@ export default function AdminProducts() {
                       onChange={(event) => setQuickVisibilityReason(event.target.value)}
                       rows={3}
                       placeholder="Optional reason for the approval trail"
-                      className="mt-2 w-full rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500"
+                      className="mt-2 w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 bg-white dark:bg-gray-800/80 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
                     />
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/40 p-4">
+                <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/40 p-4">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     Approval Flow
                   </h3>
@@ -876,7 +1119,7 @@ export default function AdminProducts() {
                     }}
                     disabled={savingQuickVisibility || productVisibilityBlocked}
                     title={productVisibilityBlocked ? productVisibilityTooltip : undefined}
-                    className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {savingQuickVisibility ? "Saving..." : "Apply Quick Visibility"}
                   </button>
@@ -900,8 +1143,8 @@ export default function AdminProducts() {
           )}
 
           {/* ───── stat cards ───── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex items-start gap-3">
               <div className="shrink-0 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
                 <PackageIcon className="w-4 h-4" />
               </div>
@@ -911,7 +1154,7 @@ export default function AdminProducts() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex items-start gap-3">
               <div className="shrink-0 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
                 <TagIcon className="w-4 h-4" />
               </div>
@@ -923,7 +1166,7 @@ export default function AdminProducts() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex items-start gap-3">
               <div className="shrink-0 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
                 <TrendingUpIcon className="w-4 h-4" />
               </div>
@@ -935,7 +1178,7 @@ export default function AdminProducts() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 flex items-start gap-3">
+            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 sm:p-5 flex items-start gap-3">
               <div className="shrink-0 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
                 <DollarIcon className="w-4 h-4" />
               </div>
@@ -949,9 +1192,9 @@ export default function AdminProducts() {
           </div>
 
           {/* ───── product table (desktop) ───── */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Inventory</h2>
+          <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Inventory</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">{analytics.inventory.length} product(s)</p>
             </div>
 
@@ -980,16 +1223,19 @@ export default function AdminProducts() {
               <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                      <th className="px-5 py-3 font-medium">Product</th>
-                      <th className="px-5 py-3 font-medium">Status</th>
-                      <th className="px-5 py-3 font-medium">Visibility</th>
-                      <th className="px-5 py-3 font-medium">Buy Price</th>
-                      <th className="px-5 py-3 font-medium">Sale Range</th>
-                      <th className="px-5 py-3 font-medium">Allocation Rate</th>
-                      <th className="px-5 py-3 font-medium">Net Profit Range</th>
-                      <th className="px-5 py-3 font-medium">Rows</th>
-                      <th className="px-5 py-3 font-medium">Actions</th>
+                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/40">
+                      <th className="px-5 py-3">Product</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Visibility</th>
+                      <th className="px-5 py-3">Buy Price</th>
+                      <th className="px-5 py-3">Sale Range</th>
+                      <th className="px-5 py-3 hidden xl:table-cell">Allocation Rate</th>
+                      <th className="px-5 py-3">Net Profit Range</th>
+                      <th className="px-5 py-3 hidden xl:table-cell">Rows</th>
+                      {showAuthenticityUrl ? (
+                        <th className="px-5 py-3 hidden xl:table-cell">Authenticity URL</th>
+                      ) : null}
+                      <th className="px-5 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -997,11 +1243,17 @@ export default function AdminProducts() {
                       const productImage = mediaByProductId[item.id];
                       const productImageUrl = productImage?.url || "";
                       const productMeta = productMetaById[item.id];
+                      const authenticityMeta = authenticityByProductId[item.id];
+                      const authenticityUrl = toAuthenticityUrl(
+                        authenticityMeta?.authenticityPath,
+                      );
+                      const hasActiveAuthenticityCard =
+                        authenticityMeta?.authCardStatus === "ACTIVE";
 
                       return (
                         <tr
                           key={item.id}
-                          className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-gray-800/50 transition-colors"
+                          className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors"
                         >
                           <td className="px-5 py-3">
                             <Link href={`${dashboardBasePath}/products/${item.id}`} className="group">
@@ -1052,15 +1304,47 @@ export default function AdminProducts() {
                           <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {moneyRange(item.pricing.saleMinPrice, item.pricing.saleMaxPrice)}
                           </td>
-                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
+                          <td className="px-5 py-3 text-gray-700 dark:text-gray-300 hidden xl:table-cell">
                             {Number(item.commission.allocationRateTotal || 0).toFixed(2)}%
                           </td>
                           <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                             {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
                           </td>
-                          <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{item.commission.allocations.length}</td>
+                          <td className="px-5 py-3 text-gray-500 dark:text-gray-400 hidden xl:table-cell">{item.commission.allocations.length}</td>
+                          {showAuthenticityUrl ? (
+                            <td className="px-5 py-3 hidden xl:table-cell">
+                              {authenticityUrl ? (
+                                <div className="max-w-[260px]">
+                                  <a
+                                    href={authenticityUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block truncate text-xs font-mono text-emerald-700 dark:text-emerald-300 hover:underline"
+                                    title={authenticityUrl}
+                                  >
+                                    {authenticityUrl}
+                                  </a>
+                                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                                    Token: {authenticityMeta?.authenticityToken || "-"}
+                                  </p>
+                                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                                    Status: {authenticityMeta?.authCardStatus || "-"} | Serial:{" "}
+                                    {authenticityMeta?.authCardSerial || "-"}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-400 dark:text-gray-500">
+                                  <p>Unavailable</p>
+                                  <p className="mt-1">
+                                    Status: {authenticityMeta?.authCardStatus || "-"} | Serial:{" "}
+                                    {authenticityMeta?.authCardSerial || "-"}
+                                  </p>
+                                </div>
+                              )}
+                            </td>
+                          ) : null}
                           <td className="px-5 py-3">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               {productEditBlocked ? (
                                 <span
                                   title={productEditTooltip}
@@ -1086,6 +1370,38 @@ export default function AdminProducts() {
                               >
                                 Quick Visibility
                               </button>
+                              {showAuthenticityUrl
+                                ? AUTH_CARD_ACTION_OPTIONS.map((action) => {
+                                    const requiresActiveCard =
+                                      action === "REPLACE" || action === "REVOKE";
+                                    const disabled =
+                                      productEditBlocked ||
+                                      (requiresActiveCard && !hasActiveAuthenticityCard);
+
+                                    return (
+                                      <button
+                                        key={`${item.id}-${action}`}
+                                        type="button"
+                                        onClick={() => openAuthCardModal(item, action)}
+                                        disabled={disabled}
+                                        title={
+                                          disabled
+                                            ? productEditBlocked
+                                              ? productEditTooltip
+                                              : "This action requires an active authenticity card."
+                                            : undefined
+                                        }
+                                        className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {action === "REGENERATE"
+                                          ? "Regen"
+                                          : action === "REPLACE"
+                                            ? "Replace"
+                                            : "Revoke"}
+                                      </button>
+                                    );
+                                  })
+                                : null}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1109,21 +1425,27 @@ export default function AdminProducts() {
 
             {/* mobile / tablet card view */}
             {totalProducts > 0 && (
-              <div className="lg:hidden divide-y divide-gray-100">
+              <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
                 {analytics.inventory.map((item) => {
                   const productImage = mediaByProductId[item.id];
                   const productImageUrl = productImage?.url || "";
                   const productMeta = productMetaById[item.id];
+                  const authenticityMeta = authenticityByProductId[item.id];
+                  const authenticityUrl = toAuthenticityUrl(
+                    authenticityMeta?.authenticityPath,
+                  );
+                  const hasActiveAuthenticityCard =
+                    authenticityMeta?.authCardStatus === "ACTIVE";
 
                   return (
-                    <div key={item.id} className="px-4 py-4">
-                      <div className="flex items-start gap-3">
+                    <div key={item.id} className="px-4 py-4 sm:px-5 hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors">
+                      <div className="flex items-start gap-3 sm:gap-4">
                         {/* image */}
                         <Link
                           href={`${dashboardBasePath}/products/${item.id}`}
                           className="shrink-0"
                         >
-                          <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden border border-gray-200 dark:border-gray-700/60 flex items-center justify-center">
+                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden border border-gray-200/80 dark:border-gray-700/50 flex items-center justify-center">
                             {productImageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -1159,7 +1481,7 @@ export default function AdminProducts() {
                           </div>
 
                           {/* details grid */}
-                          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs">
                             <div>
                               <span className="text-gray-400 dark:text-gray-500">Visibility:</span>{" "}
                               <span className="text-gray-700 dark:text-gray-300 font-medium">
@@ -1188,10 +1510,38 @@ export default function AdminProducts() {
                                 {moneyRange(item.estimate.netProfitMin, item.estimate.netProfitMax)}
                               </span>
                             </div>
+                            {showAuthenticityUrl ? (
+                              <div className="col-span-2">
+                                <span className="text-gray-400 dark:text-gray-500">
+                                  Authenticity URL:
+                                </span>{" "}
+                                {authenticityUrl ? (
+                                  <>
+                                    <a
+                                      href={authenticityUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="font-mono text-emerald-700 dark:text-emerald-300 hover:underline"
+                                    >
+                                      {authenticityUrl}
+                                    </a>
+                                    <span className="ml-2 text-gray-500 dark:text-gray-400">
+                                      ({authenticityMeta?.authCardStatus || "-"} /{" "}
+                                      {authenticityMeta?.authCardSerial || "-"})
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-gray-500 dark:text-gray-400">
+                                    Unavailable ({authenticityMeta?.authCardStatus || "-"} /{" "}
+                                    {authenticityMeta?.authCardSerial || "-"})
+                                  </span>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
 
                           {/* actions */}
-                          <div className="mt-3 flex items-center gap-2">
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -1202,6 +1552,34 @@ export default function AdminProducts() {
                             >
                               Quick Visibility
                             </button>
+                            {showAuthenticityUrl
+                              ? AUTH_CARD_ACTION_OPTIONS.map((action) => {
+                                  const requiresActiveCard =
+                                    action === "REPLACE" || action === "REVOKE";
+                                  const disabled =
+                                    productEditBlocked ||
+                                    (requiresActiveCard && !hasActiveAuthenticityCard);
+
+                                  return (
+                                    <button
+                                      key={`${item.id}-mobile-${action}`}
+                                      type="button"
+                                      onClick={() => openAuthCardModal(item, action)}
+                                      disabled={disabled}
+                                      title={
+                                        disabled
+                                          ? productEditBlocked
+                                            ? productEditTooltip
+                                            : "This action requires an active authenticity card."
+                                          : undefined
+                                      }
+                                      className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {getAuthCardActionLabel(action)}
+                                    </button>
+                                  );
+                                })
+                              : null}
                             {productEditBlocked ? (
                               <span
                                 title={productEditTooltip}
@@ -1239,6 +1617,147 @@ export default function AdminProducts() {
           </div>
         </>
       )}
+
+      {authCardModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xl dark:border-gray-700/50 dark:bg-gray-800/95">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {getAuthCardActionLabel(authCardModal.action)}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {authCardModal.productLabel}
+                </p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Confirm this product card action with your admin email OTP first.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAuthCardModal}
+                disabled={authCardModal.busy === "submit"}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[12px] text-gray-700 dark:text-gray-300">
+                  Reason
+                </label>
+                <textarea
+                  value={authCardModal.reason}
+                  onChange={(event) =>
+                    updateAuthCardModal({
+                      reason: event.target.value,
+                    })
+                  }
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700/50 dark:bg-gray-800/80 dark:text-gray-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 outline-none"
+                  placeholder="Optional note for this card action"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-gray-200/80 bg-gray-50 p-4 dark:border-gray-700/50 dark:bg-gray-800/40">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Email Verification
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {authCardModal.maskedEmail
+                        ? `Code sent to ${authCardModal.maskedEmail}`
+                        : "Send a 6 digit OTP to your admin email."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void sendAuthCardOtp();
+                    }}
+                    disabled={authCardModal.busy === "send" || authCardModal.busy === "submit"}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                  >
+                    {authCardModal.busy === "send"
+                      ? "Sending..."
+                      : authCardModal.challengeId
+                        ? "Resend OTP"
+                        : "Send OTP"}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={authCardModal.otp}
+                    onChange={(event) =>
+                      updateAuthCardModal({
+                        otp: normalizeOtpInput(event.target.value),
+                        verified: false,
+                      })
+                    }
+                    placeholder="6 digit code"
+                    className="w-full rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700/50 dark:bg-gray-800/80 dark:text-gray-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void verifyAuthCardOtp();
+                    }}
+                    disabled={
+                      authCardModal.busy === "verify" ||
+                      authCardModal.busy === "submit" ||
+                      authCardModal.otp.length !== 6 ||
+                      !authCardModal.challengeId
+                    }
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {authCardModal.busy === "verify" ? "Verifying..." : "Verify OTP"}
+                  </button>
+                </div>
+              </div>
+
+              {authCardModal.error ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-300">
+                  {authCardModal.error}
+                </div>
+              ) : null}
+
+              {authCardModal.info ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  {authCardModal.info}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeAuthCardModal}
+                  disabled={authCardModal.busy === "submit"}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void submitAuthCardAction();
+                  }}
+                  disabled={!authCardModal.verified || authCardModal.busy === "submit"}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {authCardModal.busy === "submit"
+                    ? "Submitting..."
+                    : getAuthCardActionLabel(authCardModal.action)}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

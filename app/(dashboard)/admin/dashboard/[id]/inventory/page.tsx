@@ -226,8 +226,8 @@ export default function AdminInventory() {
         })}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <input
             type="text"
             value={draftFilters.statusCsv}
@@ -338,8 +338,8 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Inventory Requests</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {currentPageStart}-{currentPageEnd} of {total}
@@ -359,15 +359,15 @@ export default function AdminInventory() {
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700/60">
-                    <th className="px-5 py-3 font-medium">Request</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Branch</th>
-                    <th className="px-5 py-3 font-medium">Product</th>
-                    <th className="px-5 py-3 font-medium">Requested By</th>
-                    <th className="px-5 py-3 font-medium">Appointment</th>
-                    <th className="px-5 py-3 font-medium">Created</th>
-                    <th className="px-5 py-3 font-medium">Source</th>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/40">
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Request</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Status</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Branch</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Product</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Requested By</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Appointment</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Created</th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Source</th>
                   </tr>
                 </thead>
                 <tbody>

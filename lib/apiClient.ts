@@ -415,6 +415,112 @@ export type UserMeResponse = {
   raw: unknown;
 };
 
+export type OwnershipClaimRecord = {
+  id: string;
+  productId: string | null;
+  userId: string | null;
+  cardId: string | null;
+  status: string | null;
+  requestedAt: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  raw: JsonRecord;
+};
+
+export type OwnershipOtpChallengeRecord = {
+  id: string;
+  purpose: string | null;
+  productId: string | null;
+  cardId: string | null;
+  claimId: string | null;
+  maskedEmail: string | null;
+  expiresAt: string | null;
+  createdAt: string | null;
+  raw: JsonRecord;
+};
+
+export type OwnershipClaimOtpResponse = {
+  message: string | null;
+  code: string | null;
+  claim: OwnershipClaimRecord | null;
+  challenge: OwnershipOtpChallengeRecord | null;
+  data: JsonRecord | null;
+  raw: unknown;
+};
+
+export type AuthenticityProductMediaRecord = {
+  id: string;
+  type: string | null;
+  url: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  raw: JsonRecord;
+};
+
+export type AuthenticityOwnershipRecord = {
+  id: string | null;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  claimedAt: string | null;
+  endedAt: string | null;
+  endReason: string | null;
+  notes: string | null;
+  cardSerial: string | null;
+  isCurrent: boolean;
+  isDefaultCompanyOwner: boolean;
+  raw: JsonRecord;
+};
+
+export type AuthenticityRecord = {
+  token: string;
+  authCard: {
+    id: string | null;
+    status: string | null;
+    cardSerial: string | null;
+    issuedAt: string | null;
+    revokedAt: string | null;
+    replacedAt: string | null;
+  };
+  product: {
+    id: string;
+    sku: string | null;
+    name: string | null;
+    color: string | null;
+    origin: string | null;
+    description: string | null;
+    weight: number | null;
+    weightUnit: string | null;
+    length: number | null;
+    depth: number | null;
+    height: number | null;
+    totalMassGram: number | null;
+    refractiveIndex: string | null;
+    densityGPerCm3: string | null;
+    uvVisSpectrumNm: string | null;
+    cutAndShape: string | null;
+    measurementMm: string | null;
+    tier: string | null;
+    status: string | null;
+    media: AuthenticityProductMediaRecord[];
+  };
+  certificate: {
+    fileUrl: string | null;
+    mediaId: string | null;
+  };
+  ownership: {
+    current: AuthenticityOwnershipRecord | null;
+    history: AuthenticityOwnershipRecord[];
+  };
+  claim: {
+    canClaim: boolean;
+    blockedCode: string | null;
+    blockedReason: string | null;
+    latestClaim: OwnershipClaimRecord | null;
+    saleConfirmedAt: string | null;
+  };
+  raw: unknown;
+};
+
 export type BlockedAccountSnapshot = {
   code: string | null;
   message: string | null;
@@ -447,6 +553,9 @@ export type AdminApprovalActionType =
   | "STAFF_RULE_REVOKE";
 export type AdminApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type AdminApprovalDecision = "APPROVE" | "REJECT";
+export type AdminAuthCardAction = "REGENERATE" | "REVOKE" | "REPLACE";
+export type AdminEmailOtpPurpose = "AUTH_CARD_ACTION_REQUEST" | "AUTH_CARD_ACTION_APPROVAL";
+export type AdminEmailOtpStatus = "PENDING" | "VERIFIED" | "CONSUMED" | "EXPIRED" | "CANCELLED";
 
 export type AdminUserReference = {
   id: string;
@@ -565,6 +674,32 @@ export type AdminActionResponse = {
   request: AdminApprovalRequest | null;
   executionResult: unknown;
   data: JsonRecord | null;
+  raw: unknown;
+};
+
+export type AdminEmailOtpChallenge = {
+  id: string;
+  purpose: AdminEmailOtpPurpose | string | null;
+  authCardAction: AdminAuthCardAction | string | null;
+  productId: string | null;
+  approvalRequestId: string | null;
+  email: string | null;
+  maskedEmail: string | null;
+  status: AdminEmailOtpStatus | string | null;
+  expiresAt: string | null;
+  lastSentAt: string | null;
+  verifiedAt: string | null;
+  consumedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  raw: JsonRecord;
+};
+
+export type AdminEmailOtpChallengeResponse = {
+  message: string | null;
+  code: string | null;
+  challenge: AdminEmailOtpChallenge | null;
   raw: unknown;
 };
 
@@ -819,6 +954,10 @@ export type AdminProductRecord = {
   consignmentRate: number | null;
   consignmentAgreementId: string | null;
   consignmentContractMediaId: string | null;
+  authenticityToken: string | null;
+  authenticityPath: string | null;
+  authCardStatus: string | null;
+  authCardSerial: string | null;
   thumbnailImageId: string | null;
   featureVideoId: string | null;
   galleryImageIds: string[];
@@ -1814,6 +1953,180 @@ const normalizeAdminUserReference = (value: unknown): AdminInventoryRequestUser 
   };
 };
 
+const normalizeOwnershipClaimRecord = (
+  payload: unknown,
+): OwnershipClaimRecord | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    productId: asNullableString(row?.productId),
+    userId: asNullableString(row?.userId),
+    cardId: asNullableString(row?.cardId),
+    status: asNullableString(row?.status),
+    requestedAt: asNullableString(row?.requestedAt),
+    decidedAt: asNullableString(row?.decidedAt),
+    decisionNote: asNullableString(row?.decisionNote),
+    raw: row ?? {},
+  };
+};
+
+const normalizeOwnershipOtpChallengeRecord = (
+  payload: unknown,
+): OwnershipOtpChallengeRecord | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    purpose: asNullableString(row?.purpose),
+    productId: asNullableString(row?.productId),
+    cardId: asNullableString(row?.cardId),
+    claimId: asNullableString(row?.claimId),
+    maskedEmail: asNullableString(row?.maskedEmail),
+    expiresAt: asNullableString(row?.expiresAt),
+    createdAt: asNullableString(row?.createdAt),
+    raw: row ?? {},
+  };
+};
+
+const normalizeOwnershipClaimOtpResponse = (
+  payload: unknown,
+): OwnershipClaimOtpResponse => {
+  const root = asRecord(payload);
+
+  return {
+    message: asNullableString(root?.message),
+    code: asNullableString(root?.code),
+    claim: normalizeOwnershipClaimRecord(root?.claim),
+    challenge: normalizeOwnershipOtpChallengeRecord(root?.challenge),
+    data: root,
+    raw: payload,
+  };
+};
+
+const normalizeAuthenticityMediaRecord = (
+  payload: unknown,
+): AuthenticityProductMediaRecord | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    type: asNullableString(row?.type),
+    url: asNullableString(row?.url),
+    mimeType: asNullableString(row?.mimeType),
+    sizeBytes: asFiniteNumber(row?.sizeBytes),
+    raw: row ?? {},
+  };
+};
+
+const normalizeAuthenticityOwnershipRecord = (
+  payload: unknown,
+): AuthenticityOwnershipRecord | null => {
+  const row = asRecord(payload);
+
+  return {
+    id: asNullableString(row?.id),
+    ownerUserId: asNullableString(row?.ownerUserId),
+    ownerName: asNullableString(row?.ownerName),
+    claimedAt: asNullableString(row?.claimedAt),
+    endedAt: asNullableString(row?.endedAt),
+    endReason: asNullableString(row?.endReason),
+    notes: asNullableString(row?.notes),
+    cardSerial: asNullableString(row?.cardSerial),
+    isCurrent: row?.isCurrent === true,
+    isDefaultCompanyOwner: row?.isDefaultCompanyOwner === true,
+    raw: row ?? {},
+  };
+};
+
+const normalizeAuthenticityRecord = (
+  payload: unknown,
+): AuthenticityRecord | null => {
+  const root = asRecord(payload);
+  const token = asString(root?.token);
+  const product = asRecord(root?.product);
+  const productId = asString(product?.id);
+
+  if (!token || !productId) {
+    return null;
+  }
+
+  const authCard = asRecord(root?.authCard);
+  const certificate = asRecord(root?.certificate);
+  const ownership = asRecord(root?.ownership);
+  const claim = asRecord(root?.claim);
+
+  return {
+    token,
+    authCard: {
+      id: asNullableString(authCard?.id),
+      status: asNullableString(authCard?.status),
+      cardSerial: asNullableString(authCard?.cardSerial),
+      issuedAt: asNullableString(authCard?.issuedAt),
+      revokedAt: asNullableString(authCard?.revokedAt),
+      replacedAt: asNullableString(authCard?.replacedAt),
+    },
+    product: {
+      id: productId,
+      sku: asNullableString(product?.sku),
+      name: asNullableString(product?.name),
+      color: asNullableString(product?.color),
+      origin: asNullableString(product?.origin),
+      description: asNullableString(product?.description),
+      weight: asFiniteNumberish(product?.weight),
+      weightUnit: asNullableString(product?.weightUnit),
+      length: asFiniteNumberish(product?.length),
+      depth: asFiniteNumberish(product?.depth),
+      height: asFiniteNumberish(product?.height),
+      totalMassGram: asFiniteNumberish(product?.totalMassGram),
+      refractiveIndex: asNullableString(product?.refractiveIndex),
+      densityGPerCm3: asNullableString(product?.densityGPerCm3),
+      uvVisSpectrumNm: asNullableString(product?.uvVisSpectrumNm),
+      cutAndShape: asNullableString(product?.cutAndShape),
+      measurementMm: asNullableString(product?.measurementMm),
+      tier: asNullableString(product?.tier),
+      status: asNullableString(product?.status),
+      media: Array.isArray(product?.media)
+        ? product.media
+            .map((entry) => normalizeAuthenticityMediaRecord(entry))
+            .filter((entry): entry is AuthenticityProductMediaRecord => Boolean(entry))
+        : [],
+    },
+    certificate: {
+      fileUrl: asNullableString(certificate?.fileUrl),
+      mediaId: asNullableString(certificate?.mediaId),
+    },
+    ownership: {
+      current: normalizeAuthenticityOwnershipRecord(ownership?.current),
+      history: Array.isArray(ownership?.history)
+        ? ownership.history
+            .map((entry) => normalizeAuthenticityOwnershipRecord(entry))
+            .filter((entry): entry is AuthenticityOwnershipRecord => Boolean(entry))
+        : [],
+    },
+    claim: {
+      canClaim: claim?.canClaim === true,
+      blockedCode: asNullableString(claim?.blockedCode),
+      blockedReason: asNullableString(claim?.blockedReason),
+      latestClaim: normalizeOwnershipClaimRecord(claim?.latestClaim),
+      saleConfirmedAt: asNullableString(claim?.saleConfirmedAt),
+    },
+    raw: payload,
+  };
+};
+
 const normalizeAdminUserBranchMembership = (
   value: unknown,
 ): AdminUserBranchMembership | null => {
@@ -2177,6 +2490,53 @@ const normalizeAdminActionResponse = (
   };
 };
 
+const normalizeAdminEmailOtpChallenge = (value: unknown): AdminEmailOtpChallenge | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    purpose: asNullableString(row.purpose),
+    authCardAction: asNullableString(row.authCardAction),
+    productId: asNullableString(row.productId),
+    approvalRequestId: asNullableString(row.approvalRequestId),
+    email: asNullableString(row.email),
+    maskedEmail: asNullableString(row.maskedEmail),
+    status: asNullableString(row.status),
+    expiresAt: asNullableString(row.expiresAt),
+    lastSentAt: asNullableString(row.lastSentAt),
+    verifiedAt: asNullableString(row.verifiedAt),
+    consumedAt: asNullableString(row.consumedAt),
+    cancelledAt: asNullableString(row.cancelledAt),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    raw: row,
+  };
+};
+
+const normalizeAdminEmailOtpChallengeResponse = (
+  payload: unknown,
+): AdminEmailOtpChallengeResponse => {
+  const root = asRecord(payload) ?? {};
+
+  return {
+    message: asNullableString(root.message),
+    code: asNullableString(root.code),
+    challenge:
+      normalizeAdminEmailOtpChallenge(root.challenge) ||
+      normalizeAdminEmailOtpChallenge(root.data) ||
+      normalizeAdminEmailOtpChallenge(payload),
+    raw: payload,
+  };
+};
+
 const normalizeAdminCustomerRow = (value: unknown): AdminCustomerListItem | null => {
   const row = asRecord(value);
   if (!row) {
@@ -2511,6 +2871,10 @@ const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => 
     consignmentRate: asFiniteNumberish(row.consignmentRate),
     consignmentAgreementId: asNullableString(row.consignmentAgreementId),
     consignmentContractMediaId: asNullableString(row.consignmentContractMediaId),
+    authenticityToken: asNullableString(row.authenticityToken),
+    authenticityPath: asNullableString(row.authenticityPath),
+    authCardStatus: asNullableString(row.authCardStatus),
+    authCardSerial: asNullableString(row.authCardSerial),
     thumbnailImageId:
       asNullableString(publicMedia?.thumbnailMediaId) ??
       asNullableString(row.thumbnailImageId),
@@ -3447,6 +3811,93 @@ export const getAdminProductDetail = async ({
   return product;
 };
 
+export const startAdminProductAuthCardOtp = async ({
+  accessToken,
+  productId,
+  action,
+}: {
+  accessToken: string;
+  productId: string;
+  action: AdminAuthCardAction | string;
+}): Promise<AdminEmailOtpChallengeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/auth-card-otp/start`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      authCardAction: asString(action).toUpperCase(),
+    }),
+    fallbackErrorMessage: "Failed to send product authenticity OTP.",
+  });
+
+  return normalizeAdminEmailOtpChallengeResponse(payload);
+};
+
+export const verifyAdminProductAuthCardOtp = async ({
+  accessToken,
+  productId,
+  action,
+  challengeId,
+  otp,
+}: {
+  accessToken: string;
+  productId: string;
+  action: AdminAuthCardAction | string;
+  challengeId: string;
+  otp: string;
+}): Promise<AdminEmailOtpChallengeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/auth-card-otp/verify`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      authCardAction: asString(action).toUpperCase(),
+      challengeId,
+      otp,
+    }),
+    fallbackErrorMessage: "Failed to verify product authenticity OTP.",
+  });
+
+  return normalizeAdminEmailOtpChallengeResponse(payload);
+};
+
+export const submitAdminProductAuthCardAction = async ({
+  accessToken,
+  productId,
+  action,
+  challengeId,
+  reason,
+}: {
+  accessToken: string;
+  productId: string;
+  action: AdminAuthCardAction | string;
+  challengeId: string;
+  reason?: string | null;
+}): Promise<AdminActionResponse> => {
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/auth-card/actions`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      authCardAction: asString(action).toUpperCase(),
+      otpChallengeId: challengeId,
+      ...(reason ? { reason: reason.trim() } : {}),
+    }),
+    fallbackErrorMessage: "Failed to submit authenticity card action.",
+  });
+
+  return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
 export const getAdminInventoryProfitAnalytics = async ({
   accessToken,
   includeSold,
@@ -3597,6 +4048,165 @@ export const getUserMe = async ({
       raw: payload,
     };
   });
+};
+
+export const getUserAuthenticityRecord = async ({
+  accessToken,
+  authenticityToken,
+}: {
+  accessToken: string;
+  authenticityToken: string;
+}): Promise<AuthenticityRecord> => {
+  const trimmedToken = authenticityToken.trim();
+  if (!trimmedToken) {
+    throw new ApiClientError({
+      message: "Authenticity token is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  return runWithInFlightDeduplication(
+    `getUserAuthenticityRecord:${trimmedToken}:${accessToken}`,
+    async () => {
+      const payload = await fetchJson({
+        path: `${API_BASE_PATH}/user/authenticity/${encodeURIComponent(trimmedToken)}`,
+        method: "GET",
+        accessToken,
+        fallbackErrorMessage: "Failed to load authenticity record.",
+      });
+
+      const record = normalizeAuthenticityRecord(payload);
+      if (!record) {
+        throw new ApiClientError({
+          message: "Invalid authenticity response.",
+          status: 500,
+          payload,
+        });
+      }
+
+      return record;
+    },
+  );
+};
+
+export const createCustomerOwnershipClaim = async ({
+  accessToken,
+  productId,
+  cardToken,
+}: {
+  accessToken: string;
+  productId?: string | null;
+  cardToken?: string | null;
+}): Promise<OwnershipClaimRecord> => {
+  const normalizedProductId = asNullableString(productId);
+  const normalizedCardToken = asNullableString(cardToken);
+
+  if (!normalizedProductId && !normalizedCardToken) {
+    throw new ApiClientError({
+      message: "productId or cardToken is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/customer/me/ownership/claims`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...(normalizedProductId ? { productId: normalizedProductId } : {}),
+      ...(normalizedCardToken ? { cardToken: normalizedCardToken } : {}),
+    }),
+    fallbackErrorMessage: "Failed to submit ownership claim.",
+  });
+
+  const record = normalizeOwnershipClaimRecord(payload);
+  if (!record) {
+    throw new ApiClientError({
+      message: "Invalid ownership claim response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return record;
+};
+
+export const startCustomerOwnershipClaimOtp = async ({
+  accessToken,
+  productId,
+  cardToken,
+}: {
+  accessToken: string;
+  productId?: string | null;
+  cardToken?: string | null;
+}): Promise<OwnershipClaimOtpResponse> => {
+  const normalizedProductId = asNullableString(productId);
+  const normalizedCardToken = asNullableString(cardToken);
+
+  if (!normalizedProductId && !normalizedCardToken) {
+    throw new ApiClientError({
+      message: "productId or cardToken is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/customer/me/ownership/claims/otp/start`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...(normalizedProductId ? { productId: normalizedProductId } : {}),
+      ...(normalizedCardToken ? { cardToken: normalizedCardToken } : {}),
+    }),
+    fallbackErrorMessage: "Failed to send ownership verification code.",
+  });
+
+  return normalizeOwnershipClaimOtpResponse(payload);
+};
+
+export const verifyCustomerOwnershipClaimOtp = async ({
+  accessToken,
+  challengeId,
+  otp,
+}: {
+  accessToken: string;
+  challengeId: string;
+  otp: string;
+}): Promise<OwnershipClaimOtpResponse> => {
+  const normalizedChallengeId = asString(challengeId);
+
+  if (!normalizedChallengeId) {
+    throw new ApiClientError({
+      message: "challengeId is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/customer/me/ownership/claims/otp/verify`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      challengeId: normalizedChallengeId,
+      otp: asString(otp),
+    }),
+    fallbackErrorMessage: "Failed to verify ownership code.",
+  });
+
+  return normalizeOwnershipClaimOtpResponse(payload);
 };
 
 export const getAdminUserDetail = async ({
@@ -4161,6 +4771,7 @@ export const decideAdminApprovalRequest = async ({
   decision,
   decisionNote,
   enableAutoApproveForFuture,
+  otpChallengeId,
   overrides,
 }: {
   accessToken: string;
@@ -4168,6 +4779,7 @@ export const decideAdminApprovalRequest = async ({
   decision: AdminApprovalDecision | string;
   decisionNote?: string;
   enableAutoApproveForFuture?: boolean;
+  otpChallengeId?: string;
   overrides?: Record<string, unknown>;
 }): Promise<AdminActionResponse> => {
   const response = await fetchJsonResponse({
@@ -4183,12 +4795,62 @@ export const decideAdminApprovalRequest = async ({
       ...(typeof enableAutoApproveForFuture === "boolean"
         ? { enableAutoApproveForFuture }
         : {}),
+      ...(otpChallengeId ? { otpChallengeId } : {}),
       ...(overrides ?? {}),
     }),
     fallbackErrorMessage: "Failed to decide approval request.",
   });
 
   return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const startAdminApprovalRequestAuthCardOtp = async ({
+  accessToken,
+  requestId,
+}: {
+  accessToken: string;
+  requestId: string;
+}): Promise<AdminEmailOtpChallengeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/approval-requests/${encodeURIComponent(requestId)}/auth-card-otp/start`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+    fallbackErrorMessage: "Failed to send approval OTP.",
+  });
+
+  return normalizeAdminEmailOtpChallengeResponse(payload);
+};
+
+export const verifyAdminApprovalRequestAuthCardOtp = async ({
+  accessToken,
+  requestId,
+  challengeId,
+  otp,
+}: {
+  accessToken: string;
+  requestId: string;
+  challengeId: string;
+  otp: string;
+}): Promise<AdminEmailOtpChallengeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/approval-requests/${encodeURIComponent(requestId)}/auth-card-otp/verify`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      challengeId,
+      otp,
+    }),
+    fallbackErrorMessage: "Failed to verify approval OTP.",
+  });
+
+  return normalizeAdminEmailOtpChallengeResponse(payload);
 };
 
 export const decideAdminBranchProductApprovalRequest = async ({

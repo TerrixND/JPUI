@@ -10,16 +10,21 @@ import {
 } from "@/lib/apiClient";
 import {
   isAuthBlockedError,
+  completePendingSetupForSession,
   precheckLogin,
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
+import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
 
 const LoginPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
+  const signupHref = buildAuthRouteWithReturnTo("/signup", returnTo);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,6 +63,11 @@ const LoginPage = () => {
         throw new Error(signInError?.message || "Unable to login.");
       }
 
+      await completePendingSetupForSession({
+        accessToken: data.session.access_token,
+        email: data.session.user?.email || normalizedEmail,
+      });
+
       try {
         await getUserMe({
           accessToken: data.session.access_token,
@@ -76,7 +86,7 @@ const LoginPage = () => {
         throw error;
       }
 
-      router.replace("/");
+      router.replace(returnTo);
       router.refresh();
     } catch (err) {
       if (isAuthBlockedError(err)) {
@@ -139,7 +149,7 @@ const LoginPage = () => {
 
         <div className="w-full flex gap-3 mt-5 flex-wrap">
           <Link
-            href={"/signup"}
+            href={signupHref}
             className="
       flex-1 min-w-40
       group
@@ -167,7 +177,7 @@ const LoginPage = () => {
           </Link>
 
           <Link
-            href={"/signup"}
+            href={signupHref}
             className="
       flex-1 min-w-40
       group
@@ -195,7 +205,7 @@ const LoginPage = () => {
           </Link>
 
           <Link
-            href={"/signup"}
+            href={signupHref}
             className="
       flex-1 min-w-40
       group
@@ -237,7 +247,7 @@ const LoginPage = () => {
           <p className="text-[13px] text-slate-800">
             Don&apos;t have an account?{" "}
             <Link
-              href={"/signup"}
+              href={signupHref}
               className="font-medium text-emerald-700 underline"
             >
               SignUp

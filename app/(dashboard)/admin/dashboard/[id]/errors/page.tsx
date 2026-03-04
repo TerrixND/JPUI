@@ -225,27 +225,27 @@ export default function AdminErrors() {
       />
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3">
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Errors</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{loading ? "-" : total.toLocaleString()}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3">
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Page</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{loading ? "-" : rows.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3">
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Active Filters</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{activeFilterCount}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 px-4 py-3">
+        <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none px-4 py-3">
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Per Page</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{limit}</p>
         </div>
       </div>
 
       {/* Filters panel */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
         <button
           type="button"
           onClick={() => setFiltersOpen((prev) => !prev)}
@@ -275,7 +275,7 @@ export default function AdminErrors() {
 
         {filtersOpen && (
           <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-700/40">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 pt-4">
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Message contains</label>
                 <input
@@ -407,8 +407,8 @@ export default function AdminErrors() {
       </div>
 
       {/* Error logs */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700/60 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/40 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Internal Error Logs</h2>
             {!loading && total > 0 && (
@@ -465,13 +465,13 @@ export default function AdminErrors() {
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/80 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
-                    <th className="px-5 py-3 font-medium">Time</th>
-                    <th className="px-5 py-3 font-medium">Source</th>
-                    <th className="px-5 py-3 font-medium">Process / Function</th>
-                    <th className="px-5 py-3 font-medium">Message</th>
-                    <th className="px-5 py-3 font-medium">Actor</th>
-                    <th className="px-5 py-3 font-medium">Request</th>
+                  <tr className="text-left text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/80 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/40">
+                    <th className="px-5 py-3 font-semibold">Time</th>
+                    <th className="px-5 py-3 font-semibold">Source</th>
+                    <th className="px-5 py-3 font-semibold">Process / Function</th>
+                    <th className="px-5 py-3 font-semibold">Message</th>
+                    <th className="px-5 py-3 font-semibold">Actor</th>
+                    <th className="px-5 py-3 font-semibold">Request</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -536,13 +536,13 @@ export default function AdminErrors() {
             </div>
 
             {/* Mobile/Tablet card view (<lg) */}
-            <div className="lg:hidden divide-y divide-gray-100">
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
               {rows.map((row) => {
                 const isExpanded = expandedRow === row.id;
                 return (
                   <div
                     key={row.id}
-                    className="px-4 py-3.5 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
+                    className="px-4 sm:px-5 py-3.5 hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors"
                   >
                     <button
                       type="button"
@@ -643,7 +643,7 @@ export default function AdminErrors() {
 
         {/* Pagination */}
         {!loading && !error && rows.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2">
+          <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700/40 flex items-center justify-between gap-2">
             <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
               Showing {currentPageStart}&ndash;{currentPageEnd} of {total.toLocaleString()} errors
             </p>
@@ -689,7 +689,7 @@ export default function AdminErrors() {
       </div>
 
       {/* Danger zone */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
         <button
           type="button"
           onClick={() => setDangerOpen((prev) => !prev)}
