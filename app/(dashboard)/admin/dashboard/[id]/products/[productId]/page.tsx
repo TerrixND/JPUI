@@ -181,6 +181,12 @@ type EditForm = {
   length: string;
   depth: string;
   height: string;
+  totalMassGram: string;
+  refractiveIndex: string;
+  densityGPerCm3: string;
+  uvVisSpectrumNm: string;
+  cutAndShape: string;
+  measurementMm: string;
   importDate: string;
   importId: string;
   fromCompanyId: string;
@@ -219,6 +225,12 @@ const initialForm: EditForm = {
   length: "",
   depth: "",
   height: "",
+  totalMassGram: "",
+  refractiveIndex: "",
+  densityGPerCm3: "",
+  uvVisSpectrumNm: "",
+  cutAndShape: "",
+  measurementMm: "",
   importDate: "",
   importId: "",
   fromCompanyId: "",
@@ -299,6 +311,8 @@ const toDisplayMoney = (value: number | null | undefined) => {
 
   return String(value);
 };
+
+const toDisplayText = (value: string | null | undefined) => value || "";
 
 const toInputDateValue = (value: string | null | undefined) => {
   if (!value) {
@@ -955,6 +969,12 @@ export default function ProductEditPage() {
           length: toDisplayMoney(productDetail.length),
           depth: toDisplayMoney(productDetail.depth),
           height: toDisplayMoney(productDetail.height),
+          totalMassGram: toDisplayMoney(productDetail.totalMassGram),
+          refractiveIndex: toDisplayText(productDetail.refractiveIndex),
+          densityGPerCm3: toDisplayText(productDetail.densityGPerCm3),
+          uvVisSpectrumNm: toDisplayText(productDetail.uvVisSpectrumNm),
+          cutAndShape: toDisplayText(productDetail.cutAndShape),
+          measurementMm: toDisplayText(productDetail.measurementMm),
           importDate: toInputDateValue(productDetail.importDate),
           importId: productDetail.importId || "",
           fromCompanyId: productDetail.fromCompanyId || "",
@@ -1236,6 +1256,7 @@ export default function ProductEditPage() {
       const normalizedLength = parseOptionalMoney(form.length, "Length");
       const normalizedDepth = parseOptionalMoney(form.depth, "Depth");
       const normalizedHeight = parseOptionalMoney(form.height, "Height");
+      const normalizedTotalMassGram = parseOptionalMoney(form.totalMassGram, "Total mass");
       const consignmentRate = parseOptionalMoney(
         form.consignmentCommissionRate,
         "Consignment commission rate",
@@ -1431,6 +1452,12 @@ export default function ProductEditPage() {
           length: normalizedLength,
           depth: normalizedDepth,
           height: normalizedHeight,
+          totalMassGram: normalizedTotalMassGram,
+          refractiveIndex: form.refractiveIndex.trim() || null,
+          densityGPerCm3: form.densityGPerCm3.trim() || null,
+          uvVisSpectrumNm: form.uvVisSpectrumNm.trim() || null,
+          cutAndShape: form.cutAndShape.trim() || null,
+          measurementMm: form.measurementMm.trim() || null,
           importDate:
             form.importDate
               ? new Date(`${form.importDate}T00:00:00.000Z`).toISOString()
@@ -1692,6 +1719,96 @@ export default function ProductEditPage() {
                 placeholder="0.00"
                 className={inputCls}
               />
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700/60 pt-5">
+            <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
+              Additional Optional Inputs
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Use these extra gem-spec fields when you need report-style product details.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Total Mass (gram)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.totalMassGram}
+                  onChange={(e) => updateField("totalMassGram", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Refractive Index
+                </label>
+                <input
+                  type="text"
+                  value={form.refractiveIndex}
+                  onChange={(e) => updateField("refractiveIndex", e.target.value)}
+                  placeholder="e.g. 1.66 - 1.67"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Density (g/cm^3)
+                </label>
+                <input
+                  type="text"
+                  value={form.densityGPerCm3}
+                  onChange={(e) => updateField("densityGPerCm3", e.target.value)}
+                  placeholder="e.g. 3.30 - 3.36"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  UV - Vis Spectrum (nm)
+                </label>
+                <input
+                  type="text"
+                  value={form.uvVisSpectrumNm}
+                  onChange={(e) => updateField("uvVisSpectrumNm", e.target.value)}
+                  placeholder="e.g. 437, 630 - 690"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Cut &amp; Shape
+                </label>
+                <input
+                  type="text"
+                  value={form.cutAndShape}
+                  onChange={(e) => updateField("cutAndShape", e.target.value)}
+                  placeholder="e.g. Oval cabochon"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Measurement (number x number x number mm)
+                </label>
+                <input
+                  type="text"
+                  value={form.measurementMm}
+                  onChange={(e) => updateField("measurementMm", e.target.value)}
+                  placeholder="e.g. 12 x 8 x 5 mm"
+                  className={inputCls}
+                />
+              </div>
             </div>
           </div>
         </div>

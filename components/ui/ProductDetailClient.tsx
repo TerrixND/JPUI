@@ -1,14 +1,56 @@
 "use client";
 
-import { generateCertificateSvg, SAMPLE_PRODUCT } from "@/utils/data";
 import {
   getPublicMediaUrl,
   mapPageContextToMediaSection,
 } from "@/lib/apiClient";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Product = any;
+type ProductMediaItem = {
+  id: string;
+  type: string;
+  url: string;
+  isPrimary?: boolean;
+};
+
+type ProductOwnership = {
+  ownerName?: string | null;
+  acquiredAt?: string | null;
+};
+
+type ProductCertificate = {
+  fileUrl?: string | null;
+  serialNumber?: string | null;
+  registeredAt?: string | null;
+  issuedBy?: string | null;
+  authenticatedBy?: string | null;
+};
+
+type Product = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  color?: string | null;
+  origin?: string | null;
+  description?: string | null;
+  weight?: number | string | null;
+  length?: number | string | null;
+  depth?: number | string | null;
+  height?: number | string | null;
+  totalMassGram?: number | string | null;
+  refractiveIndex?: string | null;
+  densityGPerCm3?: string | null;
+  uvVisSpectrumNm?: string | null;
+  cutAndShape?: string | null;
+  measurementMm?: string | null;
+  tier?: string | null;
+  status: string;
+  sourceType?: string | null;
+  media?: ProductMediaItem[] | null;
+  currentOwnership?: ProductOwnership | null;
+  certificate?: ProductCertificate | null;
+};
 
 // const PRODUCT_DETAIL_DATA = {
 //   id: "c3a9e21d-5a88-4d91-b2a1-1122ff778899",
@@ -106,6 +148,52 @@ const formatDateShort = (iso: string) =>
     day: "numeric",
   });
 
+const hasDisplayValue = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return true;
+};
+
+const formatNumberish = (
+  value: unknown,
+  suffix = "",
+  {
+    decimals,
+  }: {
+    decimals?: number;
+  } = {},
+) => {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  const displayValue =
+    typeof decimals === "number"
+      ? numericValue.toFixed(decimals)
+      : Number.isInteger(numericValue)
+        ? String(numericValue)
+        : String(numericValue);
+
+  return `${displayValue}${suffix}`;
+};
+
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -187,15 +275,19 @@ export default function ProductDetailClientComponent({
 }: {
   product: Product;
 }) {
+  const mediaItems = useMemo(
+    () => (Array.isArray(product.media) ? product.media : []),
+    [product.media],
+  );
   const primaryMedia =
-    product.media.find((m: any) => m.isPrimary) ?? product.media[0];
+    mediaItems.find((m: ProductMediaItem) => m.isPrimary) ?? mediaItems[0] ?? null;
   const [activeMedia, setActiveMedia] = useState(primaryMedia);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [mediaUrlById, setMediaUrlById] = useState<Record<string, string>>({});
 
   const refreshPublicMediaUrl = useCallback(
     async (mediaId: string) => {
-      const media = product.media.find((item: any) => item.id === mediaId);
+      const media = mediaItems.find((item: ProductMediaItem) => item.id === mediaId);
 
       if (!media || !shouldResolvePublicMediaUrl(media.id, media.url)) {
         return "";
@@ -214,13 +306,13 @@ export default function ProductDetailClientComponent({
         return "";
       }
     },
-    [product.media],
+    [mediaItems],
   );
 
   useEffect(() => {
-    const refreshableMediaIds = product.media
-      .filter((media: any) => shouldResolvePublicMediaUrl(media.id, media.url))
-      .map((media: any) => media.id);
+    const refreshableMediaIds = mediaItems
+      .filter((media: ProductMediaItem) => shouldResolvePublicMediaUrl(media.id, media.url))
+      .map((media: ProductMediaItem) => media.id);
 
     if (refreshableMediaIds.length === 0) {
       return;
@@ -242,9 +334,70 @@ export default function ProductDetailClientComponent({
       window.clearTimeout(kickoffTimer);
       window.clearInterval(timer);
     };
-  }, [product.media, refreshPublicMediaUrl]);
+  }, [mediaItems, refreshPublicMediaUrl]);
 
-  const activeMediaUrl = mediaUrlById[activeMedia.id] || activeMedia.url;
+  useEffect(() => {
+    setActiveMedia(primaryMedia);
+  }, [primaryMedia]);
+
+  const activeMediaUrl =
+    activeMedia && activeMedia.id
+      ? mediaUrlById[activeMedia.id] || activeMedia.url
+      : PLACEHOLDER_SVG;
+  const physicalProperties = [
+    { label: "Weight", value: formatNumberish(product.weight, "g") },
+    { label: "Length", value: formatNumberish(product.length, "mm") },
+    { label: "Height", value: formatNumberish(product.height, "mm") },
+    { label: "Depth", value: formatNumberish(product.depth, "mm") },
+    { label: "Total Mass", value: formatNumberish(product.totalMassGram, " g") },
+    {
+      label: "Measurement",
+      value: hasDisplayValue(product.measurementMm) ? product.measurementMm : null,
+    },
+  ].filter((entry) => hasDisplayValue(entry.value));
+  const detailRows = [
+    {
+      label: "SKU",
+      value: hasDisplayValue(product.sku) ? (
+        <span className="font-mono text-xs">{product.sku}</span>
+      ) : null,
+    },
+    {
+      label: "Status",
+      value: hasDisplayValue(product.status) ? <StatusBadge status={product.status} /> : null,
+    },
+    {
+      label: "Tier",
+      value: hasDisplayValue(product.tier) ? <TierBadge tier={product.tier} /> : null,
+    },
+    { label: "Source", value: hasDisplayValue(product.sourceType) ? product.sourceType : null },
+    { label: "Color", value: hasDisplayValue(product.color) ? product.color : null },
+    { label: "Origin", value: hasDisplayValue(product.origin) ? product.origin : null },
+    {
+      label: "Refractive Index",
+      value: hasDisplayValue(product.refractiveIndex) ? product.refractiveIndex : null,
+    },
+    {
+      label: "Density",
+      value: hasDisplayValue(product.densityGPerCm3) ? `${product.densityGPerCm3} g/cm^3` : null,
+    },
+    {
+      label: "UV - Vis Spectrum",
+      value: hasDisplayValue(product.uvVisSpectrumNm) ? `${product.uvVisSpectrumNm} nm` : null,
+    },
+    {
+      label: "Cut & Shape",
+      value: hasDisplayValue(product.cutAndShape) ? product.cutAndShape : null,
+    },
+    {
+      label: "Measurement",
+      value: hasDisplayValue(product.measurementMm) ? product.measurementMm : null,
+    },
+    {
+      label: "Description",
+      value: hasDisplayValue(product.description) ? product.description : null,
+    },
+  ].filter((entry) => hasDisplayValue(entry.value));
 
   //   const handleOpenCertificate = () => {
   //     const svgContent = generateCertificateSvg(product);
@@ -254,7 +407,9 @@ export default function ProductDetailClientComponent({
   //   };
 
   const handleOpenCertificate = () => {
-    window.open(product.certificate.fileUrl, "_blank");
+    if (product.certificate?.fileUrl) {
+      window.open(product.certificate.fileUrl, "_blank");
+    }
   };
 
   return (
@@ -278,7 +433,7 @@ export default function ProductDetailClientComponent({
           {/* ── Media ── */}
           <div className="space-y-4">
             <div className="relative aspect-square bg-gradient-to-br from-stone-100 to-stone-200 rounded-xl overflow-hidden border border-stone-200 group shadow-sm">
-              {activeMedia.type === "VIDEO" ? (
+              {activeMedia?.type === "VIDEO" ? (
                 <video
                   key={activeMediaUrl}
                   src={activeMediaUrl}
@@ -288,7 +443,9 @@ export default function ProductDetailClientComponent({
                   muted
                   playsInline
                   onError={() => {
-                    void refreshPublicMediaUrl(activeMedia.id);
+                    if (activeMedia?.id) {
+                      void refreshPublicMediaUrl(activeMedia.id);
+                    }
                   }}
                 />
               ) : (
@@ -299,6 +456,11 @@ export default function ProductDetailClientComponent({
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
+                    if (!activeMedia?.id) {
+                      target.src = PLACEHOLDER_SVG;
+                      return;
+                    }
+
                     void refreshPublicMediaUrl(activeMedia.id).then(
                       (refreshedUrl) => {
                         if (!refreshedUrl) {
@@ -312,7 +474,7 @@ export default function ProductDetailClientComponent({
               <div className="absolute top-4 left-4">
                 <StatusBadge status={product.status} />
               </div>
-              {activeMedia.type === "VIDEO" && (
+              {activeMedia?.type === "VIDEO" && (
                 <div className="absolute bottom-4 left-4">
                   <span className="bg-black/50 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded font-sans tracking-widest uppercase">
                     ▶ Video
@@ -322,12 +484,12 @@ export default function ProductDetailClientComponent({
             </div>
 
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-              {product.media.map((m: any) => (
+              {mediaItems.map((m: ProductMediaItem) => (
                 <button
                   key={m.id}
                   onClick={() => setActiveMedia(m)}
                   className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                    activeMedia.id === m.id
+                    activeMedia?.id === m.id
                       ? "border-emerald-500 ring-2 ring-emerald-500/20"
                       : "border-stone-200 hover:border-stone-400"
                   }`}
@@ -376,21 +538,25 @@ export default function ProductDetailClientComponent({
               <p className="text-xs tracking-[0.2em] uppercase text-stone-500 mb-5 font-sans font-medium">
                 Physical Properties
               </p>
-              <div className="grid grid-cols-4 gap-3 text-center divide-x divide-stone-200">
-                {[
-                  { label: "Weight", value: `${product.weight}g` },
-                  { label: "Length", value: `${product.length}mm` },
-                  { label: "Height", value: `${product.height}mm` },
-                  { label: "Depth", value: `${product.depth}mm` },
-                ].map((d) => (
-                  <div key={d.label} className="space-y-1 px-2">
-                    <div className="text-xl text-stone-700">{d.value}</div>
-                    <div className="text-[10px] text-stone-500 font-sans tracking-[0.15em] uppercase">
-                      {d.label}
+              {physicalProperties.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 text-center">
+                  {physicalProperties.map((d) => (
+                    <div
+                      key={d.label}
+                      className="space-y-1 px-3 py-4 rounded-lg border border-stone-200 bg-white"
+                    >
+                      <div className="text-xl text-stone-700 break-words">{d.value}</div>
+                      <div className="text-[10px] text-stone-500 font-sans tracking-[0.15em] uppercase">
+                        {d.label}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-stone-400 font-sans">
+                  No physical properties available.
+                </p>
+              )}
             </div>
 
             {/* Tabs */}
@@ -415,22 +581,15 @@ export default function ProductDetailClientComponent({
 
               {activeTab === "details" && (
                 <div>
-                  <InfoRow
-                    label="SKU"
-                    value={
-                      <span className="font-mono text-xs">{product.sku}</span>
-                    }
-                  />
-                  <InfoRow
-                    label="Status"
-                    value={<StatusBadge status={product.status} />}
-                  />
-                  <InfoRow
-                    label="Tier"
-                    value={<TierBadge tier={product.tier} />}
-                  />
-                  <InfoRow label="Source" value={product.sourceType} />
-                  <InfoRow label="Color" value={product.color} />
+                  {detailRows.length > 0 ? (
+                    detailRows.map((row) => (
+                      <InfoRow key={row.label} label={row.label} value={row.value} />
+                    ))
+                  ) : (
+                    <p className="text-stone-400 text-sm font-sans">
+                      No additional product details available.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -466,104 +625,108 @@ export default function ProductDetailClientComponent({
 
               {activeTab === "certificate" && (
                 <div className="space-y-4">
-                  {/* Clickable file card */}
-                  <button
-                    onClick={handleOpenCertificate}
-                    className="w-full group text-left rounded-xl border border-stone-200 hover:border-emerald-400 bg-white hover:bg-emerald-50/30 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md"
-                  >
-                    <div className="flex items-center gap-4 p-4">
-                      {/* Document icon */}
-                      <div className="flex-shrink-0 w-10 h-12 bg-stone-100 group-hover:bg-emerald-100 rounded-lg flex flex-col items-center justify-center transition-colors relative">
-                        {/* Folded corner */}
-                        <div
-                          className="absolute top-0 right-0 w-3 h-3 bg-white"
-                          style={{
-                            clipPath: "polygon(100% 0, 0 0, 100% 100%)",
-                          }}
-                        />
-                        <svg
-                          className="w-5 h-5 text-emerald-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.955 11.955 0 01.75 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+                  {product.certificate ? (
+                    <>
+                      <button
+                        onClick={handleOpenCertificate}
+                        className="w-full group text-left rounded-xl border border-stone-200 hover:border-emerald-400 bg-white hover:bg-emerald-50/30 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md"
+                      >
+                        <div className="flex items-center gap-4 p-4">
+                          <div className="flex-shrink-0 w-10 h-12 bg-stone-100 group-hover:bg-emerald-100 rounded-lg flex flex-col items-center justify-center transition-colors relative">
+                            <div
+                              className="absolute top-0 right-0 w-3 h-3 bg-white"
+                              style={{
+                                clipPath: "polygon(100% 0, 0 0, 100% 100%)",
+                              }}
+                            />
+                            <svg
+                              className="w-5 h-5 text-emerald-600"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.955 11.955 0 01.75 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+                              />
+                            </svg>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-stone-800">
+                              Certificate of Authenticity
+                            </p>
+                            <p className="text-xs text-stone-400 font-mono mt-0.5 truncate">
+                              {product.certificate.serialNumber}
+                            </p>
+                          </div>
+
+                          <div className="flex-shrink-0 text-stone-300 group-hover:text-emerald-500 transition-colors">
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                              />
+                            </svg>
+                          </div>
+                        </div>
+                        <div className="border-t border-stone-100 bg-stone-50 group-hover:bg-emerald-50/50 px-4 py-2 flex justify-between transition-colors">
+                          <span className="text-[10px] text-stone-400 font-sans tracking-wide">
+                            Click to open in new tab
+                          </span>
+                          <span className="text-[10px] text-stone-400 font-sans">
+                            {product.certificate.registeredAt
+                              ? formatDateShort(product.certificate.registeredAt)
+                              : "-"}
+                          </span>
+                        </div>
+                      </button>
+
+                      <div className="bg-stone-50 border border-stone-200 rounded-xl p-5">
+                        {hasDisplayValue(product.certificate.serialNumber) && (
+                          <InfoRow
+                            label="Certificate No."
+                            value={
+                              <span className="font-mono text-xs">
+                                {product.certificate.serialNumber}
+                              </span>
+                            }
                           />
-                        </svg>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-stone-800">
-                          Certificate of Authenticity
-                        </p>
-                        <p className="text-xs text-stone-400 font-mono mt-0.5 truncate">
-                          {product.certificate.serialNumber}
-                        </p>
-                      </div>
-
-                      {/* Arrow */}
-                      <div className="flex-shrink-0 text-stone-300 group-hover:text-emerald-500 transition-colors">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                        )}
+                        {hasDisplayValue(product.certificate.issuedBy) && (
+                          <InfoRow
+                            label="Issued By"
+                            value={product.certificate.issuedBy}
                           />
-                        </svg>
+                        )}
+                        {hasDisplayValue(product.certificate.authenticatedBy) && (
+                          <InfoRow
+                            label="Authenticated By"
+                            value={product.certificate.authenticatedBy}
+                          />
+                        )}
+                        {hasDisplayValue(product.certificate.registeredAt) && (
+                          <InfoRow
+                            label="Registered On"
+                            value={formatDateShort(product.certificate.registeredAt)}
+                          />
+                        )}
                       </div>
-                    </div>
-                    <div className="border-t border-stone-100 bg-stone-50 group-hover:bg-emerald-50/50 px-4 py-2 flex justify-between transition-colors">
-                      <span className="text-[10px] text-stone-400 font-sans tracking-wide">
-                        Click to open in new tab
-                      </span>
-                      <span className="text-[10px] text-stone-400 font-sans">
-                        {formatDateShort(product.certificate.registeredAt)}
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Summary */}
-                  <div className="bg-stone-50 border border-stone-200 rounded-xl p-5">
-                    <InfoRow
-                      label="Certificate No."
-                      value={
-                        <span className="font-mono text-xs">
-                          {product.certificate.serialNumber}
-                        </span>
-                      }
-                    />
-                    <InfoRow
-                      label="Issued By"
-                      value={product.certificate.issuedBy}
-                    />
-                    <InfoRow
-                      label="Authenticated By"
-                      value={product.certificate.authenticatedBy}
-                    />
-                    <InfoRow
-                      label="Registered On"
-                      value={formatDateShort(product.certificate.registeredAt)}
-                    />
-                    {/* <InfoRow
-                      label="Item Status"
-                      value={
-                        <span className="inline-flex items-center gap-1.5 text-emerald-600 text-xs font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                          In Company Inventory
-                        </span>
-                      }
-                    /> */}
-                  </div>
+                    </>
+                  ) : (
+                    <p className="text-stone-400 text-sm font-sans">
+                      No certificate available for this product.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

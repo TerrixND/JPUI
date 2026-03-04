@@ -800,6 +800,12 @@ export type AdminProductRecord = {
   length: number | null;
   depth: number | null;
   height: number | null;
+  totalMassGram: number | null;
+  refractiveIndex: string | null;
+  densityGPerCm3: string | null;
+  uvVisSpectrumNm: string | null;
+  cutAndShape: string | null;
+  measurementMm: string | null;
   importDate: string | null;
   importId: string | null;
   fromCompanyId: string | null;
@@ -2486,6 +2492,12 @@ const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => 
     length: asFiniteNumberish(row.length),
     depth: asFiniteNumberish(row.depth),
     height: asFiniteNumberish(row.height),
+    totalMassGram: asFiniteNumberish(row.totalMassGram),
+    refractiveIndex: asNullableString(row.refractiveIndex),
+    densityGPerCm3: asNullableString(row.densityGPerCm3),
+    uvVisSpectrumNm: asNullableString(row.uvVisSpectrumNm),
+    cutAndShape: asNullableString(row.cutAndShape),
+    measurementMm: asNullableString(row.measurementMm),
     importDate: asNullableString(row.importDate),
     importId: asNullableString(row.importId),
     fromCompanyId: asNullableString(row.fromCompanyId),
@@ -2996,6 +3008,12 @@ export type AdminProductUpsertPayload = {
   length?: number | null;
   depth?: number | null;
   height?: number | null;
+  totalMassGram?: number | null;
+  refractiveIndex?: string | null;
+  densityGPerCm3?: string | null;
+  uvVisSpectrumNm?: string | null;
+  cutAndShape?: string | null;
+  measurementMm?: string | null;
   importDate?: string | null;
   importId?: string | null;
   fromCompanyId?: string | null;
@@ -3080,6 +3098,24 @@ const normalizeAdminProductPayload = (input: AdminProductUpsertPayload): JsonRec
   }
   if (hasOwn(input, "height")) {
     body.height = normalizeFiniteOrNull(input.height);
+  }
+  if (hasOwn(input, "totalMassGram")) {
+    body.totalMassGram = normalizeFiniteOrNull(input.totalMassGram);
+  }
+  if (hasOwn(input, "refractiveIndex")) {
+    body.refractiveIndex = asNullableString(input.refractiveIndex);
+  }
+  if (hasOwn(input, "densityGPerCm3")) {
+    body.densityGPerCm3 = asNullableString(input.densityGPerCm3);
+  }
+  if (hasOwn(input, "uvVisSpectrumNm")) {
+    body.uvVisSpectrumNm = asNullableString(input.uvVisSpectrumNm);
+  }
+  if (hasOwn(input, "cutAndShape")) {
+    body.cutAndShape = asNullableString(input.cutAndShape);
+  }
+  if (hasOwn(input, "measurementMm")) {
+    body.measurementMm = asNullableString(input.measurementMm);
   }
   if (hasOwn(input, "importDate")) {
     body.importDate = asNullableString(input.importDate);

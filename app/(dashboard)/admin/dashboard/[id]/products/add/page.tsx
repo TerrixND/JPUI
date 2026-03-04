@@ -39,6 +39,12 @@ type ProductForm = {
   length: string;
   depth: string;
   height: string;
+  totalMassGram: string;
+  refractiveIndex: string;
+  densityGPerCm3: string;
+  uvVisSpectrumNm: string;
+  cutAndShape: string;
+  measurementMm: string;
   importDate: string;
   importId: string;
   fromCompanyId: string;
@@ -91,6 +97,12 @@ const initialForm: ProductForm = {
   length: "",
   depth: "",
   height: "",
+  totalMassGram: "",
+  refractiveIndex: "",
+  densityGPerCm3: "",
+  uvVisSpectrumNm: "",
+  cutAndShape: "",
+  measurementMm: "",
   importDate: "",
   importId: "",
   fromCompanyId: "",
@@ -156,6 +168,11 @@ const parseOptionalNumber = (value: string, fieldLabel: string) => {
   }
 
   return parsed;
+};
+
+const parseOptionalText = (value: string) => {
+  const normalized = value.trim();
+  return normalized || null;
 };
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -462,6 +479,7 @@ export default function AddProductPage() {
       const normalizedLength = parseOptionalNumber(form.length, "Length");
       const normalizedDepth = parseOptionalNumber(form.depth, "Depth");
       const normalizedHeight = parseOptionalNumber(form.height, "Height");
+      const normalizedTotalMassGram = parseOptionalNumber(form.totalMassGram, "Total mass");
       const consignmentRate = parseOptionalNumber(
         form.consignmentCommissionRate,
         "Consignment commission rate",
@@ -627,6 +645,12 @@ export default function AddProductPage() {
           length: normalizedLength,
           depth: normalizedDepth,
           height: normalizedHeight,
+          totalMassGram: normalizedTotalMassGram,
+          refractiveIndex: parseOptionalText(form.refractiveIndex),
+          densityGPerCm3: parseOptionalText(form.densityGPerCm3),
+          uvVisSpectrumNm: parseOptionalText(form.uvVisSpectrumNm),
+          cutAndShape: parseOptionalText(form.cutAndShape),
+          measurementMm: parseOptionalText(form.measurementMm),
           importDate: form.importDate || null,
           importId: form.importId.trim() || null,
           fromCompanyId: form.fromCompanyId.trim() || null,
@@ -1087,6 +1111,96 @@ export default function AddProductPage() {
                 placeholder="0.00"
                 className={inputCls}
               />
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700/60 pt-5">
+            <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
+              Additional Optional Inputs
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Use these extra gem-spec fields when you need report-style product details.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Total Mass (gram)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.totalMassGram}
+                  onChange={(e) => updateField("totalMassGram", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Refractive Index
+                </label>
+                <input
+                  type="text"
+                  value={form.refractiveIndex}
+                  onChange={(e) => updateField("refractiveIndex", e.target.value)}
+                  placeholder="e.g. 1.66 - 1.67"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Density (g/cm^3)
+                </label>
+                <input
+                  type="text"
+                  value={form.densityGPerCm3}
+                  onChange={(e) => updateField("densityGPerCm3", e.target.value)}
+                  placeholder="e.g. 3.30 - 3.36"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  UV - Vis Spectrum (nm)
+                </label>
+                <input
+                  type="text"
+                  value={form.uvVisSpectrumNm}
+                  onChange={(e) => updateField("uvVisSpectrumNm", e.target.value)}
+                  placeholder="e.g. 437, 630 - 690"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Cut &amp; Shape
+                </label>
+                <input
+                  type="text"
+                  value={form.cutAndShape}
+                  onChange={(e) => updateField("cutAndShape", e.target.value)}
+                  placeholder="e.g. Oval cabochon"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] text-gray-700 dark:text-gray-300 mb-1.5">
+                  Measurement (number x number x number mm)
+                </label>
+                <input
+                  type="text"
+                  value={form.measurementMm}
+                  onChange={(e) => updateField("measurementMm", e.target.value)}
+                  placeholder="e.g. 12 x 8 x 5 mm"
+                  className={inputCls}
+                />
+              </div>
             </div>
           </div>
         </div>
