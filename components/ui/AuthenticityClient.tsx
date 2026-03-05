@@ -58,6 +58,15 @@ const formatDate = (value: string | null | undefined) => {
   });
 };
 
+const toCompactSerial = (value: string) => {
+  const normalized = value.trim();
+  if (normalized.length <= 18) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 8)}-${normalized.slice(-6)}`;
+};
+
 const buildClaimMessage = (
   record: AuthenticityRecord | null,
   viewer: UserMeResponse | null,
@@ -261,6 +270,27 @@ const AuthenticityClientComponent = ({
   const claimNotice = searchParams.get("claim") === "verified"
     ? "Ownership claimed successfully."
     : "";
+  const resolvedCardSerial = useMemo(() => {
+    if (!record) {
+      return {
+        full: "",
+        display: "Not assigned",
+      };
+    }
+
+    const fullSerial = String(record.authCard.cardSerial || record.product.id || "").trim();
+    if (!fullSerial) {
+      return {
+        full: "",
+        display: "Not assigned",
+      };
+    }
+
+    return {
+      full: fullSerial,
+      display: toCompactSerial(fullSerial),
+    };
+  }, [record]);
 
   const productDetail = useMemo(() => {
     if (!record) {
@@ -300,7 +330,7 @@ const AuthenticityClientComponent = ({
       },
       certificate: {
         fileUrl: record.certificate.fileUrl,
-        serialNumber: record.authCard.cardSerial || record.product.sku,
+        serialNumber: record.authCard.cardSerial || record.product.id,
         registeredAt: record.authCard.issuedAt,
         issuedBy: "Jade Palace Pt Co",
       },
@@ -334,7 +364,7 @@ const AuthenticityClientComponent = ({
     return <ErrorState message={error} loginHref={loginHref} signupHref={signupHref} />;
   }
 
-  if (!productDetail) {
+  if (!productDetail || !record) {
     return (
       <ErrorState
         message="Authenticity record is unavailable."
@@ -367,19 +397,26 @@ const AuthenticityClientComponent = ({
               {[
                 {
                   label: "Card Serial",
-                  value: record.authCard.cardSerial || "Not assigned",
+                  value: resolvedCardSerial.display,
+                  helper:
+                    resolvedCardSerial.full && resolvedCardSerial.full !== resolvedCardSerial.display
+                      ? resolvedCardSerial.full
+                      : null,
                 },
                 {
                   label: "Card Status",
                   value: record.authCard.status || "Unknown",
+                  helper: null,
                 },
                 {
                   label: "Issued On",
                   value: formatDate(record.authCard.issuedAt),
+                  helper: null,
                 },
                 {
                   label: "Sale Confirmed",
                   value: formatDate(record.claim.saleConfirmedAt),
+                  helper: null,
                 },
               ].map((entry) => (
                 <div
@@ -392,6 +429,11 @@ const AuthenticityClientComponent = ({
                   <p className="mt-2 text-sm font-medium text-stone-800">
                     {entry.value}
                   </p>
+                  {entry.helper ? (
+                    <p className="mt-1 text-[11px] font-mono text-stone-400 break-all">
+                      {entry.helper}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>

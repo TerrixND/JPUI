@@ -169,8 +169,10 @@ const formatNumberish = (
   suffix = "",
   {
     decimals,
+    hideZero = false,
   }: {
     decimals?: number;
+    hideZero?: boolean;
   } = {},
 ) => {
   const numericValue =
@@ -183,6 +185,9 @@ const formatNumberish = (
   if (!Number.isFinite(numericValue)) {
     return null;
   }
+  if (hideZero && numericValue === 0) {
+    return null;
+  }
 
   const displayValue =
     typeof decimals === "number"
@@ -192,6 +197,63 @@ const formatNumberish = (
         : String(numericValue);
 
   return `${displayValue}${suffix}`;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const toCompactNumber = (value: number, maxDecimals = 2) => {
+  const fixed = value.toFixed(maxDecimals);
+  return fixed.replace(/\.?0+$/, "");
+};
+
+const formatWeightWithCarat = (value: unknown) => {
+  const grams = toFiniteNumber(value);
+  if (grams === null || grams === 0) {
+    return null;
+  }
+
+  const carat = grams * 5;
+  return `${toCompactNumber(grams)} g / ${toCompactNumber(carat)} ct`;
+};
+
+const parseMeasurementTriplet = (value: unknown) => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const normalized = value.replace(/×/g, "x");
+  const matches = normalized.match(/-?\d+(?:\.\d+)?/g);
+  if (!matches || matches.length < 3) {
+    return null;
+  }
+
+  const [lengthRaw, heightRaw, depthRaw] = matches;
+  const length = Number(lengthRaw);
+  const height = Number(heightRaw);
+  const depth = Number(depthRaw);
+  if (!Number.isFinite(length) || !Number.isFinite(height) || !Number.isFinite(depth)) {
+    return null;
+  }
+
+  return { length, height, depth };
+};
+
+const toCompactSerial = (value: string) => {
+  const normalized = value.trim();
+  if (normalized.length <= 18) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 8)}-${normalized.slice(-6)}`;
 };
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -346,12 +408,37 @@ export default function ProductDetailClientComponent({
     activeMedia && activeMedia.id
       ? mediaUrlById[activeMedia.id] || activeMedia.url
       : PLACEHOLDER_SVG;
+  const measurementTriplet = parseMeasurementTriplet(product.measurementMm);
+  const resolvedLength = (() => {
+    const directLength = toFiniteNumber(product.length);
+    if (directLength !== null && directLength !== 0) {
+      return directLength;
+    }
+    return measurementTriplet?.length ?? null;
+  })();
+  const resolvedHeight = (() => {
+    const directHeight = toFiniteNumber(product.height);
+    if (directHeight !== null && directHeight !== 0) {
+      return directHeight;
+    }
+    return measurementTriplet?.height ?? null;
+  })();
+  const resolvedDepth = (() => {
+    const directDepth = toFiniteNumber(product.depth);
+    if (directDepth !== null && directDepth !== 0) {
+      return directDepth;
+    }
+    return measurementTriplet?.depth ?? null;
+  })();
+  const certificateSerial = hasDisplayValue(product.certificate?.serialNumber)
+    ? String(product.certificate?.serialNumber).trim()
+    : "";
   const physicalProperties = [
-    { label: "Weight", value: formatNumberish(product.weight, "g") },
-    { label: "Length", value: formatNumberish(product.length, "mm") },
-    { label: "Height", value: formatNumberish(product.height, "mm") },
-    { label: "Depth", value: formatNumberish(product.depth, "mm") },
-    { label: "Total Mass", value: formatNumberish(product.totalMassGram, " g") },
+    { label: "Weight", value: formatWeightWithCarat(product.weight) },
+    { label: "Length", value: formatNumberish(resolvedLength, " mm", { hideZero: true }) },
+    { label: "Height", value: formatNumberish(resolvedHeight, " mm", { hideZero: true }) },
+    { label: "Depth", value: formatNumberish(resolvedDepth, " mm", { hideZero: true }) },
+    { label: "Total Mass", value: formatNumberish(product.totalMassGram, " g", { hideZero: true }) },
     {
       label: "Measurement",
       value: hasDisplayValue(product.measurementMm) ? product.measurementMm : null,
@@ -370,7 +457,7 @@ export default function ProductDetailClientComponent({
     },
     {
       label: "Tier",
-      value: hasDisplayValue(product.tier) ? <TierBadge tier={product.tier} /> : null,
+      value: hasDisplayValue(product.tier) ? <TierBadge tier={String(product.tier)} /> : null,
     },
     { label: "Source", value: hasDisplayValue(product.sourceType) ? product.sourceType : null },
     { label: "Color", value: hasDisplayValue(product.color) ? product.color : null },
@@ -662,9 +749,14 @@ export default function ProductDetailClientComponent({
                             <p className="text-sm font-medium text-stone-800">
                               Certificate of Authenticity
                             </p>
-                            <p className="text-xs text-stone-400 font-mono mt-0.5 truncate">
-                              {product.certificate.serialNumber}
-                            </p>
+                            {certificateSerial ? (
+                              <p
+                                className="text-xs text-stone-400 font-mono mt-0.5 truncate"
+                                title={certificateSerial}
+                              >
+                                {toCompactSerial(certificateSerial)}
+                              </p>
+                            ) : null}
                           </div>
 
                           <div className="flex-shrink-0 text-stone-300 group-hover:text-emerald-500 transition-colors">
@@ -700,8 +792,8 @@ export default function ProductDetailClientComponent({
                           <InfoRow
                             label="Certificate No."
                             value={
-                              <span className="font-mono text-xs">
-                                {product.certificate.serialNumber}
+                              <span className="font-mono text-xs" title={certificateSerial}>
+                                {toCompactSerial(certificateSerial)}
                               </span>
                             }
                           />
@@ -721,7 +813,7 @@ export default function ProductDetailClientComponent({
                         {hasDisplayValue(product.certificate.registeredAt) && (
                           <InfoRow
                             label="Registered On"
-                            value={formatDateShort(product.certificate.registeredAt)}
+                            value={formatDateShort(String(product.certificate.registeredAt))}
                           />
                         )}
                       </div>

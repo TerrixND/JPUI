@@ -23,6 +23,7 @@ import {
   type CustomerTier,
   getAdminMediaUrl,
   type AdminMediaUrlResponse,
+  type MediaSlot,
   type MediaVisibilityPreset,
   verifyAdminProductAuthCardOtp,
 } from "@/lib/apiClient";
@@ -88,6 +89,7 @@ type AdminProductCommissionAllocation = {
 
 type AdminProductMediaRef = {
   id?: string | null;
+  slot?: string | null;
   type?: string | null;
   url?: string | null;
   mimeType?: string | null;
@@ -148,6 +150,7 @@ type InventoryCommissionAllocation = {
 
 type InventoryProductMediaRef = {
   id?: string;
+  slot?: string | null;
   type?: string;
   url?: string;
   mimeType?: string | null;
@@ -165,6 +168,7 @@ type InventoryProductMediaRef = {
 type ProductMedia = {
   id: string;
   mediaId: string | null;
+  slot: MediaSlot | null;
   type: "IMAGE" | "VIDEO" | "PDF";
   url: string;
   mimeType: string | null;
@@ -374,6 +378,22 @@ const normalizeMediaType = (value: unknown): ProductMedia["type"] | null => {
   return null;
 };
 
+const normalizeMediaSlot = (value: unknown): MediaSlot | null => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (
+    normalized === "PUBLIC_THUMBNAIL" ||
+    normalized === "PUBLIC_FEATURE_VIDEO" ||
+    normalized === "PUBLIC_GALLERY" ||
+    normalized === "PUBLIC_CERTIFICATE" ||
+    normalized === "ROLE_REFERENCE" ||
+    normalized === "CONSIGNMENT_CONTRACT"
+  ) {
+    return normalized;
+  }
+
+  return null;
+};
+
 const normalizeCustomerTier = (value: unknown): CustomerTier | null => {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "REGULAR" || normalized === "VIP" || normalized === "ULTRA_VIP") {
@@ -413,6 +433,7 @@ const toProductMedia = (payload: AdminMediaUrlResponse | null): ProductMedia | n
   return {
     id,
     mediaId: id,
+    slot: normalizeMediaSlot(payload?.slot),
     url,
     type,
     mimeType: typeof payload?.mimeType === "string" ? payload.mimeType : null,
@@ -432,6 +453,7 @@ const toInventoryProduct = (payload: AdminProductDetail): InventoryProduct => {
   const media = (Array.isArray(payload.media) ? payload.media : [])
     .map((mediaRef) => ({
       id: typeof mediaRef?.id === "string" ? mediaRef.id : undefined,
+      slot: typeof mediaRef?.slot === "string" ? mediaRef.slot : null,
       type: typeof mediaRef?.type === "string" ? mediaRef.type : undefined,
       url: typeof mediaRef?.url === "string" ? mediaRef.url : undefined,
       mimeType: typeof mediaRef?.mimeType === "string" ? mediaRef.mimeType : null,
@@ -556,6 +578,7 @@ const toInlineProductMedia = (
   return {
     id: rowId,
     mediaId,
+    slot: normalizeMediaSlot(mediaRef.slot),
     type: mediaType,
     url: mediaUrl,
     mimeType: normalizedMimeType || null,
@@ -1362,6 +1385,42 @@ export default function ProductEditPage() {
     () => existingMedia.filter((media) => isRoleVisibilityPreset(media.visibilityPreset)),
     [existingMedia],
   );
+  const existingPublicMediaBySlot = useMemo(() => {
+    let thumbnailMediaId: string | null = null;
+    let featureVideoMediaId: string | null = null;
+    let certificateMediaId: string | null = null;
+    const galleryMediaIds: string[] = [];
+
+    for (const media of existingPublicMedia) {
+      const mediaId = toMediaIdentifier(media);
+      if (!mediaId) {
+        continue;
+      }
+
+      if (media.slot === "PUBLIC_THUMBNAIL") {
+        thumbnailMediaId = thumbnailMediaId || mediaId;
+        continue;
+      }
+      if (media.slot === "PUBLIC_FEATURE_VIDEO") {
+        featureVideoMediaId = featureVideoMediaId || mediaId;
+        continue;
+      }
+      if (media.slot === "PUBLIC_CERTIFICATE") {
+        certificateMediaId = certificateMediaId || mediaId;
+        continue;
+      }
+      if (media.slot === "PUBLIC_GALLERY") {
+        galleryMediaIds.push(mediaId);
+      }
+    }
+
+    return {
+      thumbnailMediaId,
+      featureVideoMediaId,
+      galleryMediaIds: [...new Set(galleryMediaIds)],
+      certificateMediaId,
+    };
+  }, [existingPublicMedia]);
   const existingOtherMedia = useMemo(
     () =>
       existingMedia.filter(
@@ -1614,6 +1673,26 @@ export default function ProductEditPage() {
             })
           : [];
 
+      const mergedPublicMedia = {
+        thumbnailMediaId:
+          uploadedThumbnailMedia[0]?.id || existingPublicMediaBySlot.thumbnailMediaId || null,
+        featureVideoMediaId:
+          uploadedFeatureVideoMedia[0]?.id || existingPublicMediaBySlot.featureVideoMediaId || null,
+        galleryMediaIds: [
+          ...new Set([
+            ...existingPublicMediaBySlot.galleryMediaIds,
+            ...uploadedGalleryMedia.map((media) => media.id),
+          ]),
+        ],
+        certificateMediaId:
+          uploadedCertificateMedia[0]?.id || existingPublicMediaBySlot.certificateMediaId || null,
+      };
+      const hasMergedPublicMedia =
+        Boolean(mergedPublicMedia.thumbnailMediaId) ||
+        Boolean(mergedPublicMedia.featureVideoMediaId) ||
+        mergedPublicMedia.galleryMediaIds.length > 0 ||
+        Boolean(mergedPublicMedia.certificateMediaId);
+
       const existingRoleMediaByPreset = existingRoleMedia.reduce<Record<string, string[]>>(
         (accumulator, media) => {
           const preset =
@@ -1692,14 +1771,9 @@ export default function ProductEditPage() {
             form.sourceType === "CONSIGNED" ? uploadedConsignmentContract[0]?.id || null : null,
           commissionAllocations: normalizedAllocations,
           ...(form.visibility === "TARGETED_USER" ? { targetUserIds: productTargetUserIds } : {}),
-          ...(hasAnyPublicMediaUpload
+          ...(hasMergedPublicMedia
             ? {
-                publicMedia: {
-                  thumbnailMediaId: uploadedThumbnailMedia[0]?.id || null,
-                  featureVideoMediaId: uploadedFeatureVideoMedia[0]?.id || null,
-                  galleryMediaIds: uploadedGalleryMedia.map((media) => media.id),
-                  certificateMediaId: uploadedCertificateMedia[0]?.id || null,
-                },
+                publicMedia: mergedPublicMedia,
               }
             : {}),
           ...(Object.keys(existingRoleMediaByPreset).length > 0
