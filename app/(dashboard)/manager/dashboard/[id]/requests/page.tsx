@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
@@ -92,7 +93,13 @@ const toViewerScopeMessage = ({
 };
 
 export default function ManagerRequestsPage() {
+  const searchParams = useSearchParams();
   const { dashboardBasePath } = useRole();
+  const focusRequestId = (searchParams.get("requestId") || "").trim();
+  const shortcutDecision = (() => {
+    const rawDecision = (searchParams.get("decision") || "").trim().toUpperCase();
+    return rawDecision === "APPROVE" || rawDecision === "REJECT" ? rawDecision : "";
+  })();
 
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [branchId, setBranchId] = useState("");
@@ -216,6 +223,40 @@ export default function ManagerRequestsPage() {
     void loadRequests(branchId);
   }, [branchId, loadRequests]);
 
+  useEffect(() => {
+    if (!focusRequestId) {
+      return;
+    }
+
+    const targetCard = document.getElementById(`manager-approval-request-${focusRequestId}`);
+    if (!targetCard) {
+      return;
+    }
+
+    targetCard.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [focusRequestId, rows]);
+
+  useEffect(() => {
+    if (!focusRequestId || !shortcutDecision) {
+      return;
+    }
+
+    const actionKey = shortcutDecision === "REJECT" ? "reject" : "approve";
+    const targetButton = document.getElementById(
+      `manager-approval-request-${focusRequestId}-${actionKey}`,
+    );
+    if (!targetButton) {
+      return;
+    }
+
+    targetButton.focus({
+      preventScroll: true,
+    });
+  }, [focusRequestId, shortcutDecision, rows]);
+
   const branchLabelMap = useMemo(
     () =>
       new Map(
@@ -235,8 +276,10 @@ export default function ManagerRequestsPage() {
     return { total, pending, approved, rejected };
   }, [rows]);
 
-  const getDecisionDraft = (requestId: string) =>
-    drafts[requestId] || createDecisionDraft();
+  const getDecisionDraft = useCallback(
+    (requestId: string) => drafts[requestId] || createDecisionDraft(),
+    [drafts],
+  );
 
   const updateDecisionDraft = (
     requestId: string,
@@ -286,7 +329,7 @@ export default function ManagerRequestsPage() {
         setBusyId("");
       }
     },
-    [getAccessToken, loadRequests, drafts],
+    [getAccessToken, getDecisionDraft, loadRequests],
   );
 
   return (
@@ -418,11 +461,15 @@ export default function ManagerRequestsPage() {
             const draft = getDecisionDraft(request.id);
             const isPending = request.status === "PENDING";
             const isBusy = busyId === request.id;
+            const isFocused = focusRequestId === request.id;
 
             return (
               <div
+                id={`manager-approval-request-${request.id}`}
                 key={request.id}
-                className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700/60 dark:bg-gray-900"
+                className={`rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700/60 dark:bg-gray-900 ${
+                  isFocused ? "bg-emerald-50 dark:bg-emerald-900/20" : ""
+                }`}
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-3">
@@ -563,6 +610,7 @@ export default function ManagerRequestsPage() {
 
                         <div className="flex gap-2">
                           <button
+                            id={`manager-approval-request-${request.id}-approve`}
                             type="button"
                             disabled={isBusy}
                             onClick={() => void decideRequest(request, "APPROVE")}
@@ -571,6 +619,7 @@ export default function ManagerRequestsPage() {
                             {isBusy ? "Saving..." : "Approve"}
                           </button>
                           <button
+                            id={`manager-approval-request-${request.id}-reject`}
                             type="button"
                             disabled={isBusy}
                             onClick={() => void decideRequest(request, "REJECT")}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
@@ -138,7 +139,13 @@ const createRequestControlDraft = (
 };
 
 export default function AdminRequestsPage() {
+  const searchParams = useSearchParams();
   const { dashboardBasePath, isMainAdmin, userId } = useRole();
+  const focusRequestId = (searchParams.get("requestId") || "").trim();
+  const shortcutDecision = (() => {
+    const rawDecision = (searchParams.get("decision") || "").trim().toUpperCase();
+    return rawDecision === "APPROVE" || rawDecision === "REJECT" ? rawDecision : "";
+  })();
   const [branchProductRows, setBranchProductRows] = useState<AdminBranchProductApprovalRequest[]>([]);
   const [branchProductLoading, setBranchProductLoading] = useState(true);
   const [branchProductError, setBranchProductError] = useState("");
@@ -222,6 +229,42 @@ export default function AdminRequestsPage() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  useEffect(() => {
+    if (!focusRequestId) {
+      return;
+    }
+
+    const targetCard =
+      document.getElementById(`approval-request-${focusRequestId}`) ||
+      document.getElementById(`branch-product-request-${focusRequestId}`);
+    if (!targetCard) {
+      return;
+    }
+
+    targetCard.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [focusRequestId, approvalRows, branchProductRows]);
+
+  useEffect(() => {
+    if (!focusRequestId || !shortcutDecision) {
+      return;
+    }
+
+    const actionKey = shortcutDecision === "REJECT" ? "reject" : "approve";
+    const targetButton =
+      document.getElementById(`approval-request-${focusRequestId}-${actionKey}`) ||
+      document.getElementById(`branch-product-request-${focusRequestId}-${actionKey}`);
+    if (!targetButton) {
+      return;
+    }
+
+    targetButton.focus({
+      preventScroll: true,
+    });
+  }, [focusRequestId, shortcutDecision, approvalRows, branchProductRows]);
 
   const getApprovalDraft = useCallback(
     (requestId: string) => approvalDrafts[requestId] || createDecisionDraft(),
@@ -641,9 +684,16 @@ export default function AdminRequestsPage() {
               const decisionDraft = getBranchProductDraft(request);
               const controlDraft = getControlDraft(request);
               const isPending = request.status === "PENDING";
+              const isFocused = focusRequestId === request.id;
 
               return (
-                <div key={request.id} className="grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div
+                  id={`branch-product-request-${request.id}`}
+                  key={request.id}
+                  className={`grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_360px] ${
+                    isFocused ? "bg-emerald-50 dark:bg-emerald-900/20" : ""
+                  }`}
+                >
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -788,6 +838,7 @@ export default function AdminRequestsPage() {
                         />
                         <div className="mt-3 flex gap-2">
                           <button
+                            id={`branch-product-request-${request.id}-approve`}
                             type="button"
                             onClick={() => {
                               void decideBranchProduct(request, "APPROVE");
@@ -798,6 +849,7 @@ export default function AdminRequestsPage() {
                             {branchProductBusyId === request.id ? "Saving..." : "Approve"}
                           </button>
                           <button
+                            id={`branch-product-request-${request.id}-reject`}
                             type="button"
                             onClick={() => {
                               void decideBranchProduct(request, "REJECT");
@@ -855,9 +907,16 @@ export default function AdminRequestsPage() {
               const draft = getApprovalDraft(request.id);
               const isPending = request.status === "PENDING" && isMainAdmin;
               const authCardPayload = getAuthCardRequestPayload(request);
+              const isFocused = focusRequestId === request.id;
 
               return (
-                <div key={request.id} className="grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div
+                  id={`approval-request-${request.id}`}
+                  key={request.id}
+                  className={`grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_320px] ${
+                    isFocused ? "bg-emerald-50 dark:bg-emerald-900/20" : ""
+                  }`}
+                >
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -921,6 +980,7 @@ export default function AdminRequestsPage() {
                       </label>
                       <div className="mt-3 flex gap-2">
                         <button
+                          id={`approval-request-${request.id}-approve`}
                           type="button"
                           onClick={() => {
                             void decideApproval(request, "APPROVE");
@@ -935,6 +995,7 @@ export default function AdminRequestsPage() {
                               : "Approve"}
                         </button>
                         <button
+                          id={`approval-request-${request.id}-reject`}
                           type="button"
                           onClick={() => {
                             void decideApproval(request, "REJECT");
