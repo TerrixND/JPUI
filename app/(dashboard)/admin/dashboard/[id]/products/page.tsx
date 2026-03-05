@@ -279,8 +279,10 @@ export default function AdminProducts() {
   const [quickVisibilityMessage, setQuickVisibilityMessage] = useState("");
   const [savingQuickVisibility, setSavingQuickVisibility] = useState(false);
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
+  const copyResetTimerRef = useRef<number | null>(null);
   const [browserOrigin, setBrowserOrigin] = useState("");
   const [authCardModal, setAuthCardModal] = useState<AuthCardActionModalState | null>(null);
+  const [copiedAuthProductId, setCopiedAuthProductId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -483,9 +485,54 @@ export default function AdminProducts() {
     [browserOrigin],
   );
 
+  const copyAuthenticityUrl = useCallback(
+    async (productId: string, url: string) => {
+      const normalizedUrl = typeof url === "string" ? url.trim() : "";
+      if (!normalizedUrl) {
+        return;
+      }
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(normalizedUrl);
+        } else {
+          const textArea = document.createElement("textarea");
+          textArea.value = normalizedUrl;
+          textArea.setAttribute("readonly", "");
+          textArea.style.position = "absolute";
+          textArea.style.left = "-9999px";
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+        }
+
+        setCopiedAuthProductId(productId);
+        if (copyResetTimerRef.current) {
+          window.clearTimeout(copyResetTimerRef.current);
+        }
+        copyResetTimerRef.current = window.setTimeout(() => {
+          setCopiedAuthProductId((current) => (current === productId ? null : current));
+          copyResetTimerRef.current = null;
+        }, 1800);
+      } catch {
+        setMediaHint("Failed to copy authenticity link.");
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const rows = Object.entries(mediaByProductId);
@@ -1233,7 +1280,7 @@ export default function AdminProducts() {
                       <th className="px-5 py-3">Net Profit Range</th>
                       <th className="px-5 py-3 hidden xl:table-cell">Rows</th>
                       {showAuthenticityUrl ? (
-                        <th className="px-5 py-3 hidden xl:table-cell">Authenticity URL</th>
+                        <th className="px-5 py-3 hidden xl:table-cell">Authenticity Link</th>
                       ) : null}
                       <th className="px-5 py-3">Actions</th>
                     </tr>
@@ -1247,6 +1294,7 @@ export default function AdminProducts() {
                       const authenticityUrl = toAuthenticityUrl(
                         authenticityMeta?.authenticityPath,
                       );
+                      const authenticityLinkStatus = authenticityUrl ? "READY" : "UNAVAILABLE";
                       const hasActiveAuthenticityCard =
                         authenticityMeta?.authCardStatus === "ACTIVE";
 
@@ -1313,34 +1361,51 @@ export default function AdminProducts() {
                           <td className="px-5 py-3 text-gray-500 dark:text-gray-400 hidden xl:table-cell">{item.commission.allocations.length}</td>
                           {showAuthenticityUrl ? (
                             <td className="px-5 py-3 hidden xl:table-cell">
-                              {authenticityUrl ? (
-                                <div className="max-w-[260px]">
-                                  <a
-                                    href={authenticityUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block truncate text-xs font-mono text-emerald-700 dark:text-emerald-300 hover:underline"
-                                    title={authenticityUrl}
+                              <div className="max-w-[260px] space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      authenticityUrl
+                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                    }`}
                                   >
-                                    {authenticityUrl}
-                                  </a>
-                                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                                    Token: {authenticityMeta?.authenticityToken || "-"}
-                                  </p>
-                                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                                    Status: {authenticityMeta?.authCardStatus || "-"} | Serial:{" "}
-                                    {authenticityMeta?.authCardSerial || "-"}
-                                  </p>
+                                    Link {authenticityLinkStatus}
+                                  </span>
+                                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                    Card {authenticityMeta?.authCardStatus || "-"}
+                                  </span>
                                 </div>
-                              ) : (
-                                <div className="text-xs text-gray-400 dark:text-gray-500">
-                                  <p>Unavailable</p>
-                                  <p className="mt-1">
-                                    Status: {authenticityMeta?.authCardStatus || "-"} | Serial:{" "}
-                                    {authenticityMeta?.authCardSerial || "-"}
-                                  </p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void copyAuthenticityUrl(item.id, authenticityUrl);
+                                    }}
+                                    disabled={!authenticityUrl}
+                                    className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {copiedAuthProductId === item.id ? "Copied" : "Copy"}
+                                  </button>
+                                  {authenticityUrl ? (
+                                    <a
+                                      href={authenticityUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 dark:border-emerald-700/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                    >
+                                      Visit
+                                    </a>
+                                  ) : (
+                                    <span className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed">
+                                      Visit
+                                    </span>
+                                  )}
                                 </div>
-                              )}
+                                <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                                  Serial: {authenticityMeta?.authCardSerial || "-"}
+                                </p>
+                              </div>
                             </td>
                           ) : null}
                           <td className="px-5 py-3">
@@ -1434,6 +1499,7 @@ export default function AdminProducts() {
                   const authenticityUrl = toAuthenticityUrl(
                     authenticityMeta?.authenticityPath,
                   );
+                  const authenticityLinkStatus = authenticityUrl ? "READY" : "UNAVAILABLE";
                   const hasActiveAuthenticityCard =
                     authenticityMeta?.authCardStatus === "ACTIVE";
 
@@ -1512,30 +1578,45 @@ export default function AdminProducts() {
                             </div>
                             {showAuthenticityUrl ? (
                               <div className="col-span-2">
-                                <span className="text-gray-400 dark:text-gray-500">
-                                  Authenticity URL:
-                                </span>{" "}
-                                {authenticityUrl ? (
-                                  <>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      authenticityUrl
+                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                    }`}
+                                  >
+                                    Link {authenticityLinkStatus}
+                                  </span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    Card {authenticityMeta?.authCardStatus || "-"} /{" "}
+                                    {authenticityMeta?.authCardSerial || "-"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void copyAuthenticityUrl(item.id, authenticityUrl);
+                                    }}
+                                    disabled={!authenticityUrl}
+                                    className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {copiedAuthProductId === item.id ? "Copied" : "Copy"}
+                                  </button>
+                                  {authenticityUrl ? (
                                     <a
                                       href={authenticityUrl}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="font-mono text-emerald-700 dark:text-emerald-300 hover:underline"
+                                      className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 dark:border-emerald-700/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                     >
-                                      {authenticityUrl}
+                                      Visit
                                     </a>
-                                    <span className="ml-2 text-gray-500 dark:text-gray-400">
-                                      ({authenticityMeta?.authCardStatus || "-"} /{" "}
-                                      {authenticityMeta?.authCardSerial || "-"})
+                                  ) : (
+                                    <span className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed">
+                                      Visit
                                     </span>
-                                  </>
-                                ) : (
-                                  <span className="text-gray-500 dark:text-gray-400">
-                                    Unavailable ({authenticityMeta?.authCardStatus || "-"} /{" "}
-                                    {authenticityMeta?.authCardSerial || "-"})
-                                  </span>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             ) : null}
                           </div>
