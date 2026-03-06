@@ -459,9 +459,8 @@ export default function ProductDetailClientComponent({
       label: "Tier",
       value: hasDisplayValue(product.tier) ? <TierBadge tier={String(product.tier)} /> : null,
     },
-    { label: "Source", value: hasDisplayValue(product.sourceType) ? product.sourceType : null },
-    { label: "Color", value: hasDisplayValue(product.color) ? product.color : null },
     { label: "Origin", value: hasDisplayValue(product.origin) ? product.origin : null },
+    { label: "Color", value: hasDisplayValue(product.color) ? product.color : null },
     {
       label: "Refractive Index",
       value: hasDisplayValue(product.refractiveIndex) ? product.refractiveIndex : null,

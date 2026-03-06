@@ -972,6 +972,59 @@ export type AdminProductsResponse = AdminPageResponseMeta & {
   raw: unknown;
 };
 
+export type PublicProductMediaRecord = {
+  id: string;
+  type: string | null;
+  url: string;
+  originalUrl: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  visibilitySections: MediaSection[];
+  audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUsers: Array<{
+    userId: string;
+  }>;
+  visibilityPreset: MediaVisibilityPreset | null;
+  raw: JsonRecord;
+};
+
+export type PublicProductRecord = {
+  id: string;
+  sku: string | null;
+  name: string | null;
+  color: string | null;
+  origin: string | null;
+  description: string | null;
+  weight: number | null;
+  weightUnit: string | null;
+  length: number | null;
+  depth: number | null;
+  height: number | null;
+  totalMassGram: number | null;
+  refractiveIndex: string | null;
+  densityGPerCm3: string | null;
+  uvVisSpectrumNm: string | null;
+  cutAndShape: string | null;
+  measurementMm: string | null;
+  tier: string | null;
+  status: string | null;
+  visibility: string | null;
+  visibilityNote: string | null;
+  minCustomerTier: CustomerTier | null;
+  accessListUserIds: string[];
+  media: PublicProductMediaRecord[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  raw: JsonRecord;
+};
+
+export type PublicProductsResponse = {
+  items: PublicProductRecord[];
+  raw: unknown;
+};
+
 export type AdminInventoryProfitAnalytics = {
   includeSold: boolean;
   totals: {
@@ -2901,6 +2954,127 @@ const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => 
   };
 };
 
+const normalizePublicProductMedia = (
+  value: unknown,
+): PublicProductMediaRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const normalized = normalizeMediaUrlResponse(row);
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    id: normalized.id,
+    type: normalized.type,
+    url: normalized.url,
+    originalUrl: asNullableString(row.originalUrl),
+    mimeType: normalized.mimeType,
+    sizeBytes: normalized.sizeBytes,
+    visibilitySections: normalized.visibilitySections,
+    audience: normalized.audience,
+    allowedRoles: normalized.allowedRoles,
+    minCustomerTier: normalized.minCustomerTier,
+    targetUsers: normalized.targetUsers,
+    visibilityPreset: normalized.visibilityPreset,
+    raw: row,
+  };
+};
+
+const normalizePublicProductRow = (value: unknown): PublicProductRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const media = Array.isArray(row.media)
+    ? row.media
+        .map((entry) => normalizePublicProductMedia(entry))
+        .filter((entry): entry is PublicProductMediaRecord => Boolean(entry))
+    : [];
+
+  const accessListUserIds = Array.isArray(row.accessList)
+    ? row.accessList
+        .map((entry) => asRecord(entry))
+        .map((entry) => asString(entry?.userId))
+        .filter(Boolean)
+    : [];
+
+  return {
+    id,
+    sku: asNullableString(row.sku),
+    name: asNullableString(row.name),
+    color: asNullableString(row.color),
+    origin: asNullableString(row.origin),
+    description: asNullableString(row.description),
+    weight: asFiniteNumberish(row.weight),
+    weightUnit: asNullableString(row.weightUnit),
+    length: asFiniteNumberish(row.length),
+    depth: asFiniteNumberish(row.depth),
+    height: asFiniteNumberish(row.height),
+    totalMassGram: asFiniteNumberish(row.totalMassGram),
+    refractiveIndex: asNullableString(row.refractiveIndex),
+    densityGPerCm3: asNullableString(row.densityGPerCm3),
+    uvVisSpectrumNm: asNullableString(row.uvVisSpectrumNm),
+    cutAndShape: asNullableString(row.cutAndShape),
+    measurementMm: asNullableString(row.measurementMm),
+    tier: asNullableString(row.tier),
+    status: asNullableString(row.status),
+    visibility: asNullableString(row.visibility),
+    visibilityNote: asNullableString(row.visibilityNote),
+    minCustomerTier: normalizeCustomerTier(row.minCustomerTier),
+    accessListUserIds,
+    media,
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    raw: row,
+  };
+};
+
+const extractPublicProductRows = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  if (Array.isArray(root.items)) {
+    return root.items;
+  }
+  if (Array.isArray(root.products)) {
+    return root.products;
+  }
+  if (Array.isArray(root.rows)) {
+    return root.rows;
+  }
+  if (Array.isArray(root.data)) {
+    return root.data;
+  }
+
+  const nestedData = asRecord(root.data);
+  if (nestedData) {
+    if (Array.isArray(nestedData.items)) {
+      return nestedData.items;
+    }
+    if (Array.isArray(nestedData.products)) {
+      return nestedData.products;
+    }
+  }
+
+  return [];
+};
+
 const normalizeInventoryRequestRow = (value: unknown): AdminInventoryRequestRecord | null => {
   const row = asRecord(value);
   if (!row) {
@@ -3717,6 +3891,89 @@ export const deleteAdminProduct = async ({
   });
 
   return normalizeAdminActionResponse(200, response.payload, response.status);
+};
+
+export const getPublicProducts = async ({
+  accessToken,
+  branchId,
+}: {
+  accessToken?: string;
+  branchId?: string;
+} = {}): Promise<PublicProductsResponse> => {
+  const query = new URLSearchParams();
+  const normalizedBranchId = asNullableString(branchId);
+
+  if (normalizedBranchId) {
+    query.set("branchId", normalizedBranchId);
+  }
+
+  const queryString = query.toString();
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/public/products${queryString ? `?${queryString}` : ""}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load public products.",
+  });
+
+  const items = extractPublicProductRows(payload)
+    .map((row) => normalizePublicProductRow(row))
+    .filter((row): row is PublicProductRecord => Boolean(row));
+
+  return {
+    items,
+    raw: payload,
+  };
+};
+
+export const getPublicProductDetail = async ({
+  productId,
+  accessToken,
+  branchId,
+}: {
+  productId: string;
+  accessToken?: string;
+  branchId?: string;
+}): Promise<PublicProductRecord> => {
+  const normalizedProductId = asString(productId);
+  if (!normalizedProductId) {
+    throw new ApiClientError({
+      message: "Product ID is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const query = new URLSearchParams();
+  const normalizedBranchId = asNullableString(branchId);
+  if (normalizedBranchId) {
+    query.set("branchId", normalizedBranchId);
+  }
+
+  const queryString = query.toString();
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/public/products/${encodeURIComponent(normalizedProductId)}${
+      queryString ? `?${queryString}` : ""
+    }`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load product details.",
+  });
+
+  const root = asRecord(payload);
+  const product =
+    normalizePublicProductRow(payload) ||
+    normalizePublicProductRow(root?.product) ||
+    normalizePublicProductRow(root?.item);
+
+  if (!product) {
+    throw new ApiClientError({
+      message: "Invalid public product detail response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return product;
 };
 
 export const getAdminProducts = async ({
