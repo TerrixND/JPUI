@@ -322,6 +322,23 @@ export type CreateStaffRulePayload = {
   permission?: StaffRulePermissionPayload | null;
 };
 
+export type DeleteStaffRuleResponse = {
+  approvalSubmitted: boolean;
+  message: string | null;
+  code: string | null;
+  id: string;
+  status: string | null;
+  deletedAt: string | null;
+  raw: unknown;
+};
+
+export type StaffRuleActionResponse = {
+  approvalSubmitted: boolean;
+  message: string | null;
+  code: string | null;
+  raw: unknown;
+};
+
 export type AdminLogBackupsResponse = {
   files: AdminLogBackupFile[];
   raw: unknown;
@@ -6129,9 +6146,9 @@ const revokeStaffRule = async ({
   scope: StaffRuleActorScope;
   accessToken: string;
   ruleId: string;
-}): Promise<StaffOnboardingRule> => {
+}): Promise<StaffRuleActionResponse> => {
   const scopePath = staffRuleScopePath(scope);
-  const responsePayload = await fetchJson({
+  const response = await fetchJsonResponse({
     path: `${API_BASE_PATH}/${scopePath}/staff-onboarding/rules/${encodeURIComponent(ruleId)}/revoke`,
     method: "PATCH",
     accessToken,
@@ -6140,17 +6157,71 @@ const revokeStaffRule = async ({
     },
     fallbackErrorMessage: "Failed to revoke staff onboarding rule.",
   });
+  const root = asRecord(response.payload) ?? {};
+  const code = asNullableString(root.code);
+  const approvalSubmitted =
+    response.status === 202 || asString(root.code).toUpperCase() === "APPROVAL_REQUEST_SUBMITTED";
 
-  const rule = normalizeStaffRule(responsePayload);
+  if (approvalSubmitted) {
+    return {
+      approvalSubmitted: true,
+      message: asNullableString(root.message),
+      code,
+      raw: response.payload,
+    };
+  }
+
+  const rule = normalizeStaffRule(response.payload);
   if (!rule) {
     throw new ApiClientError({
       message: "Invalid revoke response.",
       status: 500,
-      payload: responsePayload,
+      payload: response.payload,
     });
   }
 
-  return rule;
+  return {
+    approvalSubmitted: false,
+    message: asNullableString(root.message),
+    code,
+    raw: response.payload,
+  };
+};
+
+const deleteStaffRule = async ({
+  scope,
+  accessToken,
+  ruleId,
+}: {
+  scope: StaffRuleActorScope;
+  accessToken: string;
+  ruleId: string;
+}): Promise<DeleteStaffRuleResponse> => {
+  const scopePath = staffRuleScopePath(scope);
+  const response = await fetchJsonResponse({
+    path: `${API_BASE_PATH}/${scopePath}/staff-onboarding/rules/${encodeURIComponent(ruleId)}`,
+    method: "DELETE",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    fallbackErrorMessage: "Failed to delete staff onboarding rule.",
+  });
+  const root = asRecord(response.payload) ?? {};
+  const id = asString(root.id) || ruleId;
+  const code = asNullableString(root.code);
+  const approvalSubmitted =
+    response.status === 202 || asString(root.code).toUpperCase() === "APPROVAL_REQUEST_SUBMITTED";
+
+  return {
+    approvalSubmitted,
+    message: asNullableString(root.message),
+    code,
+    id,
+    status: asNullableString(root.status),
+    deletedAt: asNullableString(root.deletedAt),
+    raw: response.payload,
+  };
 };
 
 export const getAdminStaffRules = async ({
@@ -6190,8 +6261,22 @@ export const revokeAdminStaffRule = async ({
 }: {
   accessToken: string;
   ruleId: string;
-}): Promise<StaffOnboardingRule> => {
+}): Promise<StaffRuleActionResponse> => {
   return revokeStaffRule({
+    scope: "admin",
+    accessToken,
+    ruleId,
+  });
+};
+
+export const deleteAdminStaffRule = async ({
+  accessToken,
+  ruleId,
+}: {
+  accessToken: string;
+  ruleId: string;
+}): Promise<DeleteStaffRuleResponse> => {
+  return deleteStaffRule({
     scope: "admin",
     accessToken,
     ruleId,
@@ -6235,8 +6320,22 @@ export const revokeManagerStaffRule = async ({
 }: {
   accessToken: string;
   ruleId: string;
-}): Promise<StaffOnboardingRule> => {
+}): Promise<StaffRuleActionResponse> => {
   return revokeStaffRule({
+    scope: "manager",
+    accessToken,
+    ruleId,
+  });
+};
+
+export const deleteManagerStaffRule = async ({
+  accessToken,
+  ruleId,
+}: {
+  accessToken: string;
+  ruleId: string;
+}): Promise<DeleteStaffRuleResponse> => {
+  return deleteStaffRule({
     scope: "manager",
     accessToken,
     ruleId,

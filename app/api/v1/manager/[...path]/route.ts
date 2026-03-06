@@ -146,3 +146,10 @@ export async function PATCH(
   return proxyManagerRequest(request, params);
 }
 
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  const params = await context.params;
+  return proxyManagerRequest(request, params);
+}

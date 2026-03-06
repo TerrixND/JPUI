@@ -7,6 +7,7 @@ import supabase from "@/lib/supabase";
 import {
   getAdminStaffRules,
   createAdminStaffRule,
+  deleteAdminStaffRule,
   getAdminBranchesWithManagers,
   revokeAdminStaffRule,
   type StaffOnboardingRule,
@@ -247,7 +248,7 @@ const IconRefresh = () => (
 export default function AdminStaffRules() {
   type ProvisionableRole = (typeof PROVISIONABLE_ROLES)[number];
 
-  const { isAdminActionBlocked } = useRole();
+  const { isAdminActionBlocked, isMainAdmin } = useRole();
   const staffRuleManageBlocked = isAdminActionBlocked("STAFF_RULE_MANAGE");
   const staffRuleManageTooltip = getAdminActionRestrictionTooltip("STAFF_RULE_MANAGE");
 
@@ -291,6 +292,9 @@ export default function AdminStaffRules() {
   /* -------- Revoke state -------- */
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [actionInfo, setActionInfo] = useState("");
 
   /* -------- Expanded card on mobile -------- */
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -536,6 +540,8 @@ export default function AdminStaffRules() {
   /* -------- Revoke rule -------- */
   const onRevokeRule = async (ruleId: string) => {
     setRevokeError("");
+    setDeleteError("");
+    setActionInfo("");
 
     if (staffRuleManageBlocked) {
       setRevokeError(staffRuleManageTooltip);
@@ -545,12 +551,59 @@ export default function AdminStaffRules() {
     setRevokingId(ruleId);
     try {
       const accessToken = await getAccessToken();
-      await revokeAdminStaffRule({ accessToken, ruleId });
+      const response = await revokeAdminStaffRule({ accessToken, ruleId });
+      if (response.approvalSubmitted) {
+        setActionInfo(
+          response.message ||
+            "Revoke request submitted to main admin for approval.",
+        );
+      }
       await loadRules();
     } catch (caughtError) {
       setRevokeError(getErrorMessage(caughtError));
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const onDeleteRule = async (rule: StaffOnboardingRule) => {
+    setDeleteError("");
+    setRevokeError("");
+    setActionInfo("");
+
+    if (staffRuleManageBlocked) {
+      setDeleteError(staffRuleManageTooltip);
+      return;
+    }
+
+    const canDelete = rule.status === "REVOKED";
+    if (!canDelete) {
+      setDeleteError("Rule can be deleted only after it is revoked.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this onboarding rule permanently? This action cannot be undone.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(rule.id);
+    try {
+      const accessToken = await getAccessToken();
+      const response = await deleteAdminStaffRule({ accessToken, ruleId: rule.id });
+      if (response.approvalSubmitted) {
+        setActionInfo(
+          response.message ||
+            "Delete request submitted to main admin for approval.",
+        );
+      }
+      await loadRules();
+    } catch (caughtError) {
+      setDeleteError(getErrorMessage(caughtError));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -700,6 +753,24 @@ export default function AdminStaffRules() {
           </button>
         </div>
       )}
+      {deleteError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-lg text-xs text-red-700 dark:text-red-300">
+          <IconWarning />
+          {deleteError}
+          <button type="button" onClick={() => setDeleteError("")} className="ml-auto text-red-400 hover:text-red-600">
+            <IconX />
+          </button>
+        </div>
+      )}
+      {actionInfo && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-lg text-xs text-blue-700 dark:text-blue-300">
+          <IconWarning />
+          {actionInfo}
+          <button type="button" onClick={() => setActionInfo("")} className="ml-auto text-blue-400 hover:text-blue-600">
+            <IconX />
+          </button>
+        </div>
+      )}
 
       {/* -------- Loading -------- */}
       {loading && (
@@ -756,7 +827,11 @@ export default function AdminStaffRules() {
           {rules.map((rule) => {
             const isExpanded = expandedId === rule.id;
             const isRevoking = revokingId === rule.id;
-            const canRevoke = rule.status === "PENDING";
+            const isDeleting = deletingId === rule.id;
+            const canRevoke = isMainAdmin
+              ? rule.status !== "REVOKED"
+              : rule.status !== "REVOKED" && rule.status !== "CLAIMED";
+            const canDelete = rule.status === "REVOKED";
 
             return (
               <div
@@ -856,17 +931,36 @@ export default function AdminStaffRules() {
                         </svg>
                       </button>
 
-                      {canRevoke && (
-                        <button
-                          type="button"
-                          onClick={() => void onRevokeRule(rule.id)}
-                          disabled={isRevoking || staffRuleManageBlocked}
-                          title={staffRuleManageBlocked ? staffRuleManageTooltip : undefined}
-                          className="px-3 py-1.5 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {isRevoking ? "Revoking..." : "Revoke"}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => void onRevokeRule(rule.id)}
+                        disabled={!canRevoke || isRevoking || isDeleting || staffRuleManageBlocked}
+                        title={
+                          staffRuleManageBlocked
+                            ? staffRuleManageTooltip
+                            : !canRevoke
+                              ? "Claimed rules can only be revoked by main admin."
+                              : undefined
+                        }
+                        className="px-3 py-1.5 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isRevoking ? "Revoking..." : "Revoke"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onDeleteRule(rule)}
+                        disabled={!canDelete || isDeleting || isRevoking || staffRuleManageBlocked}
+                        title={
+                          staffRuleManageBlocked
+                            ? staffRuleManageTooltip
+                            : !canDelete
+                              ? "Delete is available only for revoked rules."
+                              : undefined
+                        }
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isDeleting ? "Deleting..." : "Delete"}
+                      </button>
                     </div>
                   </div>
 
