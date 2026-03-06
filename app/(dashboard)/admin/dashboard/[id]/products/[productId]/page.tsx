@@ -273,6 +273,18 @@ type PublicMediaVisibilityPreset = Extract<
 >;
 type RoleMediaVisibilityPreset = Extract<MediaVisibilityPreset, "ADMIN" | "MANAGER" | "SALES">;
 
+type PublicUploadVisibilityConfig = {
+  preset: PublicMediaVisibilityPreset;
+  minCustomerTier: CustomerTier | "";
+  targetUserIdsInput: string;
+};
+
+type PendingPublicUpload = {
+  file: MediaFile;
+  slot: Extract<MediaSlot, "PUBLIC_THUMBNAIL" | "PUBLIC_FEATURE_VIDEO" | "PUBLIC_GALLERY" | "PUBLIC_CERTIFICATE">;
+  slotLabel: string;
+};
+
 const VISIBILITY_OPTIONS = [
   "PRIVATE",
   "STAFF",
@@ -749,8 +761,14 @@ export default function ProductEditPage() {
   const [publicVideoFiles, setPublicVideoFiles] = useState<MediaFile[]>([]);
   const [publicGalleryFiles, setPublicGalleryFiles] = useState<MediaFile[]>([]);
   const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
+  const [publicVisibilityByFileId, setPublicVisibilityByFileId] = useState<
+    Record<string, PublicUploadVisibilityConfig>
+  >({});
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
+  const [roleVisibilityByFileId, setRoleVisibilityByFileId] = useState<
+    Record<string, RoleMediaVisibilityPreset>
+  >({});
   const [consignmentContractFiles, setConsignmentContractFiles] = useState<MediaFile[]>([]);
   const [productRecord, setProductRecord] = useState<AdminProductRecord | null>(null);
 
@@ -799,6 +817,39 @@ export default function ProductEditPage() {
         ? (["ADMIN"] as RoleMediaVisibilityPreset[])
         : ROLE_MEDIA_VISIBILITY_PRESETS.filter(isRoleVisibilityPreset),
     [form.visibility],
+  );
+  const pendingPublicUploads = useMemo<PendingPublicUpload[]>(
+    () => [
+      ...publicThumbnailFiles.map((file) => ({
+        file,
+        slot: "PUBLIC_THUMBNAIL" as const,
+        slotLabel: "Thumbnail Image",
+      })),
+      ...publicVideoFiles.map((file) => ({
+        file,
+        slot: "PUBLIC_FEATURE_VIDEO" as const,
+        slotLabel: "Feature Video",
+      })),
+      ...publicGalleryFiles.map((file) => ({
+        file,
+        slot: "PUBLIC_GALLERY" as const,
+        slotLabel: "More Images",
+      })),
+      ...publicCertificateFiles.map((file) => ({
+        file,
+        slot: "PUBLIC_CERTIFICATE" as const,
+        slotLabel: "Certificate File",
+      })),
+    ],
+    [publicCertificateFiles, publicGalleryFiles, publicThumbnailFiles, publicVideoFiles],
+  );
+  const createDefaultPublicUploadVisibility = useCallback(
+    (): PublicUploadVisibilityConfig => ({
+      preset: publicVisibilityPreset,
+      minCustomerTier: publicMinCustomerTier,
+      targetUserIdsInput: publicTargetUserIdsInput,
+    }),
+    [publicMinCustomerTier, publicTargetUserIdsInput, publicVisibilityPreset],
   );
   const showAuthenticityUrl = role === "admin";
   const authenticityUrl = useMemo(() => {
@@ -1359,8 +1410,80 @@ export default function ProductEditPage() {
     setPublicVisibilityPreset("PRIVATE");
   }, [form.minCustomerTier, form.targetUserIdsInput, form.visibility]);
 
+  useEffect(() => {
+    setPublicVisibilityByFileId((prev) => {
+      let changed = false;
+      const next: Record<string, PublicUploadVisibilityConfig> = {};
+
+      for (const row of pendingPublicUploads) {
+        const current = prev[row.file.id];
+        if (current) {
+          next[row.file.id] = current;
+          continue;
+        }
+
+        next[row.file.id] = createDefaultPublicUploadVisibility();
+        changed = true;
+      }
+
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [createDefaultPublicUploadVisibility, pendingPublicUploads]);
+
+  useEffect(() => {
+    const fallbackPreset = roleVisibilityOptions.includes(roleVisibilityPreset)
+      ? roleVisibilityPreset
+      : roleVisibilityOptions[0];
+
+    setRoleVisibilityByFileId((prev) => {
+      let changed = false;
+      const next: Record<string, RoleMediaVisibilityPreset> = {};
+
+      for (const mediaFile of roleMediaFiles) {
+        const current = prev[mediaFile.id];
+        if (current && roleVisibilityOptions.includes(current)) {
+          next[mediaFile.id] = current;
+          continue;
+        }
+
+        next[mediaFile.id] = fallbackPreset;
+        changed = true;
+      }
+
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [roleMediaFiles, roleVisibilityOptions, roleVisibilityPreset]);
+
   const updateField = (field: keyof EditForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updatePublicFileVisibility = (
+    fileId: string,
+    patch: Partial<PublicUploadVisibilityConfig>,
+  ) => {
+    setPublicVisibilityByFileId((prev) => ({
+      ...prev,
+      [fileId]: {
+        ...(prev[fileId] || createDefaultPublicUploadVisibility()),
+        ...patch,
+      },
+    }));
+  };
+
+  const updateRoleFileVisibility = (fileId: string, preset: RoleMediaVisibilityPreset) => {
+    setRoleVisibilityByFileId((prev) => ({
+      ...prev,
+      [fileId]: preset,
+    }));
   };
 
   const updateAllocation = (allocationId: string, patch: Partial<AllocationRow>) => {
@@ -1485,23 +1608,32 @@ export default function ProductEditPage() {
       return;
     }
 
-    if (!publicThumbnailFiles.length) {
+    const hasThumbnail =
+      publicThumbnailFiles.length > 0 || Boolean(existingPublicMediaBySlot.thumbnailMediaId);
+    const hasFeatureVideo =
+      publicVideoFiles.length > 0 || Boolean(existingPublicMediaBySlot.featureVideoMediaId);
+
+    if (!hasThumbnail) {
       throw new Error("Public media requires a thumbnail image.");
     }
 
-    if (!publicVideoFiles.length) {
+    if (!hasFeatureVideo) {
       throw new Error("Public media requires at least one video.");
     }
 
-    if (publicVisibilityPreset === "USER_TIER" && !publicMinCustomerTier) {
-      throw new Error("Select a minimum customer tier for USER_TIER public media.");
-    }
+    for (const row of pendingPublicUploads) {
+      const config = publicVisibilityByFileId[row.file.id] || createDefaultPublicUploadVisibility();
 
-    if (
-      publicVisibilityPreset === "TARGETED_USER" &&
-      parseTargetUserIdsInput(publicTargetUserIdsInput).length === 0
-    ) {
-      throw new Error("Provide at least one target user id for TARGETED_USER public media.");
+      if (config.preset === "USER_TIER" && !config.minCustomerTier) {
+        throw new Error(`Select a minimum customer tier for "${row.file.file.name}".`);
+      }
+
+      if (
+        config.preset === "TARGETED_USER" &&
+        parseTargetUserIdsInput(config.targetUserIdsInput).length === 0
+      ) {
+        throw new Error(`Provide at least one target user id for "${row.file.file.name}".`);
+      }
     }
   };
 
@@ -1608,60 +1740,75 @@ export default function ProductEditPage() {
       setSaving(true);
 
       const accessToken = await getAccessToken();
-      const publicTargetUserIds = parseTargetUserIdsInput(publicTargetUserIdsInput);
-      const publicUploadOptions = {
-        accessToken,
-        visibilityPreset: publicVisibilityPreset,
-        ...(publicVisibilityPreset === "USER_TIER" && publicMinCustomerTier
-          ? { minCustomerTier: publicMinCustomerTier }
-          : {}),
-        ...(publicVisibilityPreset === "TARGETED_USER"
-          ? { targetUserIds: publicTargetUserIds }
-          : {}),
+      const uploadPublicSlotFiles = async (
+        slotFiles: MediaFile[],
+        slot: Extract<
+          MediaSlot,
+          "PUBLIC_THUMBNAIL" | "PUBLIC_FEATURE_VIDEO" | "PUBLIC_GALLERY" | "PUBLIC_CERTIFICATE"
+        >,
+      ) => {
+        const uploaded = [];
+
+        for (const mediaFile of slotFiles) {
+          const config =
+            publicVisibilityByFileId[mediaFile.id] || createDefaultPublicUploadVisibility();
+          const targetUserIds = parseTargetUserIdsInput(config.targetUserIdsInput);
+
+          const uploadedRows = await uploadMediaFiles({
+            files: [mediaFile.file],
+            accessToken,
+            slot,
+            visibilityPreset: config.preset,
+            ...(config.preset === "USER_TIER" && config.minCustomerTier
+              ? { minCustomerTier: config.minCustomerTier }
+              : {}),
+            ...(config.preset === "TARGETED_USER" ? { targetUserIds } : {}),
+          });
+
+          uploaded.push(...uploadedRows);
+        }
+
+        return uploaded;
       };
 
       const uploadedThumbnailMedia =
         hasAnyPublicMediaUpload && publicThumbnailFiles.length > 0
-          ? await uploadMediaFiles({
-              files: publicThumbnailFiles.map((mediaFile) => mediaFile.file),
-              slot: "PUBLIC_THUMBNAIL",
-              ...publicUploadOptions,
-            })
+          ? await uploadPublicSlotFiles(publicThumbnailFiles, "PUBLIC_THUMBNAIL")
           : [];
       const uploadedFeatureVideoMedia =
         hasAnyPublicMediaUpload && publicVideoFiles.length > 0
-          ? await uploadMediaFiles({
-              files: publicVideoFiles.map((mediaFile) => mediaFile.file),
-              slot: "PUBLIC_FEATURE_VIDEO",
-              ...publicUploadOptions,
-            })
+          ? await uploadPublicSlotFiles(publicVideoFiles, "PUBLIC_FEATURE_VIDEO")
           : [];
       const uploadedGalleryMedia =
         hasAnyPublicMediaUpload && publicGalleryFiles.length > 0
-          ? await uploadMediaFiles({
-              files: publicGalleryFiles.map((mediaFile) => mediaFile.file),
-              slot: "PUBLIC_GALLERY",
-              ...publicUploadOptions,
-            })
+          ? await uploadPublicSlotFiles(publicGalleryFiles, "PUBLIC_GALLERY")
           : [];
       const uploadedCertificateMedia =
         hasAnyPublicMediaUpload && publicCertificateFiles.length > 0
-          ? await uploadMediaFiles({
-              files: publicCertificateFiles.map((mediaFile) => mediaFile.file),
-              slot: "PUBLIC_CERTIFICATE",
-              ...publicUploadOptions,
-            })
+          ? await uploadPublicSlotFiles(publicCertificateFiles, "PUBLIC_CERTIFICATE")
           : [];
-      const uploadedRoleMedia =
-        roleMediaFiles.length > 0
-          ? await uploadMediaFiles({
-              files: roleMediaFiles.map((mediaFile) => mediaFile.file),
-              accessToken,
-              slot: "ROLE_REFERENCE",
-              visibilityPreset: roleVisibilityPreset,
-              allowedRoles: [roleVisibilityPreset],
-            })
-          : [];
+      const uploadedRoleMediaByPreset: Record<string, string[]> = {};
+      const uploadedRoleMedia = [];
+
+      if (roleMediaFiles.length > 0) {
+        for (const mediaFile of roleMediaFiles) {
+          const preset = roleVisibilityByFileId[mediaFile.id] || roleVisibilityPreset;
+          const uploadedRows = await uploadMediaFiles({
+            files: [mediaFile.file],
+            accessToken,
+            slot: "ROLE_REFERENCE",
+            visibilityPreset: preset,
+            allowedRoles: [preset],
+          });
+
+          uploadedRoleMedia.push(...uploadedRows);
+          const uploadedId = uploadedRows[0]?.id;
+          if (uploadedId) {
+            const currentIds = uploadedRoleMediaByPreset[preset] || [];
+            uploadedRoleMediaByPreset[preset] = [...new Set([...currentIds, uploadedId])];
+          }
+        }
+      }
       const uploadedConsignmentContract =
         form.sourceType === "CONSIGNED" && consignmentContractFiles.length > 0
           ? await uploadMediaFiles({
@@ -1715,11 +1862,10 @@ export default function ProductEditPage() {
       );
 
       if (uploadedRoleMedia.length > 0) {
-        const nextIds = [
-          ...(existingRoleMediaByPreset[roleVisibilityPreset] || []),
-          ...uploadedRoleMedia.map((media) => media.id),
-        ];
-        existingRoleMediaByPreset[roleVisibilityPreset] = [...new Set(nextIds)];
+        for (const [preset, mediaIds] of Object.entries(uploadedRoleMediaByPreset)) {
+          const nextIds = [...(existingRoleMediaByPreset[preset] || []), ...mediaIds];
+          existingRoleMediaByPreset[preset] = [...new Set(nextIds)];
+        }
       }
 
       const response = await updateAdminProduct({
@@ -2645,13 +2791,13 @@ export default function ProductEditPage() {
           )}
 
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-            Delete outdated media, then upload replacements using the public visibility preset.
+            Delete outdated media, then upload replacements. Each uploaded file can use its own visibility.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Public Visibility
+                Default Public Visibility (for new uploads)
               </label>
               <select
                 value={publicVisibilityPreset}
@@ -2756,7 +2902,7 @@ export default function ProductEditPage() {
                 maxSizeMB={50}
                 maxVideoSizeMB={500}
                 allowedTypes={["IMAGE"]}
-                helperText="Upload one primary thumbnail image (required when public media is used)."
+                helperText="Upload one primary thumbnail image. Existing thumbnail media also satisfies the requirement during edit."
               />
             </div>
 
@@ -2769,7 +2915,7 @@ export default function ProductEditPage() {
                 maxSizeMB={50}
                 maxVideoSizeMB={500}
                 allowedTypes={["VIDEO"]}
-                helperText="Upload one product video (required when public media is used)."
+                helperText="Upload one product video. Existing feature video media also satisfies the requirement during edit."
               />
             </div>
 
@@ -2799,12 +2945,106 @@ export default function ProductEditPage() {
               />
             </div>
           </div>
+
+          {pendingPublicUploads.length > 0 && (
+            <div className="mt-5 rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                Per-file Public Visibility
+              </p>
+              <div className="space-y-3">
+                {pendingPublicUploads.map((row) => {
+                  const config =
+                    publicVisibilityByFileId[row.file.id] || createDefaultPublicUploadVisibility();
+
+                  return (
+                    <div
+                      key={row.file.id}
+                      className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3 bg-gray-50/70 dark:bg-gray-800/40"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <p className="text-xs font-medium text-gray-800 dark:text-gray-200">
+                          {row.file.file.name}
+                        </p>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          {row.slotLabel}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-gray-600 dark:text-gray-300 mb-1">
+                            Visibility
+                          </label>
+                          <select
+                            value={config.preset}
+                            onChange={(event) =>
+                              updatePublicFileVisibility(row.file.id, {
+                                preset: event.target.value as PublicMediaVisibilityPreset,
+                              })
+                            }
+                            className={inputCls}
+                          >
+                            {PUBLIC_MEDIA_VISIBILITY_PRESETS.map((preset) => (
+                              <option key={`${row.file.id}-${preset}`} value={preset}>
+                                {preset.replace(/_/g, " ")}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {config.preset === "USER_TIER" && (
+                          <div>
+                            <label className="block text-[11px] text-gray-600 dark:text-gray-300 mb-1">
+                              Min Customer Tier
+                            </label>
+                            <select
+                              value={config.minCustomerTier}
+                              onChange={(event) =>
+                                updatePublicFileVisibility(row.file.id, {
+                                  minCustomerTier: event.target.value as CustomerTier | "",
+                                })
+                              }
+                              className={inputCls}
+                            >
+                              <option value="">Select tier</option>
+                              {MEDIA_CUSTOMER_TIER_OPTIONS.map((tier) => (
+                                <option key={`${row.file.id}-${tier}`} value={tier}>
+                                  {tier}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {config.preset === "TARGETED_USER" && (
+                        <div className="mt-3">
+                          <AdminCustomerPicker
+                            selectedIds={parseTargetUserIdsInput(config.targetUserIdsInput)}
+                            onChange={(nextIds) =>
+                              updatePublicFileVisibility(row.file.id, {
+                                targetUserIdsInput: nextIds.join(", "),
+                              })
+                            }
+                            getAccessToken={getAccessToken}
+                            disabled={saving || productEditBlocked}
+                            label="Target User IDs"
+                            helperText="Choose customers who can view this specific media file."
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-5">
           <SectionHeading>Role Based Media Upload</SectionHeading>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-            Upload internal media with access limited to one role preset.
+            Upload internal media and set visibility role per file.
           </p>
 
           <div className="mb-4">
@@ -2857,6 +3097,48 @@ export default function ProductEditPage() {
             maxVideoSizeMB={500}
             allowedTypes={["IMAGE", "VIDEO", "PDF"]}
           />
+
+          {roleMediaFiles.length > 0 && (
+            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700/60 p-3 space-y-3">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Per-file Role Visibility
+              </p>
+              {roleMediaFiles.map((mediaFile) => {
+                const preset = roleVisibilityByFileId[mediaFile.id] || roleVisibilityPreset;
+
+                return (
+                  <div
+                    key={mediaFile.id}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3 bg-gray-50/70 dark:bg-gray-800/40"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-gray-800 dark:text-gray-200">
+                        {mediaFile.file.name}
+                      </p>
+                      <div className="w-full sm:w-56">
+                        <select
+                          value={preset}
+                          onChange={(event) =>
+                            updateRoleFileVisibility(
+                              mediaFile.id,
+                              event.target.value as RoleMediaVisibilityPreset,
+                            )
+                          }
+                          className={inputCls}
+                        >
+                          {roleVisibilityOptions.map((option) => (
+                            <option key={`${mediaFile.id}-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">
