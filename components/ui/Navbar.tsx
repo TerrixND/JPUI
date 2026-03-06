@@ -13,8 +13,8 @@ import {
 } from "@/lib/roleChecker";
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
-  // const user = useAuth();
-  const [user, setUser] = useState(true);
+  const authUser = useAuth();
+  const isLoggedIn = Boolean(authUser);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const totalQuantity = 0; // TODO: connect to real cart state
@@ -67,7 +67,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     let isDisposed = false;
 
     const loadDashboardLink = async () => {
-      if (!user) {
+      if (!isLoggedIn) {
         if (!isDisposed) {
           setDashboardHref(null);
         }
@@ -118,7 +118,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     return () => {
       isDisposed = true;
     };
-  }, [user]);
+  }, [isLoggedIn]);
 
   return (
     <div
@@ -156,7 +156,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
             </Link>
           )}
 
-          {user ? (
+          {isLoggedIn ? (
             <div className="hidden md:flex gap-6 items-center">
               <Link href="/cart" className="hidden md:block">
                 <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
@@ -214,7 +214,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
             </Link>
           ))}
 
-          {user ? (
+          {isLoggedIn ? (
             <>
               <Link
                 href="/cart"

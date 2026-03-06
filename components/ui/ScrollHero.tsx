@@ -10,6 +10,7 @@ const sections = [
   {
     id: 1,
     video: "/videos/hero-2.mp4",
+    poster: "/images/jadeBg.png",
     eyebrow: "Heritage Collection",
     title: ["Timeless", "Craftsmanship"],
     description:
@@ -20,6 +21,7 @@ const sections = [
   {
     id: 2,
     video: "/videos/hero-3.mp4",
+    poster: "/images/jadeBg.png",
     eyebrow: "Provenance",
     title: ["Rare.", "Pure.", "Powerful."],
     description: "Sourced from the finest origins, refined into wearable art.",
@@ -29,6 +31,7 @@ const sections = [
   {
     id: 3,
     video: "/videos/hero-4.mp4",
+    poster: "/images/jadeBg.png",
     eyebrow: "New Season",
     title: ["Luxury", "Redefined"],
     description:
@@ -42,44 +45,13 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [animKey, setAnimKey] = useState(0);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
-  const heroRef = useRef<HTMLDivElement>(null);
   const [showDots, setShowDots] = useState(true);
 
-  /* ── Mandatory snap within the hero, free scroll once past it ─────────
-   * While the viewport is inside the hero area → mandatory snap so each
-   * scroll gesture moves exactly one slide.
-   * Once scrollY reaches the content section → snap is removed so the
-   * rest of the page scrolls normally.
-   * ─────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     document.documentElement.style.scrollSnapType = "y mandatory";
 
-    const handleScroll = () => {
-      // Use the actual rendered hero height (immune to vh/dvh mismatches)
-      const heroEl = heroRef.current;
-      const heroEnd = heroEl
-        ? heroEl.offsetTop + heroEl.offsetHeight
-        : window.innerHeight * sections.length;
-
-      if (window.scrollY > heroEnd + 50) {
-        // Deep in content — free scroll
-        if (document.documentElement.style.scrollSnapType !== "none") {
-          document.documentElement.style.scrollSnapType = "none";
-        }
-      } else {
-        // In hero OR at the hero↔content boundary — mandatory snap.
-        // This covers both the hero section-by-section snapping AND
-        // the snap-back from content → hero on a single upward scroll.
-        if (document.documentElement.style.scrollSnapType !== "y mandatory") {
-          document.documentElement.style.scrollSnapType = "y mandatory";
-        }
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       document.documentElement.style.scrollSnapType = "";
-      window.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -103,9 +75,15 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
 
   useEffect(() => {
     if (!hideAtRef?.current) return;
+
+    const root = document.documentElement;
     const observer = new IntersectionObserver(
-      ([entry]) => setShowDots(!entry.isIntersecting),
-      { threshold: 0.1 },
+      ([entry]) => {
+        const isInContent = entry.isIntersecting;
+        setShowDots(!isInContent);
+        root.style.scrollSnapType = isInContent ? "y proximity" : "y mandatory";
+      },
+      { threshold: 0.12 },
     );
     observer.observe(hideAtRef.current);
     return () => observer.disconnect();
@@ -116,23 +94,19 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
   };
 
   return (
-    <div ref={heroRef} className="bg-black">
+    <div
+      className="bg-black"
+      style={{
+        backgroundImage: "url('/images/jadeBg.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center top",
+      }}
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap');
 
         .sh-display { font-family: 'Cormorant Garamond', serif; }
         .sh-sans    { font-family: 'Jost', sans-serif; }
-
-        body {
-          font-family: "Poppins", sans-serif;
-          margin: 0;
-          padding: 0;
-          background: #000;
-        }
-        html {
-          scroll-behavior: smooth;
-          background: #000;
-        }
 
 
         /* ── Each snap section fills exactly one screen ── */
@@ -141,7 +115,11 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
           scroll-snap-stop: always;
           position: relative;
           width: 100%;
+          min-height: 100vh;
+          min-height: 100dvh;
           height: 100vh;
+          height: 100dvh;
+          background: #020617 url('/images/jadeBg.png') center / cover no-repeat;
           overflow: hidden;
           display: flex;
           align-items: flex-end;
@@ -438,6 +416,8 @@ const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
             loop
             muted
             playsInline
+            preload="metadata"
+            poster={section.poster}
             className="sh-video"
             aria-hidden="true"
           >

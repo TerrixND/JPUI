@@ -163,7 +163,7 @@ const getAccessDescription = (accountAccess: AccountAccessState | null) => {
 
 function LoadingScreen({ message }: { message: string }) {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/20 flex items-center justify-center px-6">
+    <main className="jp-min-vh-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/20 flex items-center justify-center px-6">
       <div className="jp-fade-in-up flex flex-col items-center gap-8">
         <div className="relative">
           <div className="absolute -inset-6 rounded-full bg-emerald-400/10 animate-pulse" />
@@ -209,7 +209,7 @@ function AccessRestrictedScreen({
   onSignOut: () => void;
 }) {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-rose-50/40 px-6 py-12 flex items-center justify-center">
+    <main className="jp-min-vh-screen bg-gradient-to-br from-amber-50 via-white to-rose-50/40 px-6 py-12 flex items-center justify-center">
       <div className="w-full max-w-3xl rounded-3xl border border-amber-200 bg-white/95 shadow-xl shadow-amber-100/60 backdrop-blur">
         <div className="border-b border-amber-100 px-8 py-7">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-700">
@@ -707,7 +707,7 @@ export default function DashboardLayout({
         adminCapabilities={adminCapabilities}
         refreshAdminCapabilities={refreshAdminCapabilities}
       >
-        <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden transition-colors duration-200">
+        <div className="flex jp-h-vh-screen bg-gray-50 dark:bg-gray-950 overflow-hidden overscroll-none transition-colors duration-200">
           {adminRestrictionNotice && (
             <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 shadow-md">
               <p className="text-sm text-amber-800 dark:text-amber-200">{adminRestrictionNotice}</p>
@@ -726,7 +726,9 @@ export default function DashboardLayout({
           <div className="flex-1 flex flex-col min-w-0">
             <Navbar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
 
-            <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
+            <main className="flex-1 overflow-y-auto overscroll-y-contain bg-gray-50 dark:bg-gray-950 p-4 sm:p-6 lg:p-8">
+              {children}
+            </main>
           </div>
         </div>
       </RoleProvider>
