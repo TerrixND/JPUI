@@ -31,12 +31,15 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     "/login",
     "/signup",
   ];
-  const isWhiteRoute = whiteRoutes.some((route) => pathname.startsWith(route));
+
+  const isWhiteRoute = whiteRoutes.some((route) =>
+    pathname.startsWith(route),
+  );
 
   const isLight = isScrolled || isWhiteRoute;
 
-  const textColor = isLight ? "text-black" : "text-white";
-  const iconColor = isLight ? "text-gray-700" : "text-white";
+  const textColor = isLight ? "text-black" : "text-black";
+  const iconColor = isLight ? "text-gray-700" : "text-black";
 
   const navLinks = useMemo(() => {
     const links = [
@@ -55,11 +58,13 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
   useEffect(() => {
     const handleScroll = () => {
-      const threshold = heroMode ? window.innerHeight * 2.5 : 50;
+      const threshold = heroMode ? window.innerHeight * 0.7 : 50;
       setIsScrolled(window.scrollY > threshold);
     };
 
+    handleScroll(); // fix refresh state
     window.addEventListener("scroll", handleScroll);
+
     return () => window.removeEventListener("scroll", handleScroll);
   }, [heroMode]);
 
@@ -93,6 +98,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
         const dashboardRole = mapBackendRoleToDashboardRole(me.role);
         const userId = me.id || "";
+
         const isEligible =
           Boolean(dashboardRole) &&
           Boolean(userId) &&
@@ -161,6 +167,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               <Link href="/cart" className="hidden md:block">
                 <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
               </Link>
+
               <Link href="/profile" className="hidden md:block">
                 <User className={`w-5 h-5 ${iconColor}`} />
               </Link>
@@ -173,12 +180,13 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               >
                 Login
               </Link>
+
               <Link
                 href="/signup"
                 className={`text-sm px-4 py-1.5 border rounded transition-colors duration-200 ${
                   isLight
                     ? "border-black text-black hover:bg-black hover:text-white"
-                    : "border-white text-white hover:bg-white hover:text-black"
+                    : "border-black text-black hover:bg-black hover:text-white"
                 }`}
               >
                 Sign Up
@@ -200,7 +208,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
         </div>
       </div>
 
-      {/* Mobile Dropdown Menu */}
+      {/* Mobile Dropdown */}
       {menuOpen && (
         <div className="md:hidden flex flex-col px-6 py-4 gap-4 bg-white border-t border-gray-100">
           {navLinks.map(({ label, href }) => (
@@ -223,6 +231,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               >
                 Cart
               </Link>
+
               <Link
                 href="/profile"
                 onClick={() => setMenuOpen(false)}
@@ -240,6 +249,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
               >
                 Login
               </Link>
+
               <Link
                 href="/signup"
                 onClick={() => setMenuOpen(false)}
@@ -256,4 +266,3 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 };
 
 export default Navbar;
-

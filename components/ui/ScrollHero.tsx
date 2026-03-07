@@ -1,473 +1,398 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import Link from "next/link";
+import React, { useEffect, useRef, useState } from "react";
 
-interface ScrollHeroProps {
-  hideAtRef?: React.RefObject<HTMLElement | null>;
-}
-
-const sections = [
-  {
-    id: 1,
-    video: "/videos/hero-2.mp4",
-    poster: "/images/jadeBg.png",
-    eyebrow: "Heritage Collection",
-    title: ["Timeless", "Craftsmanship"],
-    description:
-      "Every jade piece is shaped with precision and decades of mastery.",
-    button: "Explore Heritage",
-    accent: "#C8A96E",
-  },
-  {
-    id: 2,
-    video: "/videos/hero-3.mp4",
-    poster: "/images/jadeBg.png",
-    eyebrow: "Provenance",
-    title: ["Rare.", "Pure.", "Powerful."],
-    description: "Sourced from the finest origins, refined into wearable art.",
-    button: "Discover Collection",
-    accent: "#8FB8A2",
-  },
-  {
-    id: 3,
-    video: "/videos/hero-4.mp4",
-    poster: "/images/jadeBg.png",
-    eyebrow: "New Season",
-    title: ["Luxury", "Redefined"],
-    description:
-      "Minimal form. Maximum elegance. Designed for the modern elite.",
-    button: "Shop Now",
-    accent: "#B8A9C9",
-  },
-];
-
-const ScrollHero: React.FC<ScrollHeroProps> = ({ hideAtRef }) => {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [animKey, setAnimKey] = useState(0);
-  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
-  const [showDots, setShowDots] = useState(true);
+const ScrollHero = () => {
+  const bgRef = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    document.documentElement.style.scrollSnapType = "y mandatory";
+    const t = setTimeout(() => setLoaded(true), 80);
+    return () => clearTimeout(t);
+  }, []);
 
-    return () => {
-      document.documentElement.style.scrollSnapType = "";
+  useEffect(() => {
+    const onScroll = () => {
+      if (!bgRef.current || window.innerWidth < 768) return;
+      bgRef.current.style.transform = `scale(1.08) translateY(${window.scrollY * 0.15}px)`;
     };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => {
-    const observers = sectionRefs.current.map((ref, i) => {
-      if (!ref) return null;
-      const obs = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) {
-            setActiveIndex(i);
-            setAnimKey((k) => k + 1);
-          }
-        },
-        { threshold: 0.5 },
-      );
-      obs.observe(ref);
-      return obs;
-    });
-    return () => observers.forEach((obs) => obs?.disconnect());
-  }, []);
-
-  useEffect(() => {
-    if (!hideAtRef?.current) return;
-
-    const root = document.documentElement;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const isInContent = entry.isIntersecting;
-        setShowDots(!isInContent);
-        root.style.scrollSnapType = isInContent ? "y proximity" : "y mandatory";
-      },
-      { threshold: 0.12 },
-    );
-    observer.observe(hideAtRef.current);
-    return () => observer.disconnect();
-  }, [hideAtRef]);
-
-  const scrollToSection = (i: number) => {
-    sectionRefs.current[i]?.scrollIntoView({ behavior: "smooth" });
-  };
 
   return (
-    <div
-      className="bg-black"
-      style={{
-        backgroundImage: "url('/images/jadeBg.png')",
-        backgroundSize: "cover",
-        backgroundPosition: "center top",
-      }}
-    >
+    <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Jost:wght@200;300;400&display=swap');
 
-        .sh-display { font-family: 'Cormorant Garamond', serif; }
-        .sh-sans    { font-family: 'Jost', sans-serif; }
+        /* ── ALL selectors scoped under .sh__ prefix — zero global bleed ── */
 
-
-        /* ── Each snap section fills exactly one screen ── */
-        .sh-snap-section {
-          scroll-snap-align: start;
-          scroll-snap-stop: always;
+        .sh__wrap {
           position: relative;
           width: 100%;
-          min-height: 100vh;
-          min-height: 100dvh;
-          height: 100vh;
-          height: 100dvh;
-          background: #020617 url('/images/jadeBg.png') center / cover no-repeat;
-          overflow: hidden;
+          min-height: 100svh;
           display: flex;
-          align-items: flex-end;
-          justify-content: flex-start;
-        }
-
-        /* ── Video ── */
-        .sh-video {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          object-position: center center;
-          transform: scale(1.04);
-          transition: transform 1.4s ease;
-          will-change: transform;
-        }
-        @media (hover: hover) {
-          .sh-snap-section:hover .sh-video { transform: scale(1); }
-        }
-        @media (hover: none), (max-width: 1024px) {
-          .sh-video { transform: scale(1) !important; }
-        }
-        @media (max-width: 640px) and (orientation: portrait) {
-          .sh-video { object-position: center 25%; }
-        }
-        @media (max-width: 896px) and (orientation: landscape) {
-          .sh-video { object-position: center center; }
-        }
-
-        /* ── Overlay gradient ── */
-        .sh-overlay {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            155deg,
-            rgba(0,0,0,.78) 0%,
-            rgba(0,0,0,.40) 45%,
-            rgba(0,0,0,.10) 100%
-          );
-        }
-        @media (max-width: 640px) {
-          .sh-overlay {
-            background: linear-gradient(
-              160deg,
-              rgba(0,0,0,.85) 0%,
-              rgba(0,0,0,.50) 50%,
-              rgba(0,0,0,.12) 100%
-            );
-          }
-        }
-
-        /* ── Left decorative line ── */
-        .sh-deco-line {
-          position: absolute;
-          top: 0;
-          left: clamp(1rem, 5vw, 4rem);
-          width: 1px;
-          height: 100%;
-          z-index: 5;
-          background: linear-gradient(
-            to bottom,
-            transparent,
-            rgba(255,255,255,.12),
-            transparent
-          );
-          pointer-events: none;
-        }
-        @media (max-width: 360px) { .sh-deco-line { display: none; } }
-
-        /* ── Section counter (vertical) ── */
-        .sh-counter {
-          position: absolute;
-          right: clamp(2.5rem, 5vw, 4rem);
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 10;
-          writing-mode: vertical-rl;
-          font-family: 'Jost', sans-serif;
-          font-weight: 200;
-          font-size: 0.8rem;
-          letter-spacing: 0.4em;
-          color: rgba(255,255,255,.28);
-          pointer-events: none;
-          user-select: none;
-        }
-        @media (max-width: 1024px) { .sh-counter { display: none; } }
-
-        /* ── Content block ── */
-        .sh-content {
-          position: relative;
-          z-index: 10;
-          width: 100%;
-          padding-left:  clamp(1.25rem, 5vw, 5rem);
-          padding-right: clamp(3.5rem,  12vw, 6rem);
-          padding-bottom: clamp(4vh, 8vh, 10vh);
-          max-width: 56rem;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          background: #faf8f4;
           box-sizing: border-box;
         }
-        @media (max-width: 896px) and (orientation: landscape) {
-          .sh-content { padding-bottom: clamp(2vh, 4vh, 5vh); }
+
+        .sh__bg {
+          position: absolute;
+          inset: -8%;
+          background-image: url('/images/whiteBg.jpg');
+          background-size: cover;
+          background-position: center;
+          transform: scale(1.08);
+          transform-origin: center;
+          transition: transform 0.1s linear;
+          filter: brightness(0.96) saturate(0.85) sepia(0.04);
+          will-change: transform;
         }
 
-        /* ── Eyebrow ── */
-        .sh-eyebrow {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          text-transform: uppercase;
-          font-family: 'Jost', sans-serif;
-          font-weight: 300;
-          font-size: clamp(0.62rem, 1.2vw, 0.75rem);
-          letter-spacing: 0.28em;
-          color: var(--accent);
-          margin-bottom: clamp(0.75rem, 2vh, 1.5rem);
+        .sh__overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          background:
+            linear-gradient(
+              to top,
+              rgba(26, 74, 58, 0.18) 0%,
+              rgba(26, 74, 58, 0.06) 40%,
+              rgba(250, 248, 244, 0.0) 70%
+            ),
+            radial-gradient(
+              ellipse 80% 70% at 50% 50%,
+              transparent 30%,
+              rgba(15, 31, 24, 0.12) 100%
+            );
         }
-        .sh-eyebrow-line {
-          flex-shrink: 0;
+
+        .sh__grain {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          opacity: 0.035;
+          pointer-events: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+          background-size: 180px 180px;
+        }
+
+        .sh__line-left,
+        .sh__line-right {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 5;
+          width: 1px;
+          height: 0;
+          background: linear-gradient(to bottom, transparent, #2d6e56, transparent);
+          transition: height 1.2s cubic-bezier(0.16,1,0.3,1) 0.9s,
+                      opacity 0.4s ease 0.9s;
+          opacity: 0;
+        }
+        .sh__line-left  { left:  clamp(2rem, 6vw, 5rem); }
+        .sh__line-right { right: clamp(2rem, 6vw, 5rem); }
+
+        .sh__line-left::before,
+        .sh__line-left::after,
+        .sh__line-right::before,
+        .sh__line-right::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 5px;
           height: 1px;
-          width: clamp(1.5rem, 3vw, 2.5rem);
-          background: var(--accent);
+          background: #2d6e56;
+        }
+        .sh__line-left::before,  .sh__line-right::before { top: 0; }
+        .sh__line-left::after,   .sh__line-right::after  { bottom: 0; }
+
+        .sh__wrap.is-loaded .sh__line-left,
+        .sh__wrap.is-loaded .sh__line-right {
+          height: clamp(80px, 20vh, 160px);
+          opacity: 1;
         }
 
-        /* ── Title ── */
-        .sh-title {
-          font-family: 'Cormorant Garamond', serif;
-          font-weight: 300;
-          color: #fff;
-          margin: 0 0 clamp(0.75rem, 2.5vh, 2rem);
-          font-size: clamp(2.6rem, 8vw, 7rem);
-          line-height: 0.92;
-          letter-spacing: -0.01em;
-        }
-        @media (max-width: 896px) and (orientation: landscape) {
-          .sh-title { font-size: clamp(2rem, 8vw, 3.2rem); }
-        }
-
-        /* ── Description ── */
-        .sh-description {
-          font-family: 'Jost', sans-serif;
-          font-weight: 200;
-          font-size: clamp(0.875rem, 1.5vw, 1rem);
-          line-height: 1.75;
-          letter-spacing: 0.04em;
-          color: rgba(255,255,255,.65);
-          max-width: 28rem;
-          margin-bottom: clamp(1.5rem, 4vh, 2.75rem);
-        }
-        @media (max-width: 896px) and (orientation: landscape) {
-          .sh-description { display: none; }
+        .sh__content {
+          position: relative;
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: 0 clamp(1.5rem, 6vw, 4rem);
+          max-width: 720px;
+          width: 100%;
+          box-sizing: border-box;
         }
 
-        /* ── CTA Button ── */
-        .sh-btn {
+        .sh__eyebrow {
           display: inline-flex;
           align-items: center;
-          gap: 0.75rem;
-          text-transform: uppercase;
+          gap: 0.7em;
           font-family: 'Jost', sans-serif;
           font-weight: 300;
-          font-size: clamp(0.65rem, 1.2vw, 0.72rem);
-          letter-spacing: 0.22em;
-          color: #fff;
-          background: transparent;
-          border: 1px solid rgba(255,255,255,.35);
-          padding: clamp(0.65rem, 1.5vh, 1rem) clamp(1.25rem, 3vw, 2rem);
+          font-size: clamp(0.56rem, 1.5vw, 0.62rem);
+          letter-spacing: 0.42em;
+          text-transform: uppercase;
+          color: #1a4a3a;
+          opacity: 0;
+          transform: translateY(10px);
+          transition: opacity 0.8s ease 0.15s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.15s;
+          margin-bottom: clamp(1.4rem, 3.5vw, 2rem);
+          /* reset any inherited styles */
+          font-style: normal;
+          text-decoration: none;
+          background: none;
+          border: none;
+          padding: 0;
+          line-height: 1;
+        }
+        .sh__eyebrow::before,
+        .sh__eyebrow::after {
+          content: '';
+          display: block;
+          width: clamp(20px, 4vw, 32px);
+          height: 1px;
+          background: #4a9e7e;
+          opacity: 0.6;
+          flex-shrink: 0;
+        }
+
+        .sh__title {
+          font-family: 'Cormorant', Georgia, serif;
+          font-weight: 300;
+          font-size: clamp(3.4rem, 12vw, 7.5rem);
+          line-height: 0.95;
+          color: #0f1f18;
+          letter-spacing: -0.02em;
+          opacity: 0;
+          transform: translateY(28px);
+          transition: opacity 1.1s ease 0.4s, transform 1.1s cubic-bezier(0.16,1,0.3,1) 0.4s;
+          margin-bottom: clamp(0.6rem, 2vw, 1rem);
+          /* resets */
+          font-style: normal;
+          text-decoration: none;
+          background: none;
+          border: none;
+          padding: 0;
+        }
+        .sh__title em {
+          font-style: italic;
+          font-weight: 400;
+          color: #1a4a3a;
+          display: block;
+        }
+
+        .sh__ornament {
+          display: flex;
+          align-items: center;
+          gap: 0.8rem;
+          opacity: 0;
+          transform: scaleX(0.6);
+          transition: opacity 0.9s ease 0.75s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.75s;
+          margin: clamp(1.2rem, 3vw, 1.8rem) 0;
+        }
+        .sh__ornament-line {
+          width: clamp(30px, 8vw, 50px);
+          height: 1px;
+          background: #4a9e7e;
+          opacity: 0.5;
+        }
+        .sh__ornament-diamond {
+          width: 5px;
+          height: 5px;
+          border: 1px solid #1a4a3a;
+          transform: rotate(45deg);
+          opacity: 0.7;
+          flex-shrink: 0;
+        }
+
+        .sh__subtitle {
+          font-family: 'Jost', sans-serif;
+          font-weight: 200;
+          font-size: clamp(0.72rem, 2vw, 0.85rem);
+          letter-spacing: 0.16em;
+          color: rgba(15, 31, 24, 0.85);
+          opacity: 0;
+          transform: translateY(10px);
+          transition: opacity 0.9s ease 0.95s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.95s;
+          margin-bottom: clamp(2.2rem, 5vw, 3.2rem);
+          /* resets */
+          font-style: normal;
+          text-decoration: none;
+          background: none;
+          border: none;
+          padding: 0;
+          line-height: 1.5;
+        }
+
+        .sh__cta-row {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: clamp(0.8rem, 3vw, 1.4rem);
+          opacity: 0;
+          transform: translateY(12px);
+          transition: opacity 0.9s ease 1.1s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 1.1s;
+        }
+
+        .sh__btn-primary {
+          font-family: 'Jost', sans-serif;
+          font-weight: 300;
+          font-size: clamp(0.58rem, 1.6vw, 0.65rem);
+          letter-spacing: 0.32em;
+          text-transform: uppercase;
+          color: #faf8f4;
+          background: #1a4a3a;
+          border: none;
+          padding: clamp(0.8rem, 2vw, 1rem) clamp(1.8rem, 5vw, 2.8rem);
           cursor: pointer;
           position: relative;
           overflow: hidden;
-          transition: color 0.3s ease, border-color 0.3s ease;
-          -webkit-tap-highlight-color: transparent;
-          touch-action: manipulation;
+          transition: color 0.4s ease;
+          line-height: 1;
+          text-decoration: none;
+          display: inline-block;
+          box-sizing: border-box;
         }
-        .sh-btn::before {
+        .sh__btn-primary::before {
           content: '';
           position: absolute;
           inset: 0;
-          background: var(--accent);
+          background: #2d6e56;
           transform: translateX(-101%);
-          transition: transform 0.4s cubic-bezier(0.76, 0, 0.24, 1);
+          transition: transform 0.45s cubic-bezier(0.16,1,0.3,1);
         }
-        @media (hover: hover) {
-          .sh-btn:hover::before { transform: translateX(0); }
-          .sh-btn:hover { color: #0a0a0a; border-color: var(--accent); }
-          .sh-btn:hover .sh-arrow { width: 1.8rem; }
-        }
-        @media (hover: none) {
-          .sh-btn:active::before { transform: translateX(0); }
-          .sh-btn:active { color: #0a0a0a; border-color: var(--accent); }
-        }
+        .sh__btn-primary:hover::before { transform: translateX(0); }
+        .sh__btn-primary span { position: relative; z-index: 1; }
 
-        /* ── Arrow inside button ── */
-        .sh-arrow {
-          position: relative;
-          z-index: 1;
-          display: inline-block;
-          width: 1.2rem;
-          height: 1px;
-          background: currentColor;
-          transition: width 0.3s ease;
-          flex-shrink: 0;
-        }
-
-        /* ── Nav dots ── */
-        .sh-nav-dots {
-          position: fixed;
-          right: clamp(0.75rem, 2.5vw, 2.5rem);
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 50;
-          display: flex;
-          flex-direction: column;
-          gap: clamp(0.5rem, 1vh, 1rem);
-          transition: opacity 0.5s ease;
-        }
-        .sh-dot {
-          width: 4px;
-          height: 4px;
-          border-radius: 50%;
-          background: rgba(255,255,255,.30);
-          border: none;
-          padding: 0;
+        .sh__btn-ghost {
+          font-family: 'Jost', sans-serif;
+          font-weight: 300;
+          font-size: clamp(0.58rem, 1.6vw, 0.65rem);
+          letter-spacing: 0.32em;
+          text-transform: uppercase;
+          color: #1a4a3a;
+          background: none;
+          border: 1px solid rgba(26, 74, 58, 0.35);
+          padding: clamp(0.8rem, 2vw, 1rem) clamp(1.8rem, 5vw, 2.8rem);
           cursor: pointer;
-          transition: height 0.3s ease, border-radius 0.3s ease, background 0.3s ease, width 0.3s ease;
           position: relative;
+          overflow: hidden;
+          transition: color 0.4s ease, border-color 0.4s ease;
+          line-height: 1;
+          text-decoration: none;
+          display: inline-block;
+          box-sizing: border-box;
         }
-        .sh-dot::after {
+        .sh__btn-ghost::before {
           content: '';
           position: absolute;
-          inset: -8px;
+          inset: 0;
+          background: #1a4a3a;
+          transform: translateX(-101%);
+          transition: transform 0.45s cubic-bezier(0.16,1,0.3,1);
         }
-        .sh-dot.active {
-          height: 24px;
-          border-radius: 2px;
-          background: #fff;
+        .sh__btn-ghost:hover { color: #faf8f4; border-color: #1a4a3a; }
+        .sh__btn-ghost:hover::before { transform: translateX(0); }
+        .sh__btn-ghost span { position: relative; z-index: 1; }
+
+        /* ── Loaded state triggers ── */
+        .sh__wrap.is-loaded .sh__eyebrow,
+        .sh__wrap.is-loaded .sh__title,
+        .sh__wrap.is-loaded .sh__subtitle,
+        .sh__wrap.is-loaded .sh__cta-row {
+          opacity: 1;
+          transform: translateY(0);
         }
-        @media (max-width: 360px) {
-          .sh-dot { width: 3px; height: 3px; }
-          .sh-dot.active { height: 18px; }
+        .sh__wrap.is-loaded .sh__ornament {
+          opacity: 1;
+          transform: scaleX(1);
         }
 
-        /* ── Staggered entrance animations ── */
-        @keyframes sh-up {
-          from { opacity: 0; transform: translateY(var(--dy, 20px)); }
-          to   { opacity: 1; transform: translateY(0); }
+        /* ── Scroll indicator ── */
+        .sh__scroll-hint {
+          position: absolute;
+          bottom: clamp(1.5rem, 4vw, 2.2rem);
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.45rem;
+          opacity: 0;
+          transition: opacity 0.8s ease 1.7s;
         }
-        .sh-a1 { opacity: 0; animation: sh-up 0.8s 0.20s forwards ease-out; --dy: 14px; }
-        .sh-a2 { opacity: 0; animation: sh-up 0.9s 0.36s forwards ease-out; --dy: 22px; }
-        .sh-a3 { opacity: 0; animation: sh-up 0.9s 0.50s forwards ease-out; --dy: 18px; }
-        .sh-a4 { opacity: 0; animation: sh-up 0.8s 0.64s forwards ease-out; --dy: 14px; }
-
-        @media (prefers-reduced-motion: reduce) {
-          .sh-a1, .sh-a2, .sh-a3, .sh-a4 {
-            animation: none;
-            opacity: 1;
-          }
-          .sh-video { transform: scale(1) !important; transition: none; }
-          .sh-btn::before { transition: none; }
-          .sh-dot { transition: none; }
+        .sh__wrap.is-loaded .sh__scroll-hint { opacity: 1; }
+        .sh__scroll-hint span {
+          font-family: 'Jost', sans-serif;
+          font-size: 0.5rem;
+          letter-spacing: 0.42em;
+          text-transform: uppercase;
+          color: rgba(26, 74, 58, 0.45);
+          font-weight: 300;
+          font-style: normal;
+        }
+        .sh__scroll-line {
+          width: 1px;
+          height: 28px;
+          background: linear-gradient(to bottom, #4a9e7e, transparent);
+          animation: sh__scrollPulse 2.2s ease-in-out infinite;
+        }
+        @keyframes sh__scrollPulse {
+          0%, 100% { opacity: 0.35; transform: scaleY(1);    }
+          50%       { opacity: 1;    transform: scaleY(1.12); }
         }
       `}</style>
 
-      {/* ── Nav Dots (fixed, outside scroll container) ── */}
-      <div
-        className="sh-nav-dots"
-        style={{
-          opacity: showDots ? 1 : 0,
-          pointerEvents: showDots ? "auto" : "none",
-        }}
-      >
-        {sections.map((_, i) => (
-          <button
-            key={i}
-            aria-label={`Go to slide ${i + 1}`}
-            onClick={() => scrollToSection(i)}
-            className={`sh-dot${activeIndex === i ? " active" : ""}`}
-          />
-        ))}
+      <div className={`sh__wrap${loaded ? " is-loaded" : ""}`}>
+        <div className="sh__bg" ref={bgRef} />
+        <div className="sh__overlay" />
+        <div className="sh__grain" />
+
+        <div className="sh__line-left" />
+        <div className="sh__line-right" />
+
+        <div className="sh__content">
+          <p className="sh__eyebrow">Heritage Collection</p>
+
+          <h1 className="sh__title">
+            Timeless
+            <em>Craftsmanship</em>
+          </h1>
+
+          <div className="sh__ornament">
+            <div className="sh__ornament-line" />
+            <div className="sh__ornament-diamond" />
+            <div className="sh__ornament-line" />
+          </div>
+
+          <p className="sh__subtitle">Where tradition meets modern elegance</p>
+
+          <div className="sh__cta-row">
+            <Link href={"/products"} className="sh__btn-primary">
+              <span>Explore Collection</span>
+            </Link>
+            <Link href={"aboutus"} className="sh__btn-ghost">
+              <span>Our Story</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="sh__scroll-hint">
+          <span>Scroll</span>
+          <div className="sh__scroll-line" />
+        </div>
       </div>
-
-      {sections.map((section, i) => (
-        <section
-          key={section.id}
-          ref={(el) => {
-            sectionRefs.current[i] = el;
-          }}
-          className="sh-snap-section"
-          style={{ "--accent": section.accent } as React.CSSProperties}
-        >
-          {/* Video background */}
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="metadata"
-            poster={section.poster}
-            className="sh-video"
-            aria-hidden="true"
-          >
-            <source src={section.video} type="video/mp4" />
-          </video>
-
-          {/* Gradient overlay */}
-          <div className="sh-overlay" aria-hidden="true" />
-
-          {/* Left decorative line */}
-          <div className="sh-deco-line" aria-hidden="true" />
-
-          {/* Section counter */}
-          <div className="sh-counter" aria-hidden="true">
-            0{section.id} — 0{sections.length}
-          </div>
-
-          {/* ── Animated content block ── */}
-          <div key={`${animKey}-${i}`} className="sh-content">
-            <p className="sh-eyebrow sh-a1">
-              <span className="sh-eyebrow-line" aria-hidden="true" />
-              {section.eyebrow}
-            </p>
-
-            <h1 className="sh-title sh-a2">
-              {section.title.map((line, j) => (
-                <span key={j} style={{ display: "block" }}>
-                  {j === 0 ? (
-                    <em style={{ fontStyle: "italic", color: "var(--accent)" }}>
-                      {line}
-                    </em>
-                  ) : (
-                    line
-                  )}
-                </span>
-              ))}
-            </h1>
-
-            <p className="sh-description sh-a3">{section.description}</p>
-
-            <button className="sh-btn sh-a4">
-              <span style={{ position: "relative", zIndex: 1 }}>
-                {section.button}
-              </span>
-              <span className="sh-arrow" aria-hidden="true" />
-            </button>
-          </div>
-        </section>
-      ))}
-    </div>
+    </>
   );
 };
 
