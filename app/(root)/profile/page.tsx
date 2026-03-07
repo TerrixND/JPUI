@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Edit, X, Save, LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ApiClientError,
   type CustomerTier,
@@ -14,6 +14,7 @@ import {
   signOutAndRedirect,
   updateUserMeProfile,
 } from "@/lib/apiClient";
+import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 
 type Profile = {
@@ -84,6 +85,7 @@ type ProfileTextField =
 
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [originalProfile, setOriginalProfile] = useState<Profile>(EMPTY_PROFILE);
   const [isEditing, setIsEditing] = useState(false);
@@ -91,8 +93,25 @@ export default function ProfilePage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isConnectingLine, setIsConnectingLine] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const lineConnected = searchParams.get("lineConnected") === "1";
+    const lineConnectError = searchParams.get("lineConnectError");
+
+    if (lineConnected) {
+      setError("");
+      setSuccess("LINE account connected successfully.");
+      return;
+    }
+
+    if (lineConnectError) {
+      setSuccess("");
+      setError(lineConnectError);
+    }
+  }, [searchParams]);
 
   const handleChange = (key: ProfileTextField, value: string) => {
     setProfile((prev) => ({
@@ -264,6 +283,24 @@ export default function ProfilePage() {
     setIsLoggingOut(false);
   };
 
+  const handleConnectLine = async () => {
+    setError("");
+    setSuccess("");
+    setIsConnectingLine(true);
+
+    try {
+      await startLineOAuth({
+        intent: "connect",
+        returnTo: "/profile",
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to start LINE connection.",
+      );
+      setIsConnectingLine(false);
+    }
+  };
+
   if (isLoadingProfile) {
     return (
       <div className="min-h-screen bg-white px-6 sm:px-12 lg:px-20 py-20">
@@ -389,8 +426,28 @@ export default function ProfilePage() {
           </h4>
           <p className="text-xs text-gray-600 mb-4">
             Email and LINE can both be enabled. To enable LINE notifications,
-            connect a valid LINE User ID first.
+            connect your LINE account first.
           </p>
+
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={handleConnectLine}
+              disabled={isConnectingLine}
+              className="w-full sm:w-auto bg-green-600 py-2.5 px-4 rounded-lg text-sm tracking-wide text-white hover:bg-green-700 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isConnectingLine
+                ? "Connecting LINE..."
+                : profile.lineUserId
+                  ? "Reconnect with LINE"
+                  : "Connect with LINE"}
+            </button>
+            {profile.lineUserId && (
+              <p className="text-xs text-gray-600">
+                Connected LINE User ID: {profile.lineUserId}
+              </p>
+            )}
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">

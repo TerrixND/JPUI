@@ -1,6 +1,6 @@
 import { resolveSafeReturnTo } from "./authRedirect";
 
-export type LineAuthIntent = "login" | "signup";
+export type LineAuthIntent = "login" | "signup" | "connect";
 
 export type LineIdentity = {
   lineUserId: string | null;
@@ -24,12 +24,13 @@ type LineAuthorizeUrlResponse = {
 };
 
 export type LineExchangeResponse = {
+  intent?: LineAuthIntent;
   lineIdentity: {
     lineUserId: string | null;
     lineDisplayName: string | null;
     linePictureUrl?: string | null;
   };
-  session: {
+  session?: {
     accessToken: string;
     refreshToken: string;
     expiresIn: number | null;
@@ -59,8 +60,11 @@ const toRecord = (value: unknown): Record<string, unknown> =>
 const normalizeProviderName = (value: unknown): string =>
   String(value || "").trim().toLowerCase();
 
-const normalizeIntent = (value: unknown): LineAuthIntent =>
-  value === "signup" ? "signup" : "login";
+const normalizeIntent = (value: unknown): LineAuthIntent => {
+  if (value === "signup") return "signup";
+  if (value === "connect") return "connect";
+  return "login";
+};
 
 const generateLineChallenge = (length = 48): string => {
   const chars =
@@ -330,10 +334,12 @@ export const exchangeLineAuthorizationCode = async ({
   code,
   nonce,
   redirectUri,
+  intent,
 }: {
   code: string;
   nonce: string;
   redirectUri: string;
+  intent: LineAuthIntent;
 }): Promise<LineExchangeResponse> => {
   const response = await fetch("/api/v1/auth/line/exchange", {
     method: "POST",
@@ -344,6 +350,7 @@ export const exchangeLineAuthorizationCode = async ({
       code,
       nonce,
       redirectUri,
+      intent,
     }),
   });
 
@@ -365,7 +372,7 @@ export const exchangeLineAuthorizationCode = async ({
   }
 
   const typed = payload as LineExchangeResponse;
-  if (!typed.session?.accessToken || !typed.session?.refreshToken) {
+  if (intent !== "connect" && (!typed.session?.accessToken || !typed.session?.refreshToken)) {
     throw new Error("LINE exchange response does not include a valid session.");
   }
 

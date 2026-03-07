@@ -18,6 +18,7 @@ import {
   getUserMe,
   isAccountAccessDeniedError,
   redirectToBlockedPage,
+  updateUserMeProfile,
 } from "@/lib/apiClient";
 import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import {
@@ -43,11 +44,13 @@ const HomePage = () => {
     const syncSetupUserAfterCallback = async () => {
       if (!isSupabaseConfigured) return;
 
+      const callbackSearchParams = new URLSearchParams(window.location.search);
+      const isLineAuthCallback = callbackSearchParams.get("lineAuth") === "1";
+      const callbackIntent = callbackSearchParams.get("intent") || "";
+      const callbackReturnTo =
+        resolveSafeReturnTo(callbackSearchParams.get("returnTo")) || "/";
+
       try {
-        const callbackSearchParams = new URLSearchParams(window.location.search);
-        const isLineAuthCallback = callbackSearchParams.get("lineAuth") === "1";
-        const callbackReturnTo =
-          resolveSafeReturnTo(callbackSearchParams.get("returnTo")) || "/";
         const hasAuthCode = Boolean(callbackSearchParams.get("code"));
         const lineOauthError = callbackSearchParams.get("error");
         const lineOauthErrorDescription = callbackSearchParams.get(
@@ -91,11 +94,45 @@ const HomePage = () => {
               code: String(callbackSearchParams.get("code") || ""),
               nonce: pendingLineAuth.nonce,
               redirectUri: pendingLineAuth.redirectUri,
+              intent: pendingLineAuth.intent,
             });
 
             callbackLineUserId = lineExchangeResult.lineIdentity.lineUserId || null;
             callbackLineDisplayName =
               lineExchangeResult.lineIdentity.lineDisplayName || null;
+
+            if (pendingLineAuth.intent === "connect") {
+              if (!session?.access_token) {
+                throw new Error("Your session expired. Please login again.");
+              }
+
+              if (!callbackLineUserId) {
+                throw new Error(
+                  "Unable to resolve LINE identity. Please continue with LINE again.",
+                );
+              }
+
+              await updateUserMeProfile({
+                accessToken: session.access_token,
+                payload: {
+                  lineUserId: callbackLineUserId,
+                  lineDisplayName: callbackLineDisplayName,
+                  linePictureUrl:
+                    lineExchangeResult.lineIdentity.linePictureUrl || null,
+                  lineNotificationsEnabled: true,
+                },
+              });
+
+              const connectedRoute = new URL(
+                callbackReturnTo,
+                window.location.origin,
+              );
+              connectedRoute.searchParams.set("lineConnected", "1");
+              router.replace(
+                `${connectedRoute.pathname}${connectedRoute.search}`,
+              );
+              return;
+            }
 
             const { error: setSessionError } = await supabase.auth.setSession({
               access_token: lineExchangeResult.session.accessToken,
@@ -203,6 +240,16 @@ const HomePage = () => {
             details: error.details,
           });
 
+          return;
+        }
+
+        if (isLineAuthCallback && callbackIntent === "connect") {
+          const failedRoute = new URL(callbackReturnTo, window.location.origin);
+          failedRoute.searchParams.set(
+            "lineConnectError",
+            error instanceof Error ? error.message : "Unable to connect LINE.",
+          );
+          router.replace(`${failedRoute.pathname}${failedRoute.search}`);
           return;
         }
 
