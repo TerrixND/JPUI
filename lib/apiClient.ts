@@ -420,6 +420,12 @@ export type UserMeResponse = {
   id: string | null;
   supabaseUserId: string | null;
   email: string | null;
+  lineUserId: string | null;
+  lineDisplayName: string | null;
+  linePictureUrl: string | null;
+  lineLinkedAt: string | null;
+  emailNotificationsEnabled: boolean;
+  lineNotificationsEnabled: boolean;
   role: string | null;
   status: string | null;
   isSetup: boolean;
@@ -443,6 +449,11 @@ export type UpdateUserMeProfilePayload = {
   lineId?: string | null;
   preferredLanguage?: string | null;
   city?: string | null;
+  lineUserId?: string | null;
+  lineDisplayName?: string | null;
+  linePictureUrl?: string | null;
+  emailNotificationsEnabled?: boolean;
+  lineNotificationsEnabled?: boolean;
 };
 
 export type OwnershipClaimRecord = {
@@ -4295,6 +4306,30 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
   const profiles = asRecord(root.profiles);
   const customerProfile = asRecord(profiles?.customerProfile);
   const accountDetails = asRecord(root.accountDetails);
+  const line = asRecord(root.line);
+  const notificationChannels = asRecord(root.notificationChannels);
+  const lineUserId =
+    asNullableString(line?.userId) ?? asNullableString(root.lineUserId);
+  const lineDisplayName =
+    asNullableString(line?.displayName) ?? asNullableString(root.lineDisplayName);
+  const linePictureUrl =
+    asNullableString(line?.pictureUrl) ?? asNullableString(root.linePictureUrl);
+  const lineLinkedAt = asNullableString(line?.linkedAt) ?? asNullableString(root.lineLinkedAt);
+  const emailNotificationsEnabled =
+    typeof root.emailNotificationsEnabled === "boolean"
+      ? root.emailNotificationsEnabled
+      : typeof notificationChannels?.email === "boolean"
+        ? notificationChannels.email
+        : true;
+  const lineNotificationsEnabledRaw =
+    typeof root.lineNotificationsEnabled === "boolean"
+      ? root.lineNotificationsEnabled
+      : typeof line?.notificationsEnabled === "boolean"
+        ? line.notificationsEnabled
+        : typeof notificationChannels?.line === "boolean"
+          ? notificationChannels.line
+          : false;
+  const lineNotificationsEnabled = Boolean(lineUserId) && lineNotificationsEnabledRaw;
 
   const profileSources: JsonRecord = {
     adminProfile: asRecord(profiles?.adminProfile),
@@ -4320,6 +4355,12 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     id: asNullableString(root.id),
     supabaseUserId: asNullableString(root.supabaseUserId),
     email: asNullableString(root.email),
+    lineUserId,
+    lineDisplayName,
+    linePictureUrl,
+    lineLinkedAt,
+    emailNotificationsEnabled,
+    lineNotificationsEnabled,
     role: asNullableString(root.role),
     status: asNullableString(root.status),
     isSetup: root.isSetup === true,
@@ -4384,6 +4425,21 @@ export const updateUserMeProfile = async ({
   }
   if (Object.prototype.hasOwnProperty.call(payload, "city")) {
     body.city = payload.city ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "lineUserId")) {
+    body.lineUserId = payload.lineUserId ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "lineDisplayName")) {
+    body.lineDisplayName = payload.lineDisplayName ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "linePictureUrl")) {
+    body.linePictureUrl = payload.linePictureUrl ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "emailNotificationsEnabled")) {
+    body.emailNotificationsEnabled = payload.emailNotificationsEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "lineNotificationsEnabled")) {
+    body.lineNotificationsEnabled = payload.lineNotificationsEnabled;
   }
 
   if (!Object.keys(body).length) {

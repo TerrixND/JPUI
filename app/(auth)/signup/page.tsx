@@ -20,9 +20,14 @@ import {
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
+import {
+  resolveLineIdentityFromSupabaseUser,
+  startLineOAuth,
+} from "@/lib/lineAuth";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const languages = [
   {
@@ -47,6 +52,9 @@ const SignupPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
+  const isLineSetupMode = searchParams.get("lineSetup") === "1";
+  const lineUserIdFromQuery = searchParams.get("lineUserId");
+  const lineDisplayNameFromQuery = searchParams.get("lineDisplayName");
   const loginHref = buildAuthRouteWithReturnTo("/login", returnTo);
 
   const [fullName, setFullName] = useState<string>("");
@@ -58,7 +66,106 @@ const SignupPage = () => {
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [lineLoading, setLineLoading] = useState(false);
+  const [lineUserId, setLineUserId] = useState<string | null>(
+    lineUserIdFromQuery?.trim() || null,
+  );
   const [selected, setSelected] = useState(languages[0]);
+
+  useEffect(() => {
+    if (!isLineSetupMode) {
+      return;
+    }
+
+    let isActive = true;
+
+    const hydrateLineSetupSession = async () => {
+      try {
+        if (!isSupabaseConfigured) {
+          throw new Error(
+            "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_PROJECT_URL and NEXT_PUBLIC_SUPABASE_PUB_KEY.",
+          );
+        }
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw new Error(sessionError.message);
+        }
+
+        if (!session?.access_token || !session.user) {
+          router.replace(loginHref);
+          return;
+        }
+
+        const identity = resolveLineIdentityFromSupabaseUser(session.user);
+        const fallbackLineUserId = lineUserIdFromQuery?.trim() || null;
+        const resolvedLineUserId = identity.lineUserId || fallbackLineUserId;
+        if (!resolvedLineUserId) {
+          throw new Error(
+            "Unable to resolve LINE identity from session. Please continue with LINE again.",
+          );
+        }
+
+        if (!isActive) {
+          return;
+        }
+
+        setLineUserId(resolvedLineUserId);
+        setEmail((prev) => prev || session.user.email || "");
+        setFullName(
+          (prev) =>
+            prev ||
+            identity.lineDisplayName ||
+            lineDisplayNameFromQuery?.trim() ||
+            "",
+        );
+      } catch (err) {
+        if (!isActive) {
+          return;
+        }
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to initialize LINE account setup.",
+        );
+      }
+    };
+
+    hydrateLineSetupSession();
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    isLineSetupMode,
+    lineDisplayNameFromQuery,
+    lineUserIdFromQuery,
+    loginHref,
+    router,
+  ]);
+
+  const handleLineContinue = async () => {
+    setError("");
+    setMessage("");
+    setLineLoading(true);
+
+    try {
+      await startLineOAuth({
+        returnTo,
+        intent: "signup",
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to continue with LINE.",
+      );
+      setLineLoading(false);
+    }
+  };
 
   const handleSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,18 +181,97 @@ const SignupPage = () => {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
+      const profilePayload = {
+        email: normalizedEmail || undefined,
+        displayName: fullName.trim() || undefined,
+        phone: phNo.trim() || undefined,
+        lineId: isLineSetupMode ? undefined : lineID.trim() || undefined,
+        preferredLanguage: selected.code || undefined,
+        city: city.trim() || undefined,
+      };
+
+      if (isLineSetupMode) {
+        if (
+          !normalizedEmail ||
+          !profilePayload.displayName ||
+          !profilePayload.phone ||
+          !profilePayload.city
+        ) {
+          throw new Error(
+            "Display name, email, city, and phone number are required to complete LINE setup.",
+          );
+        }
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw new Error(sessionError.message);
+        }
+
+        if (!session?.access_token || !session.user) {
+          throw new Error(
+            "LINE session expired. Please continue with LINE again.",
+          );
+        }
+
+        const identity = resolveLineIdentityFromSupabaseUser(session.user);
+        const resolvedLineUserId =
+          identity.lineUserId || lineUserId || lineUserIdFromQuery?.trim() || null;
+        if (!resolvedLineUserId) {
+          throw new Error(
+            "Unable to resolve LINE identity from session. Please continue with LINE again.",
+          );
+        }
+
+        const lineSetupPayload = {
+          ...profilePayload,
+          lineUserId: resolvedLineUserId,
+        };
+
+        const precheckResult = await precheckSignup({
+          email: normalizedEmail,
+          lineUserId: resolvedLineUserId,
+          flow: "SETUP_USER",
+          ...lineSetupPayload,
+        });
+        const onboardingMode = resolveOnboardingMode(precheckResult);
+
+        if (onboardingMode === "bootstrap-admin") {
+          await bootstrapAdmin(session.access_token, lineSetupPayload);
+        } else {
+          await setupUser(session.access_token, lineSetupPayload);
+        }
+
+        try {
+          await getUserMe({
+            accessToken: session.access_token,
+          });
+        } catch (authError) {
+          if (isAccountAccessDeniedError(authError)) {
+            await forceLogoutToBlockedPage(
+              authError.payload ?? {
+                message: authError.message,
+                code: authError.code,
+              },
+            );
+            return;
+          }
+
+          throw authError;
+        }
+
+        clearPendingSetupPayload();
+        router.replace(returnTo);
+        router.refresh();
+        return;
+      }
 
       if (!normalizedEmail || !password) {
         throw new Error("Email and password are required.");
       }
-
-      const profilePayload = {
-        displayName: fullName.trim() || undefined,
-        phone: phNo.trim() || undefined,
-        lineId: lineID.trim() || undefined,
-        preferredLanguage: selected.code || undefined,
-        city: city.trim() || undefined,
-      };
 
       const precheckResult = await precheckSignup({
         email: normalizedEmail,
@@ -181,10 +367,12 @@ const SignupPage = () => {
       <div className="flex justify-between items-center flex-wrap mb-6 gap-4">
         <div className="">
           <h3 className="text-base font-semibold text-black">
-            Create an account
+            {isLineSetupMode ? "Complete LINE Account Setup" : "Create an account"}
           </h3>
           <p className="text-xs text-slate-700 mt-[5px]">
-            Create your account and get started.
+            {isLineSetupMode
+              ? "Add your profile details to finish setup."
+              : "Create your account and get started."}
           </p>
         </div>
         <select
@@ -213,6 +401,39 @@ const SignupPage = () => {
           ))}
         </select>
       </div>
+      {!isLineSetupMode && (
+        <div className="w-full mb-5">
+          <button
+            type="button"
+            onClick={handleLineContinue}
+            disabled={loading || lineLoading}
+            className="
+              w-full
+              group
+              flex items-center justify-center gap-3
+              px-4 py-3.5
+              bg-white
+              border border-gray-200
+              rounded-lg
+              shadow-sm
+              hover:shadow-md hover:border-gray-300
+              transition-all duration-200
+              cursor-pointer disabled:cursor-not-allowed disabled:opacity-60
+            "
+          >
+            <Image
+              src="/icons/Line.png"
+              alt="Line logo"
+              width={20}
+              height={20}
+              className="w-5 h-5 object-contain"
+            />
+            <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+              {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
+            </span>
+          </button>
+        </div>
+      )}
       <form onSubmit={handleSignUp}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InputBox
@@ -236,13 +457,15 @@ const SignupPage = () => {
             placeholder="john@gmail.com"
             type="text"
           />
-          <InputBox
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            label="Password"
-            placeholder="Minimum 8 characters"
-            type="password"
-          />
+          {!isLineSetupMode && (
+            <InputBox
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              label="Password"
+              placeholder="Minimum 8 characters"
+              type="password"
+            />
+          )}
           <InputBox
             value={phNo}
             onChange={(e) => setPhNo(e.target.value)}
@@ -250,13 +473,15 @@ const SignupPage = () => {
             placeholder="+95 #### ####"
             type="text"
           />
-          <InputBox
-            value={lineID}
-            onChange={(e) => setLineID(e.target.value)}
-            label="Line ID"
-            placeholder="#### ####"
-            type="text"
-          />
+          {!isLineSetupMode && (
+            <InputBox
+              value={lineID}
+              onChange={(e) => setLineID(e.target.value)}
+              label="Line ID"
+              placeholder="#### ####"
+              type="text"
+            />
+          )}
           {/* <div className="col-span-2">
             <InputBox
               value={password}
@@ -277,17 +502,25 @@ const SignupPage = () => {
             loading ? "bg-emerald-500" : "bg-emerald-700"
           }`}
         >
-          {loading ? "Signing Up..." : "SIGN UP"}
+          {loading
+            ? isLineSetupMode
+              ? "Completing Setup..."
+              : "Signing Up..."
+            : isLineSetupMode
+              ? "COMPLETE SETUP"
+              : "SIGN UP"}
         </button>
-        <p className="text-[13px] text-slate-800 mt-3">
-          Already have an account?{" "}
-          <Link
-            href={loginHref}
-            className="font-medium text-emerald-600 underline"
-          >
-            Login
-          </Link>
-        </p>
+        {!isLineSetupMode && (
+          <p className="text-[13px] text-slate-800 mt-3">
+            Already have an account?{" "}
+            <Link
+              href={loginHref}
+              className="font-medium text-emerald-600 underline"
+            >
+              Login
+            </Link>
+          </p>
+        )}
       </form>
     </div>
   );

@@ -1,7 +1,9 @@
 type SetupUserPayload = {
+  email?: string;
   displayName?: string;
   phone?: string;
   lineId?: string;
+  lineUserId?: string;
   preferredLanguage?: string;
   city?: string;
 };
@@ -10,13 +12,15 @@ type OnboardingMode = "setup-user" | "bootstrap-admin";
 type SignupFlow = "SETUP_USER" | "BOOTSTRAP_ADMIN";
 
 type SignupPrecheckPayload = SetupUserPayload & {
-  email: string;
+  email?: string;
+  lineUserId?: string;
   flow?: SignupFlow;
   bootstrapSecret?: string;
 };
 
 type LoginPrecheckPayload = {
-  email: string;
+  email?: string;
+  lineUserId?: string;
   phone?: string;
 };
 

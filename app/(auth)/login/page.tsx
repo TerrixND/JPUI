@@ -13,6 +13,7 @@ import {
   completePendingSetupForSession,
   precheckLogin,
 } from "@/lib/setupUser";
+import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import Image from "next/image";
@@ -30,6 +31,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lineLoading, setLineLoading] = useState(false);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -114,6 +116,23 @@ const LoginPage = () => {
     }
   };
 
+  const handleLineContinue = async () => {
+    setError("");
+    setLineLoading(true);
+
+    try {
+      await startLineOAuth({
+        returnTo,
+        intent: "login",
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to continue with LINE.",
+      );
+      setLineLoading(false);
+    }
+  };
+
   return (
     <div className="lg:w-[70%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
       <h3 className="text-base font-semibold text-black">Welcome Back</h3>
@@ -176,8 +195,10 @@ const LoginPage = () => {
             </span>
           </Link>
 
-          <Link
-            href={signupHref}
+          <button
+            type="button"
+            onClick={handleLineContinue}
+            disabled={loading || lineLoading}
             className="
       flex-1 min-w-40
       group
@@ -189,7 +210,7 @@ const LoginPage = () => {
       shadow-sm
       hover:shadow-md hover:border-gray-300
       transition-all duration-200
-      cursor-pointer
+      cursor-pointer disabled:cursor-not-allowed disabled:opacity-60
     "
           >
             <Image
@@ -200,9 +221,9 @@ const LoginPage = () => {
               className="w-5 h-5 object-contain"
             />
             <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
-              Continue with Line
+              {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
             </span>
-          </Link>
+          </button>
 
           <Link
             href={signupHref}

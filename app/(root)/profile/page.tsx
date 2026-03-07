@@ -25,6 +25,11 @@ type Profile = {
   location: string;
   lineId: string;
   language: string;
+  lineUserId: string;
+  lineDisplayName: string;
+  linePictureUrl: string;
+  emailNotificationsEnabled: boolean;
+  lineNotificationsEnabled: boolean;
 };
 
 const EMPTY_PROFILE: Profile = {
@@ -36,6 +41,11 @@ const EMPTY_PROFILE: Profile = {
   location: "",
   lineId: "",
   language: "English",
+  lineUserId: "",
+  lineDisplayName: "",
+  linePictureUrl: "",
+  emailNotificationsEnabled: true,
+  lineNotificationsEnabled: false,
 };
 
 const resolveTierLabel = (tier: CustomerTier | null) => {
@@ -54,7 +64,23 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   location: me.city || "",
   lineId: me.lineId || "",
   language: me.preferredLanguage || "English",
+  lineUserId: me.lineUserId || "",
+  lineDisplayName: me.lineDisplayName || "",
+  linePictureUrl: me.linePictureUrl || "",
+  emailNotificationsEnabled: me.emailNotificationsEnabled,
+  lineNotificationsEnabled: me.lineNotificationsEnabled,
 });
+
+type ProfileTextField =
+  | "name"
+  | "email"
+  | "phone"
+  | "location"
+  | "lineId"
+  | "language"
+  | "lineUserId"
+  | "lineDisplayName"
+  | "linePictureUrl";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -68,7 +94,17 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const handleChange = (key: keyof Profile, value: string) => {
+  const handleChange = (key: ProfileTextField, value: string) => {
+    setProfile((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handleToggle = (
+    key: "emailNotificationsEnabled" | "lineNotificationsEnabled",
+    value: boolean,
+  ) => {
     setProfile((prev) => ({
       ...prev,
       [key]: value,
@@ -186,6 +222,11 @@ export default function ProfilePage() {
           lineId: profile.lineId || null,
           preferredLanguage: isCustomerProfile ? profile.language || null : undefined,
           city: isCustomerProfile ? profile.location || null : undefined,
+          lineUserId: profile.lineUserId || null,
+          lineDisplayName: profile.lineDisplayName || null,
+          linePictureUrl: profile.linePictureUrl || null,
+          emailNotificationsEnabled: profile.emailNotificationsEnabled,
+          lineNotificationsEnabled: profile.lineNotificationsEnabled,
         },
       });
 
@@ -299,7 +340,9 @@ export default function ProfilePage() {
             ["phone", "Phone Number"],
             ["location", "Location"],
             ["lineId", "LINE ID"],
-          ] as [keyof Profile, string][]
+            ["lineUserId", "LINE User ID"],
+            ["lineDisplayName", "LINE Display Name"],
+          ] as [ProfileTextField, string][]
         ).map(([key, label]) => (
           <div key={key} className="flex flex-col gap-2">
             <label className="text-sm font-medium text-gray-600">{label}</label>
@@ -338,6 +381,42 @@ export default function ProfilePage() {
             <option value="Thai">Thai</option>
             <option value="Myanmar">Myanmar</option>
           </select>
+        </div>
+
+        <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50 p-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3">
+            Notification Channels
+          </h4>
+          <p className="text-xs text-gray-600 mb-4">
+            Email and LINE can both be enabled. To enable LINE notifications,
+            connect a valid LINE User ID first.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={profile.emailNotificationsEnabled}
+                disabled={!isEditing}
+                onChange={(event) =>
+                  handleToggle("emailNotificationsEnabled", event.target.checked)
+                }
+              />
+              Email Notifications
+            </label>
+
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={profile.lineNotificationsEnabled}
+                disabled={!isEditing || !profile.lineUserId}
+                onChange={(event) =>
+                  handleToggle("lineNotificationsEnabled", event.target.checked)
+                }
+              />
+              LINE Notifications
+            </label>
+          </div>
         </div>
       </div>
       {/* ================= TIER INFORMATION ================= */}
