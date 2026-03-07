@@ -425,11 +425,24 @@ export type UserMeResponse = {
   isSetup: boolean;
   isMainAdmin: boolean;
   displayName: string | null;
+  phone: string | null;
+  lineId: string | null;
+  preferredLanguage: string | null;
+  city: string | null;
+  customerTier: CustomerTier | null;
   isBranchAdmin: boolean;
   branchMemberships: AdminUserBranchMembership[];
   permissions: JsonRecord | null;
   accountAccess: AccountAccessState | null;
   raw: unknown;
+};
+
+export type UpdateUserMeProfilePayload = {
+  displayName?: string | null;
+  phone?: string | null;
+  lineId?: string | null;
+  preferredLanguage?: string | null;
+  city?: string | null;
 };
 
 export type OwnershipClaimRecord = {
@@ -4277,6 +4290,60 @@ export const getAdminUsers = async ({
   };
 };
 
+const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
+  const root = asRecord(payload) ?? {};
+  const profiles = asRecord(root.profiles);
+  const customerProfile = asRecord(profiles?.customerProfile);
+  const accountDetails = asRecord(root.accountDetails);
+
+  const profileSources: JsonRecord = {
+    adminProfile: asRecord(profiles?.adminProfile),
+    managerProfile: asRecord(profiles?.managerProfile),
+    salespersonProfile: asRecord(profiles?.salespersonProfile),
+    customerProfile,
+    displayName:
+      asNullableString(root.displayName) ?? asNullableString(accountDetails?.displayName),
+    phone: asNullableString(accountDetails?.phone),
+    lineId: asNullableString(accountDetails?.lineId),
+  };
+
+  const branchMemberships = Array.isArray(root.branchMemberships)
+    ? root.branchMemberships
+        .map((entry) => normalizeAdminUserBranchMembership(entry))
+        .filter((entry): entry is AdminUserBranchMembership => Boolean(entry))
+    : [];
+  const permissions = asRecord(root.permissions);
+  const permissionProfile = asRecord(permissions?.profile);
+  const managerType = asString(permissionProfile?.managerType).toUpperCase();
+
+  return {
+    id: asNullableString(root.id),
+    supabaseUserId: asNullableString(root.supabaseUserId),
+    email: asNullableString(root.email),
+    role: asNullableString(root.role),
+    status: asNullableString(root.status),
+    isSetup: root.isSetup === true,
+    isMainAdmin: root.isMainAdmin === true,
+    displayName: resolveProfileField(profileSources, "displayName"),
+    phone: resolveProfileField(profileSources, "phone"),
+    lineId: resolveProfileField(profileSources, "lineId"),
+    preferredLanguage: asNullableString(customerProfile?.preferredLanguage),
+    city: asNullableString(customerProfile?.city),
+    customerTier: normalizeCustomerTier(customerProfile?.tier),
+    isBranchAdmin:
+      managerType === "BRANCH_ADMIN" ||
+      (asString(root.role).toUpperCase() === "MANAGER" &&
+        branchMemberships.some((membership) => membership.isPrimary)),
+    branchMemberships,
+    permissions,
+    accountAccess:
+      normalizeAccountAccess(root.accountAccess) ??
+      normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
+      null,
+    raw: payload,
+  };
+};
+
 export const getUserMe = async ({
   accessToken,
 }: {
@@ -4290,38 +4357,64 @@ export const getUserMe = async ({
       fallbackErrorMessage: "Failed to load account profile.",
     });
 
-    const root = asRecord(payload) ?? {};
-    const branchMemberships = Array.isArray(root.branchMemberships)
-      ? root.branchMemberships
-          .map((entry) => normalizeAdminUserBranchMembership(entry))
-          .filter((entry): entry is AdminUserBranchMembership => Boolean(entry))
-      : [];
-    const permissions = asRecord(root.permissions);
-    const permissionProfile = asRecord(permissions?.profile);
-    const managerType = asString(permissionProfile?.managerType).toUpperCase();
-
-    return {
-      id: asNullableString(root.id),
-      supabaseUserId: asNullableString(root.supabaseUserId),
-      email: asNullableString(root.email),
-      role: asNullableString(root.role),
-      status: asNullableString(root.status),
-      isSetup: root.isSetup === true,
-      isMainAdmin: root.isMainAdmin === true,
-      displayName: asNullableString(root.displayName),
-      isBranchAdmin:
-        managerType === "BRANCH_ADMIN" ||
-        (asString(root.role).toUpperCase() === "MANAGER" &&
-          branchMemberships.some((membership) => membership.isPrimary)),
-      branchMemberships,
-      permissions,
-      accountAccess:
-        normalizeAccountAccess(root.accountAccess) ??
-        normalizeAccountAccess(asRecord(root.details)?.accountAccess) ??
-        null,
-      raw: payload,
-    };
+    return normalizeUserMeResponsePayload(payload);
   });
+};
+
+export const updateUserMeProfile = async ({
+  accessToken,
+  payload,
+}: {
+  accessToken: string;
+  payload: UpdateUserMeProfilePayload;
+}): Promise<UserMeResponse> => {
+  const body: Record<string, unknown> = {};
+
+  if (Object.prototype.hasOwnProperty.call(payload, "displayName")) {
+    body.displayName = payload.displayName ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "phone")) {
+    body.phone = payload.phone ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "lineId")) {
+    body.lineId = payload.lineId ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "preferredLanguage")) {
+    body.preferredLanguage = payload.preferredLanguage ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "city")) {
+    body.city = payload.city ?? null;
+  }
+
+  if (!Object.keys(body).length) {
+    throw new ApiClientError({
+      message: "At least one profile field must be provided.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const responsePayload = await fetchJson({
+    path: `${API_BASE_PATH}/user/me`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    fallbackErrorMessage: "Failed to update account profile.",
+  });
+
+  const root = asRecord(responsePayload);
+  if (!root) {
+    throw new ApiClientError({
+      message: "Invalid profile update response.",
+      status: 500,
+      payload: responsePayload,
+    });
+  }
+
+  return normalizeUserMeResponsePayload(responsePayload);
 };
 
 export const getUserAuthenticityRecord = async ({

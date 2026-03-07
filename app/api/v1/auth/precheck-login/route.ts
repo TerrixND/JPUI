@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, "");
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 const getApiBaseUrl = () =>
   process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+const normalizeHostname = (hostname: string) =>
+  hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
+
+const resolvePort = (url: URL) =>
+  url.port || (url.protocol === "https:" ? "443" : "80");
+
+const isSameProxyOrigin = (targetUrl: URL, requestUrl: URL) => {
+  if (targetUrl.protocol !== requestUrl.protocol) {
+    return false;
+  }
+
+  if (resolvePort(targetUrl) !== resolvePort(requestUrl)) {
+    return false;
+  }
+
+  const targetHost = normalizeHostname(targetUrl.hostname);
+  const requestHost = normalizeHostname(requestUrl.hostname);
+
+  if (targetHost === requestHost) {
+    return true;
+  }
+
+  return LOOPBACK_HOSTS.has(targetHost) && LOOPBACK_HOSTS.has(requestHost);
+};
 
 export const runtime = "nodejs";
 
@@ -23,13 +49,13 @@ export async function POST(request: NextRequest) {
   const targetUrl = `${normalizeBaseUrl(apiBaseUrl)}/api/v1/auth/precheck-login`;
 
   try {
-    const targetOrigin = new URL(targetUrl).origin;
+    const parsedTargetUrl = new URL(targetUrl);
 
-    if (targetOrigin === request.nextUrl.origin) {
+    if (isSameProxyOrigin(parsedTargetUrl, request.nextUrl)) {
       return NextResponse.json(
         {
           message:
-            "API_BASE_URL points to this frontend origin. Point it to your backend service origin.",
+            "API_BASE_URL points to this frontend origin (or a loopback alias of it). Point it to your backend service origin.",
         },
         { status: 500 },
       );

@@ -7,7 +7,12 @@ const getApiBaseUrl = () =>
 
 export const runtime = "nodejs";
 
-export async function GET(request: NextRequest) {
+const isBodyMethod = (method: string) => {
+  const upper = method.toUpperCase();
+  return upper !== "GET" && upper !== "HEAD";
+};
+
+const proxyMeRequest = async (request: NextRequest) => {
   const apiBaseUrl = getApiBaseUrl();
 
   if (!apiBaseUrl) {
@@ -54,12 +59,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const contentType = request.headers.get("content-type");
+  const shouldForwardBody = isBodyMethod(request.method);
+  const body = shouldForwardBody ? await request.text() : undefined;
+  const headers: HeadersInit = {
+    Authorization: authorization,
+  };
+
+  if (contentType && shouldForwardBody) {
+    headers["Content-Type"] = contentType;
+  }
+
   try {
     const upstreamResponse = await fetch(targetUrl, {
-      method: "GET",
-      headers: {
-        Authorization: authorization,
-      },
+      method: request.method,
+      headers,
+      body,
       cache: "no-store",
     });
 
@@ -84,4 +99,12 @@ export async function GET(request: NextRequest) {
       { status: 502 },
     );
   }
+};
+
+export async function GET(request: NextRequest) {
+  return proxyMeRequest(request);
+}
+
+export async function PATCH(request: NextRequest) {
+  return proxyMeRequest(request);
 }
