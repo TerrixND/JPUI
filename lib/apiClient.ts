@@ -420,10 +420,14 @@ export type UserMeResponse = {
   id: string | null;
   supabaseUserId: string | null;
   email: string | null;
+  authProvider: string | null;
   lineUserId: string | null;
   lineDisplayName: string | null;
   linePictureUrl: string | null;
   lineLinkedAt: string | null;
+  lineOfficialVerifiedAt: string | null;
+  lineOfficialVerified: boolean;
+  lineLoginEnabled: boolean;
   emailNotificationsEnabled: boolean;
   lineNotificationsEnabled: boolean;
   role: string | null;
@@ -452,6 +456,7 @@ export type UpdateUserMeProfilePayload = {
   lineUserId?: string | null;
   lineDisplayName?: string | null;
   linePictureUrl?: string | null;
+  lineLoginEnabled?: boolean;
   emailNotificationsEnabled?: boolean;
   lineNotificationsEnabled?: boolean;
 };
@@ -485,6 +490,27 @@ export type OwnershipClaimOtpResponse = {
   code: string | null;
   claim: OwnershipClaimRecord | null;
   challenge: OwnershipOtpChallengeRecord | null;
+  data: JsonRecord | null;
+  raw: unknown;
+};
+
+export type LineOfficialOtpChallengeRecord = {
+  id: string;
+  lineUserId: string | null;
+  status: string | null;
+  expiresAt: string | null;
+  lastSentAt: string | null;
+  createdAt: string | null;
+  raw: JsonRecord;
+};
+
+export type LineOfficialOtpResponse = {
+  message: string | null;
+  code: string | null;
+  addOfficialAccountUrl: string | null;
+  verifiedAt: string | null;
+  lineNotificationsEnabled: boolean | null;
+  challenge: LineOfficialOtpChallengeRecord | null;
   data: JsonRecord | null;
   raw: unknown;
 };
@@ -2101,6 +2127,46 @@ const normalizeOwnershipClaimOtpResponse = (
     code: asNullableString(root?.code),
     claim: normalizeOwnershipClaimRecord(root?.claim),
     challenge: normalizeOwnershipOtpChallengeRecord(root?.challenge),
+    data: root,
+    raw: payload,
+  };
+};
+
+const normalizeLineOfficialOtpChallengeRecord = (
+  payload: unknown,
+): LineOfficialOtpChallengeRecord | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    lineUserId: asNullableString(row?.lineUserId),
+    status: asNullableString(row?.status),
+    expiresAt: asNullableString(row?.expiresAt),
+    lastSentAt: asNullableString(row?.lastSentAt),
+    createdAt: asNullableString(row?.createdAt),
+    raw: row ?? {},
+  };
+};
+
+const normalizeLineOfficialOtpResponse = (
+  payload: unknown,
+): LineOfficialOtpResponse => {
+  const root = asRecord(payload);
+
+  return {
+    message: asNullableString(root?.message),
+    code: asNullableString(root?.code),
+    addOfficialAccountUrl: asNullableString(root?.addOfficialAccountUrl),
+    verifiedAt: asNullableString(root?.verifiedAt),
+    lineNotificationsEnabled:
+      typeof root?.lineNotificationsEnabled === "boolean"
+        ? root.lineNotificationsEnabled
+        : null,
+    challenge: normalizeLineOfficialOtpChallengeRecord(root?.challenge),
     data: root,
     raw: payload,
   };
@@ -4315,6 +4381,9 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
   const linePictureUrl =
     asNullableString(line?.pictureUrl) ?? asNullableString(root.linePictureUrl);
   const lineLinkedAt = asNullableString(line?.linkedAt) ?? asNullableString(root.lineLinkedAt);
+  const lineOfficialVerifiedAt =
+    asNullableString(line?.officialVerifiedAt) ??
+    asNullableString(root.lineOfficialVerifiedAt);
   const emailNotificationsEnabled =
     typeof root.emailNotificationsEnabled === "boolean"
       ? root.emailNotificationsEnabled
@@ -4330,6 +4399,13 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
           ? notificationChannels.line
           : false;
   const lineNotificationsEnabled = Boolean(lineUserId) && lineNotificationsEnabledRaw;
+  const lineLoginEnabledRaw =
+    typeof root.lineLoginEnabled === "boolean"
+      ? root.lineLoginEnabled
+      : typeof line?.loginEnabled === "boolean"
+        ? line.loginEnabled
+        : false;
+  const lineLoginEnabled = Boolean(lineUserId) && lineLoginEnabledRaw;
 
   const profileSources: JsonRecord = {
     adminProfile: asRecord(profiles?.adminProfile),
@@ -4355,10 +4431,14 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     id: asNullableString(root.id),
     supabaseUserId: asNullableString(root.supabaseUserId),
     email: asNullableString(root.email),
+    authProvider: asNullableString(root.authProvider),
     lineUserId,
     lineDisplayName,
     linePictureUrl,
     lineLinkedAt,
+    lineOfficialVerifiedAt,
+    lineOfficialVerified: Boolean(lineUserId) && Boolean(lineOfficialVerifiedAt),
+    lineLoginEnabled,
     emailNotificationsEnabled,
     lineNotificationsEnabled,
     role: asNullableString(root.role),
@@ -4434,6 +4514,9 @@ export const updateUserMeProfile = async ({
   }
   if (Object.prototype.hasOwnProperty.call(payload, "linePictureUrl")) {
     body.linePictureUrl = payload.linePictureUrl ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "lineLoginEnabled")) {
+    body.lineLoginEnabled = payload.lineLoginEnabled;
   }
   if (Object.prototype.hasOwnProperty.call(payload, "emailNotificationsEnabled")) {
     body.emailNotificationsEnabled = payload.emailNotificationsEnabled;
@@ -4630,6 +4713,61 @@ export const verifyCustomerOwnershipClaimOtp = async ({
   });
 
   return normalizeOwnershipClaimOtpResponse(payload);
+};
+
+export const startUserLineOfficialOtpVerification = async ({
+  accessToken,
+}: {
+  accessToken: string;
+}): Promise<LineOfficialOtpResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/line-official/otp/start`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+    fallbackErrorMessage: "Failed to send LINE verification code.",
+  });
+
+  return normalizeLineOfficialOtpResponse(payload);
+};
+
+export const verifyUserLineOfficialOtpVerification = async ({
+  accessToken,
+  challengeId,
+  otp,
+}: {
+  accessToken: string;
+  challengeId: string;
+  otp: string;
+}): Promise<LineOfficialOtpResponse> => {
+  const normalizedChallengeId = asString(challengeId);
+
+  if (!normalizedChallengeId) {
+    throw new ApiClientError({
+      message: "challengeId is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/line-official/otp/verify`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      challengeId: normalizedChallengeId,
+      otp: asString(otp),
+    }),
+    fallbackErrorMessage: "Failed to verify LINE code.",
+  });
+
+  return normalizeLineOfficialOtpResponse(payload);
 };
 
 export const getAdminUserDetail = async ({

@@ -120,7 +120,7 @@ const HomePage = () => {
                   lineDisplayName: callbackLineDisplayName,
                   linePictureUrl:
                     lineExchangeResult.lineIdentity.linePictureUrl || null,
-                  lineNotificationsEnabled: true,
+                  lineNotificationsEnabled: false,
                 },
               });
 

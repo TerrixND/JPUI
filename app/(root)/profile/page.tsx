@@ -21,6 +21,7 @@ type Profile = {
   name: string;
   tierCode: CustomerTier | null;
   tierLabel: string;
+  authProvider: string;
   email: string;
   phone: string;
   location: string;
@@ -29,6 +30,8 @@ type Profile = {
   lineUserId: string;
   lineDisplayName: string;
   linePictureUrl: string;
+  lineOfficialVerifiedAt: string;
+  lineLoginEnabled: boolean;
   emailNotificationsEnabled: boolean;
   lineNotificationsEnabled: boolean;
 };
@@ -37,6 +40,7 @@ const EMPTY_PROFILE: Profile = {
   name: "",
   tierCode: null,
   tierLabel: "N/A",
+  authProvider: "SUPABASE",
   email: "",
   phone: "",
   location: "",
@@ -45,6 +49,8 @@ const EMPTY_PROFILE: Profile = {
   lineUserId: "",
   lineDisplayName: "",
   linePictureUrl: "",
+  lineOfficialVerifiedAt: "",
+  lineLoginEnabled: false,
   emailNotificationsEnabled: true,
   lineNotificationsEnabled: false,
 };
@@ -60,6 +66,7 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   name: me.displayName || "",
   tierCode: me.customerTier,
   tierLabel: resolveTierLabel(me.customerTier),
+  authProvider: (me.authProvider || "SUPABASE").toUpperCase(),
   email: me.email || "",
   phone: me.phone || "",
   location: me.city || "",
@@ -68,6 +75,8 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   lineUserId: me.lineUserId || "",
   lineDisplayName: me.lineDisplayName || "",
   linePictureUrl: me.linePictureUrl || "",
+  lineOfficialVerifiedAt: me.lineOfficialVerifiedAt || "",
+  lineLoginEnabled: me.lineLoginEnabled,
   emailNotificationsEnabled: me.emailNotificationsEnabled,
   lineNotificationsEnabled: me.lineNotificationsEnabled,
 });
@@ -121,9 +130,37 @@ export default function ProfilePage() {
   };
 
   const handleToggle = (
-    key: "emailNotificationsEnabled" | "lineNotificationsEnabled",
+    key:
+      | "emailNotificationsEnabled"
+      | "lineNotificationsEnabled"
+      | "lineLoginEnabled",
     value: boolean,
   ) => {
+    if (key === "lineLoginEnabled" && value && !profile.lineUserId) {
+      setError("Connect a LINE account before enabling LINE login.");
+      return;
+    }
+
+    if (
+      key === "lineLoginEnabled" &&
+      !value &&
+      profile.authProvider === "LINE"
+    ) {
+      setError("LINE login cannot be disabled for LINE-authenticated accounts.");
+      return;
+    }
+
+    if (
+      key === "lineNotificationsEnabled" &&
+      value &&
+      (!profile.lineUserId || !profile.lineOfficialVerifiedAt)
+    ) {
+      setError(
+        "Please verify LINE Official Account connection before enabling LINE notifications.",
+      );
+      return;
+    }
+
     setProfile((prev) => ({
       ...prev,
       [key]: value,
@@ -244,6 +281,7 @@ export default function ProfilePage() {
           lineUserId: profile.lineUserId || null,
           lineDisplayName: profile.lineDisplayName || null,
           linePictureUrl: profile.linePictureUrl || null,
+          lineLoginEnabled: profile.lineLoginEnabled,
           emailNotificationsEnabled: profile.emailNotificationsEnabled,
           lineNotificationsEnabled: profile.lineNotificationsEnabled,
         },
@@ -300,6 +338,10 @@ export default function ProfilePage() {
       setIsConnectingLine(false);
     }
   };
+
+  const lineOfficialIsVerified = Boolean(
+    profile.lineUserId && profile.lineOfficialVerifiedAt,
+  );
 
   if (isLoadingProfile) {
     return (
@@ -426,7 +468,11 @@ export default function ProfilePage() {
           </h4>
           <p className="text-xs text-gray-600 mb-4">
             Email and LINE can both be enabled. To enable LINE notifications,
-            connect your LINE account first.
+            connect LINE, add our LINE Official Account, and verify with OTP.
+          </p>
+
+          <p className="mb-3 text-xs text-gray-600">
+            Account login provider: {profile.authProvider}
           </p>
 
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -449,7 +495,30 @@ export default function ProfilePage() {
             )}
           </div>
 
+          <p className="mb-4 text-xs text-gray-600">
+            LINE Official verification:{" "}
+            {lineOfficialIsVerified
+              ? `Verified at ${new Date(profile.lineOfficialVerifiedAt).toLocaleString()}`
+              : "Not verified yet. Connect with LINE to continue verification on a separate page."}
+          </p>
+
           <div className="flex flex-col sm:flex-row gap-4">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={profile.lineLoginEnabled}
+                disabled={
+                  !isEditing ||
+                  !profile.lineUserId ||
+                  profile.authProvider === "LINE"
+                }
+                onChange={(event) =>
+                  handleToggle("lineLoginEnabled", event.target.checked)
+                }
+              />
+              LINE Login
+            </label>
+
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
@@ -466,7 +535,11 @@ export default function ProfilePage() {
               <input
                 type="checkbox"
                 checked={profile.lineNotificationsEnabled}
-                disabled={!isEditing || !profile.lineUserId}
+                disabled={
+                  !isEditing ||
+                  !profile.lineUserId ||
+                  (!lineOfficialIsVerified && !profile.lineNotificationsEnabled)
+                }
                 onChange={(event) =>
                   handleToggle("lineNotificationsEnabled", event.target.checked)
                 }

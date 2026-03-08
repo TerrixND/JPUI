@@ -165,7 +165,7 @@ const buildLineOAuthRedirectUrl = ({
   intent: LineAuthIntent;
 }): string => {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const callbackUrl = new URL("/", baseUrl || "http://localhost:3001");
+  const callbackUrl = new URL("/line/verify", baseUrl || "http://localhost:3001");
   const safeReturnTo = resolveSafeReturnTo(returnTo);
 
   callbackUrl.searchParams.set("lineAuth", "1");
