@@ -19,12 +19,13 @@ import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedir
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const LoginPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
+  const lineAuthError = searchParams.get("lineAuthError");
   const signupHref = buildAuthRouteWithReturnTo("/signup", returnTo);
 
   const [email, setEmail] = useState("");
@@ -32,6 +33,15 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [lineLoading, setLineLoading] = useState(false);
+
+  useEffect(() => {
+    const normalizedLineAuthError = lineAuthError?.trim();
+    if (!normalizedLineAuthError) {
+      return;
+    }
+
+    setError(normalizedLineAuthError);
+  }, [lineAuthError]);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

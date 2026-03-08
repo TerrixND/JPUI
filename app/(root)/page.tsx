@@ -22,6 +22,7 @@ import {
 } from "@/lib/apiClient";
 import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import {
+  checkLineAccount,
   consumePendingLineAuthContext,
   exchangeLineAuthorizationCode,
   resolveLineIdentityFromSupabaseUser,
@@ -134,9 +135,43 @@ const HomePage = () => {
               return;
             }
 
+            if (pendingLineAuth.intent === "signup") {
+              if (!callbackLineUserId) {
+                throw new Error(
+                  "Unable to resolve LINE identity. Please continue with LINE again.",
+                );
+              }
+
+              const lineAccountCheck = await checkLineAccount({
+                lineUserId: callbackLineUserId,
+                lineDisplayName: callbackLineDisplayName,
+              });
+
+              if (!lineAccountCheck.eligible) {
+                const loginRoute = new URL(
+                  buildAuthRouteWithReturnTo("/login", callbackReturnTo),
+                  window.location.origin,
+                );
+                loginRoute.searchParams.set(
+                  "lineAuthError",
+                  lineAccountCheck.message ||
+                    "Line account is already connected with user account. Please login with email and password.",
+                );
+                router.replace(`${loginRoute.pathname}${loginRoute.search}`);
+                return;
+              }
+            }
+
+            const lineSession = lineExchangeResult.session;
+            if (!lineSession?.accessToken || !lineSession?.refreshToken) {
+              throw new Error(
+                "LINE exchange response does not include a valid session.",
+              );
+            }
+
             const { error: setSessionError } = await supabase.auth.setSession({
-              access_token: lineExchangeResult.session.accessToken,
-              refresh_token: lineExchangeResult.session.refreshToken,
+              access_token: lineSession.accessToken,
+              refresh_token: lineSession.refreshToken,
             });
             if (setSessionError) {
               throw new Error(setSessionError.message);

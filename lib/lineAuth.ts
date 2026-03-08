@@ -40,6 +40,15 @@ export type LineExchangeResponse = {
   supabaseUser?: unknown;
 };
 
+export type LineAccountCheckResponse = {
+  eligible: boolean;
+  lineUserId: string;
+  isRegistered: boolean;
+  isConnected: boolean;
+  code?: string | null;
+  message?: string | null;
+};
+
 const LINE_PENDING_AUTH_STORAGE_KEY = "line_oauth_pending_auth";
 const MAX_PENDING_LINE_AUTH_AGE_MS = 10 * 60 * 1000;
 
@@ -56,6 +65,20 @@ const toRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+const readPayloadMessage = (
+  payload: unknown,
+  fallbackMessage: string,
+): string => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return fallbackMessage;
+  }
+
+  const message = (payload as { message?: unknown }).message;
+  return typeof message === "string" && message.trim()
+    ? message
+    : fallbackMessage;
+};
 
 const normalizeProviderName = (value: unknown): string =>
   String(value || "").trim().toLowerCase();
@@ -266,10 +289,10 @@ const requestLineAuthorizeUrl = async ({
     | null;
 
   if (!response.ok) {
-    const message =
-      payload && typeof payload === "object" && typeof payload.message === "string"
-        ? payload.message
-        : "Unable to initialize LINE authorization.";
+    const message = readPayloadMessage(
+      payload,
+      "Unable to initialize LINE authorization.",
+    );
     throw new Error(message);
   }
 
@@ -360,10 +383,10 @@ export const exchangeLineAuthorizationCode = async ({
     | null;
 
   if (!response.ok) {
-    const message =
-      payload && typeof payload === "object" && typeof payload.message === "string"
-        ? payload.message
-        : "Unable to exchange LINE authorization code.";
+    const message = readPayloadMessage(
+      payload,
+      "Unable to exchange LINE authorization code.",
+    );
     throw new Error(message);
   }
 
@@ -377,4 +400,53 @@ export const exchangeLineAuthorizationCode = async ({
   }
 
   return typed;
+};
+
+export const checkLineAccount = async ({
+  lineUserId,
+  lineDisplayName,
+}: {
+  lineUserId: string;
+  lineDisplayName?: string | null;
+}): Promise<LineAccountCheckResponse> => {
+  const response = await fetch("/api/v1/auth/line/check-account", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      lineUserId,
+      lineDisplayName: lineDisplayName || undefined,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | (LineAccountCheckResponse & { message?: string; code?: string })
+    | { message?: string; code?: string }
+    | null;
+
+  if (!response.ok) {
+    const message = readPayloadMessage(payload, "Unable to check LINE account.");
+    throw new Error(message);
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid LINE account check response.");
+  }
+
+  const normalizedLineUserId = toSafeString(
+    (payload as LineAccountCheckResponse).lineUserId,
+  );
+  if (!normalizedLineUserId) {
+    throw new Error("LINE account check response is missing lineUserId.");
+  }
+
+  return {
+    eligible: Boolean((payload as LineAccountCheckResponse).eligible),
+    lineUserId: normalizedLineUserId,
+    isRegistered: Boolean((payload as LineAccountCheckResponse).isRegistered),
+    isConnected: Boolean((payload as LineAccountCheckResponse).isConnected),
+    message: toSafeString((payload as LineAccountCheckResponse).message),
+    code: toSafeString((payload as LineAccountCheckResponse).code),
+  };
 };
