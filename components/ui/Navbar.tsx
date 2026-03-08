@@ -38,8 +38,8 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
   const isLight = isScrolled || isWhiteRoute;
 
-  const textColor = isLight ? "text-black" : "text-black";
-  const iconColor = isLight ? "text-gray-700" : "text-black";
+  const textColor = isLight ? "text-black" : "text-white";
+  const iconColor = isLight ? "text-gray-700" : "text-white";
 
   const navLinks = useMemo(() => {
     const links = [
@@ -186,7 +186,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
                 className={`text-sm px-4 py-1.5 border rounded transition-colors duration-200 ${
                   isLight
                     ? "border-black text-black hover:bg-black hover:text-white"
-                    : "border-black text-black hover:bg-black hover:text-white"
+                    : "border-white text-white hover:bg-white hover:text-black"
                 }`}
               >
                 Sign Up

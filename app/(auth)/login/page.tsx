@@ -134,7 +134,7 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="lg:w-[70%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
+    <div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
       <h3 className="text-base font-semibold text-black">Welcome Back</h3>
       <p className="text-xs text-slate-700 mt-1.25 mb-6">
         Enter your information to proceed.
@@ -254,7 +254,7 @@ const LoginPage = () => {
           </Link>
         </div>
 
-        <div className="flex justify-between  mt-5 ">
+        <div className="flex justify-between  mt-8 ">
           <p className="text-[13px] text-slate-800">
             Forgot{" "}
             <Link

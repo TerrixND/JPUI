@@ -1,399 +1,188 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
-const ScrollHero = () => {
-  const bgRef = useRef<HTMLDivElement>(null);
-  const [loaded, setLoaded] = useState(false);
+const slides = [
+  {
+    id: 1,
+    image: "/images/ab1.png",
+    eyebrow: "Heritage Collection",
+    title: ["Timeless", "Craftsmanship"],
+    description:
+      "Every jade piece is shaped with precision and decades of mastery.",
+    button: "Explore Heritage",
+    accent: "#C8A96E",
+  },
+  {
+    id: 2,
+    image: "/images/ab2.png",
+    eyebrow: "Provenance",
+    title: ["Rare.", "Pure.", "Powerful."],
+    description:
+      "Sourced from the finest origins, refined into wearable art.",
+    button: "Discover Collection",
+    accent: "#8FB8A2",
+  },
+  {
+    id: 3,
+    image: "/images/ab3.png",
+    eyebrow: "New Season",
+    title: ["Luxury", "Redefined"],
+    description:
+      "Minimal form. Maximum elegance. Designed for the modern elite.",
+    button: "Shop Now",
+    accent: "#B8A9C9",
+  },
+];
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoaded(true), 80);
-    return () => clearTimeout(t);
+const DURATION = 5000;
+
+export default function ScrollHero() {
+  const [current, setCurrent] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const total = slides.length;
+
+  const goTo = useCallback((index: number) => {
+    setCurrent(index);
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
+  const next = useCallback(() => {
+    goTo((current + 1) % total);
+  }, [current, total, goTo]);
+
+  const back = useCallback(() => {
+    goTo((current - 1 + total) % total);
+  }, [current, total, goTo]);
+
   useEffect(() => {
-    const onScroll = () => {
-      if (!bgRef.current || window.innerWidth < 768) return;
-      bgRef.current.style.transform = `scale(1.08) translateY(${window.scrollY * 0.15}px)`;
+    timerRef.current = setTimeout(next, DURATION);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [current, next]);
+
+  const slide = slides[current];
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Jost:wght@200;300;400&display=swap');
+    <div className="relative w-full h-screen overflow-hidden bg-black">
 
-        /* ── ALL selectors scoped under .sh__ prefix — zero global bleed ── */
+      {/* Background */}
+      <img
+        src={slide.image}
+        className="absolute inset-0 w-full h-full object-cover animate-slow-zoom"
+        alt=""
+      />
 
-        .sh__wrap {
-          position: relative;
-          width: 100%;
-          min-height: 100svh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          background: #faf8f4;
-          box-sizing: border-box;
-        }
+      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
-        .sh__bg {
-          position: absolute;
-          inset: -8%;
-          background-image: url('/images/whiteBg.jpg');
-          background-size: cover;
-          background-position: center;
-          transform: scale(1.08);
-          transform-origin: center;
-          transition: transform 0.1s linear;
-          filter: brightness(0.96) saturate(0.85) sepia(0.04);
-          will-change: transform;
-        }
+      {/* Text */}
+      <div className="absolute inset-0 flex items-center z-20">
+        <div
+          className="ml-16 md:ml-24 max-w-2xl flex flex-col gap-5"
+          style={{ "--accent": slide.accent } as React.CSSProperties}
+        >
+          <p className="text-sm uppercase text-white/60">
+            {slide.eyebrow}
+          </p>
 
-        .sh__overlay {
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          background:
-            linear-gradient(
-              to top,
-              rgba(26, 74, 58, 0.18) 0%,
-              rgba(26, 74, 58, 0.06) 40%,
-              rgba(250, 248, 244, 0.0) 70%
-            ),
-            radial-gradient(
-              ellipse 80% 70% at 50% 50%,
-              transparent 30%,
-              rgba(15, 31, 24, 0.12) 100%
-            );
-        }
-
-        .sh__grain {
-          position: absolute;
-          inset: 0;
-          z-index: 2;
-          opacity: 0.035;
-          pointer-events: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-          background-size: 180px 180px;
-        }
-
-        .sh__line-left,
-        .sh__line-right {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 5;
-          width: 1px;
-          height: 0;
-          background: linear-gradient(to bottom, transparent, #2d6e56, transparent);
-          transition: height 1.2s cubic-bezier(0.16,1,0.3,1) 0.9s,
-                      opacity 0.4s ease 0.9s;
-          opacity: 0;
-        }
-        .sh__line-left  { left:  clamp(2rem, 6vw, 5rem); }
-        .sh__line-right { right: clamp(2rem, 6vw, 5rem); }
-
-        .sh__line-left::before,
-        .sh__line-left::after,
-        .sh__line-right::before,
-        .sh__line-right::after {
-          content: '';
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 5px;
-          height: 1px;
-          background: #2d6e56;
-        }
-        .sh__line-left::before,  .sh__line-right::before { top: 0; }
-        .sh__line-left::after,   .sh__line-right::after  { bottom: 0; }
-
-        .sh__wrap.is-loaded .sh__line-left,
-        .sh__wrap.is-loaded .sh__line-right {
-          height: clamp(80px, 20vh, 160px);
-          opacity: 1;
-        }
-
-        .sh__content {
-          position: relative;
-          z-index: 10;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-          padding: 0 clamp(1.5rem, 6vw, 4rem);
-          max-width: 720px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-
-        .sh__eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.7em;
-          font-family: 'Jost', sans-serif;
-          font-weight: 300;
-          font-size: clamp(0.56rem, 1.5vw, 0.62rem);
-          letter-spacing: 0.42em;
-          text-transform: uppercase;
-          color: #1a4a3a;
-          opacity: 0;
-          transform: translateY(10px);
-          transition: opacity 0.8s ease 0.15s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.15s;
-          margin-bottom: clamp(1.4rem, 3.5vw, 2rem);
-          /* reset any inherited styles */
-          font-style: normal;
-          text-decoration: none;
-          background: none;
-          border: none;
-          padding: 0;
-          line-height: 1;
-        }
-        .sh__eyebrow::before,
-        .sh__eyebrow::after {
-          content: '';
-          display: block;
-          width: clamp(20px, 4vw, 32px);
-          height: 1px;
-          background: #4a9e7e;
-          opacity: 0.6;
-          flex-shrink: 0;
-        }
-
-        .sh__title {
-          font-family: 'Cormorant', Georgia, serif;
-          font-weight: 300;
-          font-size: clamp(3.4rem, 12vw, 7.5rem);
-          line-height: 0.95;
-          color: #0f1f18;
-          letter-spacing: -0.02em;
-          opacity: 0;
-          transform: translateY(28px);
-          transition: opacity 1.1s ease 0.4s, transform 1.1s cubic-bezier(0.16,1,0.3,1) 0.4s;
-          margin-bottom: clamp(0.6rem, 2vw, 1rem);
-          /* resets */
-          font-style: normal;
-          text-decoration: none;
-          background: none;
-          border: none;
-          padding: 0;
-        }
-        .sh__title em {
-          font-style: italic;
-          font-weight: 400;
-          color: #1a4a3a;
-          display: block;
-        }
-
-        .sh__ornament {
-          display: flex;
-          align-items: center;
-          gap: 0.8rem;
-          opacity: 0;
-          transform: scaleX(0.6);
-          transition: opacity 0.9s ease 0.75s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.75s;
-          margin: clamp(1.2rem, 3vw, 1.8rem) 0;
-        }
-        .sh__ornament-line {
-          width: clamp(30px, 8vw, 50px);
-          height: 1px;
-          background: #4a9e7e;
-          opacity: 0.5;
-        }
-        .sh__ornament-diamond {
-          width: 5px;
-          height: 5px;
-          border: 1px solid #1a4a3a;
-          transform: rotate(45deg);
-          opacity: 0.7;
-          flex-shrink: 0;
-        }
-
-        .sh__subtitle {
-          font-family: 'Jost', sans-serif;
-          font-weight: 200;
-          font-size: clamp(0.72rem, 2vw, 0.85rem);
-          letter-spacing: 0.16em;
-          color: rgba(15, 31, 24, 0.85);
-          opacity: 0;
-          transform: translateY(10px);
-          transition: opacity 0.9s ease 0.95s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.95s;
-          margin-bottom: clamp(2.2rem, 5vw, 3.2rem);
-          /* resets */
-          font-style: normal;
-          text-decoration: none;
-          background: none;
-          border: none;
-          padding: 0;
-          line-height: 1.5;
-        }
-
-        .sh__cta-row {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: clamp(0.8rem, 3vw, 1.4rem);
-          opacity: 0;
-          transform: translateY(12px);
-          transition: opacity 0.9s ease 1.1s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 1.1s;
-        }
-
-        .sh__btn-primary {
-          font-family: 'Jost', sans-serif;
-          font-weight: 300;
-          font-size: clamp(0.58rem, 1.6vw, 0.65rem);
-          letter-spacing: 0.32em;
-          text-transform: uppercase;
-          color: #faf8f4;
-          background: #1a4a3a;
-          border: none;
-          padding: clamp(0.8rem, 2vw, 1rem) clamp(1.8rem, 5vw, 2.8rem);
-          cursor: pointer;
-          position: relative;
-          overflow: hidden;
-          transition: color 0.4s ease;
-          line-height: 1;
-          text-decoration: none;
-          display: inline-block;
-          box-sizing: border-box;
-        }
-        .sh__btn-primary::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: #2d6e56;
-          transform: translateX(-101%);
-          transition: transform 0.45s cubic-bezier(0.16,1,0.3,1);
-        }
-        .sh__btn-primary:hover::before { transform: translateX(0); }
-        .sh__btn-primary span { position: relative; z-index: 1; }
-
-        .sh__btn-ghost {
-          font-family: 'Jost', sans-serif;
-          font-weight: 300;
-          font-size: clamp(0.58rem, 1.6vw, 0.65rem);
-          letter-spacing: 0.32em;
-          text-transform: uppercase;
-          color: #1a4a3a;
-          background: none;
-          border: 1px solid rgba(26, 74, 58, 0.35);
-          padding: clamp(0.8rem, 2vw, 1rem) clamp(1.8rem, 5vw, 2.8rem);
-          cursor: pointer;
-          position: relative;
-          overflow: hidden;
-          transition: color 0.4s ease, border-color 0.4s ease;
-          line-height: 1;
-          text-decoration: none;
-          display: inline-block;
-          box-sizing: border-box;
-        }
-        .sh__btn-ghost::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: #1a4a3a;
-          transform: translateX(-101%);
-          transition: transform 0.45s cubic-bezier(0.16,1,0.3,1);
-        }
-        .sh__btn-ghost:hover { color: #faf8f4; border-color: #1a4a3a; }
-        .sh__btn-ghost:hover::before { transform: translateX(0); }
-        .sh__btn-ghost span { position: relative; z-index: 1; }
-
-        /* ── Loaded state triggers ── */
-        .sh__wrap.is-loaded .sh__eyebrow,
-        .sh__wrap.is-loaded .sh__title,
-        .sh__wrap.is-loaded .sh__subtitle,
-        .sh__wrap.is-loaded .sh__cta-row {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        .sh__wrap.is-loaded .sh__ornament {
-          opacity: 1;
-          transform: scaleX(1);
-        }
-
-        /* ── Scroll indicator ── */
-        .sh__scroll-hint {
-          position: absolute;
-          bottom: clamp(1.5rem, 4vw, 2.2rem);
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 10;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 0.45rem;
-          opacity: 0;
-          transition: opacity 0.8s ease 1.7s;
-        }
-        .sh__wrap.is-loaded .sh__scroll-hint { opacity: 1; }
-        .sh__scroll-hint span {
-          font-family: 'Jost', sans-serif;
-          font-size: 0.5rem;
-          letter-spacing: 0.42em;
-          text-transform: uppercase;
-          color: rgba(26, 74, 58, 0.45);
-          font-weight: 300;
-          font-style: normal;
-        }
-        .sh__scroll-line {
-          width: 1px;
-          height: 28px;
-          background: linear-gradient(to bottom, #4a9e7e, transparent);
-          animation: sh__scrollPulse 2.2s ease-in-out infinite;
-        }
-        @keyframes sh__scrollPulse {
-          0%, 100% { opacity: 0.35; transform: scaleY(1);    }
-          50%       { opacity: 1;    transform: scaleY(1.12); }
-        }
-      `}</style>
-
-      <div className={`sh__wrap${loaded ? " is-loaded" : ""}`}>
-        <div className="sh__bg" ref={bgRef} />
-        <div className="sh__overlay" />
-        <div className="sh__grain" />
-
-        <div className="sh__line-left" />
-        <div className="sh__line-right" />
-
-        <div className="sh__content">
-          <p className="sh__eyebrow">Heritage Collection</p>
-
-          <h1 className="sh__title">
-            Timeless
-            <em>Craftsmanship</em>
+          <h1 className="text-5xl md:text-7xl font-black text-white leading-none">
+            {slide.title.map((line, i) => (
+              <span key={i} className="block">
+                {i === 0 ? (
+                  <em
+                    className="not-italic"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    {line}
+                  </em>
+                ) : (
+                  line
+                )}
+              </span>
+            ))}
           </h1>
 
-          <div className="sh__ornament">
-            <div className="sh__ornament-line" />
-            <div className="sh__ornament-diamond" />
-            <div className="sh__ornament-line" />
-          </div>
+          <p className="text-white/60 max-w-sm">
+            {slide.description}
+          </p>
 
-          <p className="sh__subtitle">Where tradition meets modern elegance</p>
-
-          <div className="sh__cta-row">
-            <Link href={"/products"} className="sh__btn-primary">
-              <span>Explore Collection</span>
-            </Link>
-            <Link href={"aboutus"} className="sh__btn-ghost">
-              <span>Our Story</span>
-            </Link>
-          </div>
-        </div>
-
-        <div className="sh__scroll-hint">
-          <span>Scroll</span>
-          <div className="sh__scroll-line" />
+          <Link href={"/products"}
+            className="px-6 py-3 text-black font-semibold w-fit cursor-pointer"
+            style={{ backgroundColor: "var(--accent)" }}
+          >
+            {slide.button}
+          </Link>
         </div>
       </div>
-    </>
-  );
-};
 
-export default ScrollHero;
+      {/* Bottom Controls */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 px-16 md:px-24 pb-8 flex items-center gap-6">
+
+        {/* Previous */}
+        <button
+          onClick={back}
+          className="w-10 h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white"
+        >
+          <ChevronLeft />
+        </button>
+
+        {/* Progress */}
+        <div className="flex flex-1 gap-1">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              className="relative flex-1 h-px bg-white/20 overflow-hidden"
+            >
+              <span
+                className={`absolute inset-y-0 left-0 ${
+                  i === current
+                    ? "animate-progress"
+                    : i < current
+                    ? "w-full"
+                    : "w-0"
+                }`}
+                style={{
+                  backgroundColor:
+                    i === current ? slide.accent : "white",
+                }}
+              />
+            </button>
+          ))}
+        </div>
+
+        {/* Next */}
+        <button
+          onClick={next}
+          className="w-10 h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white"
+        >
+          <ChevronRight />
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes slowZoom {
+          from { transform: scale(1); }
+          to { transform: scale(1.06); }
+        }
+
+        @keyframes progress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+
+        .animate-slow-zoom {
+          animation: slowZoom 10s linear forwards;
+        }
+
+        .animate-progress {
+          animation: progress 5s linear forwards;
+        }
+      `}</style>
+    </div>
+  );
+}

@@ -19,7 +19,10 @@ import {
   storePendingSetupPayload,
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
-import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
+import {
+  buildAuthRouteWithReturnTo,
+  resolveSafeReturnTo,
+} from "@/lib/authRedirect";
 import {
   resolveLineIdentityFromSupabaseUser,
   startLineOAuth,
@@ -219,7 +222,10 @@ const SignupPage = () => {
 
         const identity = resolveLineIdentityFromSupabaseUser(session.user);
         const resolvedLineUserId =
-          identity.lineUserId || lineUserId || lineUserIdFromQuery?.trim() || null;
+          identity.lineUserId ||
+          lineUserId ||
+          lineUserIdFromQuery?.trim() ||
+          null;
         if (!resolvedLineUserId) {
           throw new Error(
             "Unable to resolve LINE identity from session. Please continue with LINE again.",
@@ -367,7 +373,9 @@ const SignupPage = () => {
       <div className="flex justify-between items-center flex-wrap mb-6 gap-4">
         <div className="">
           <h3 className="text-base font-semibold text-black">
-            {isLineSetupMode ? "Complete LINE Account Setup" : "Create an account"}
+            {isLineSetupMode
+              ? "Complete LINE Account Setup"
+              : "Create an account"}
           </h3>
           <p className="text-xs text-slate-700 mt-[5px]">
             {isLineSetupMode
@@ -401,39 +409,7 @@ const SignupPage = () => {
           ))}
         </select>
       </div>
-      {!isLineSetupMode && (
-        <div className="w-full mb-5">
-          <button
-            type="button"
-            onClick={handleLineContinue}
-            disabled={loading || lineLoading}
-            className="
-              w-full
-              group
-              flex items-center justify-center gap-3
-              px-4 py-3.5
-              bg-white
-              border border-gray-200
-              rounded-lg
-              shadow-sm
-              hover:shadow-md hover:border-gray-300
-              transition-all duration-200
-              cursor-pointer disabled:cursor-not-allowed disabled:opacity-60
-            "
-          >
-            <Image
-              src="/icons/Line.png"
-              alt="Line logo"
-              width={20}
-              height={20}
-              className="w-5 h-5 object-contain"
-            />
-            <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
-              {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
-            </span>
-          </button>
-        </div>
-      )}
+
       <form onSubmit={handleSignUp}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InputBox
@@ -494,7 +470,9 @@ const SignupPage = () => {
         </div>
 
         {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
-        {message && <p className="text-emerald-700 text-xs pb-2.5">{message}</p>}
+        {message && (
+          <p className="text-emerald-700 text-xs pb-2.5">{message}</p>
+        )}
         <button
           type="submit"
           disabled={loading}
@@ -511,7 +489,98 @@ const SignupPage = () => {
               : "SIGN UP"}
         </button>
         {!isLineSetupMode && (
-          <p className="text-[13px] text-slate-800 mt-3">
+          <div className="w-full flex gap-3 mt-5 flex-wrap">
+            <button
+              type="button"
+              onClick={handleLineContinue}
+              disabled={loading || lineLoading}
+              className="
+              flex-1 min-w-40
+      group
+      flex items-center justify-center gap-3
+      px-4 py-3.5
+      bg-white
+      border border-gray-200
+      rounded-lg
+      shadow-sm
+      hover:shadow-md hover:border-gray-300
+      transition-all duration-200
+      cursor-pointer
+    "
+            >
+              <Image
+                src="/icons/Google.png"
+                alt="Line logo"
+                width={20}
+                height={20}
+                className="w-5 h-5 object-contain"
+              />
+              <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLineContinue}
+              disabled={loading || lineLoading}
+              className="
+              flex-1 min-w-40
+      group
+      flex items-center justify-center gap-3
+      px-4 py-3.5
+      bg-white
+      border border-gray-200
+      rounded-lg
+      shadow-sm
+      hover:shadow-md hover:border-gray-300
+      transition-all duration-200
+      cursor-pointer
+    "
+            >
+              <Image
+                src="/icons/Line.png"
+                alt="Line logo"
+                width={20}
+                height={20}
+                className="w-5 h-5 object-contain"
+              />
+              <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLineContinue}
+              disabled={loading || lineLoading}
+              className="
+              flex-1 min-w-40
+      group
+      flex items-center justify-center gap-3
+      px-4 py-3.5
+      bg-white
+      border border-gray-200
+      rounded-lg
+      shadow-sm
+      hover:shadow-md hover:border-gray-300
+      transition-all duration-200
+      cursor-pointer
+    "
+            >
+              <Image
+                src="/icons/facebook.png"
+                alt="Line logo"
+                width={20}
+                height={20}
+                className="w-5 h-5 object-contain"
+              />
+              <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
+              </span>
+            </button>
+          </div>
+        )}
+        {!isLineSetupMode && (
+          <p className="text-[13px] text-slate-800 my-8">
             Already have an account?{" "}
             <Link
               href={loginHref}
