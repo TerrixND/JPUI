@@ -428,6 +428,7 @@ export type UserMeResponse = {
   lineOfficialVerifiedAt: string | null;
   lineOfficialVerified: boolean;
   lineLoginEnabled: boolean;
+  lineLoginAvailable: boolean;
   emailNotificationsEnabled: boolean;
   lineNotificationsEnabled: boolean;
   role: string | null;
@@ -511,6 +512,32 @@ export type LineOfficialOtpResponse = {
   verifiedAt: string | null;
   lineNotificationsEnabled: boolean | null;
   challenge: LineOfficialOtpChallengeRecord | null;
+  data: JsonRecord | null;
+  raw: unknown;
+};
+
+export type UserAccountDeletionOtpMethod = "EMAIL" | "LINE";
+
+export type UserAccountDeletionOtpChallengeRecord = {
+  id: string;
+  method: UserAccountDeletionOtpMethod | null;
+  email: string | null;
+  maskedEmail: string | null;
+  lineUserId: string | null;
+  status: string | null;
+  expiresAt: string | null;
+  lastSentAt: string | null;
+  createdAt: string | null;
+  raw: JsonRecord;
+};
+
+export type UserAccountDeletionOtpResponse = {
+  message: string | null;
+  code: string | null;
+  method: UserAccountDeletionOtpMethod | null;
+  addOfficialAccountUrl: string | null;
+  deletedAt: string | null;
+  challenge: UserAccountDeletionOtpChallengeRecord | null;
   data: JsonRecord | null;
   raw: unknown;
 };
@@ -2167,6 +2194,57 @@ const normalizeLineOfficialOtpResponse = (
         ? root.lineNotificationsEnabled
         : null,
     challenge: normalizeLineOfficialOtpChallengeRecord(root?.challenge),
+    data: root,
+    raw: payload,
+  };
+};
+
+const normalizeUserAccountDeletionOtpMethod = (
+  value: unknown,
+): UserAccountDeletionOtpMethod | null => {
+  const method = asString(value).toUpperCase();
+  if (method === "EMAIL" || method === "LINE") {
+    return method;
+  }
+
+  return null;
+};
+
+const normalizeUserAccountDeletionOtpChallengeRecord = (
+  payload: unknown,
+): UserAccountDeletionOtpChallengeRecord | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    method: normalizeUserAccountDeletionOtpMethod(row?.method),
+    email: asNullableString(row?.email),
+    maskedEmail: asNullableString(row?.maskedEmail),
+    lineUserId: asNullableString(row?.lineUserId),
+    status: asNullableString(row?.status),
+    expiresAt: asNullableString(row?.expiresAt),
+    lastSentAt: asNullableString(row?.lastSentAt),
+    createdAt: asNullableString(row?.createdAt),
+    raw: row ?? {},
+  };
+};
+
+const normalizeUserAccountDeletionOtpResponse = (
+  payload: unknown,
+): UserAccountDeletionOtpResponse => {
+  const root = asRecord(payload);
+
+  return {
+    message: asNullableString(root?.message),
+    code: asNullableString(root?.code),
+    method: normalizeUserAccountDeletionOtpMethod(root?.method),
+    addOfficialAccountUrl: asNullableString(root?.addOfficialAccountUrl),
+    deletedAt: asNullableString(root?.deletedAt),
+    challenge: normalizeUserAccountDeletionOtpChallengeRecord(root?.challenge),
     data: root,
     raw: payload,
   };
@@ -4439,6 +4517,7 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     lineOfficialVerifiedAt,
     lineOfficialVerified: Boolean(lineUserId) && Boolean(lineOfficialVerifiedAt),
     lineLoginEnabled,
+    lineLoginAvailable: root.lineLoginAvailable === true,
     emailNotificationsEnabled,
     lineNotificationsEnabled,
     role: asNullableString(root.role),
@@ -4768,6 +4847,88 @@ export const verifyUserLineOfficialOtpVerification = async ({
   });
 
   return normalizeLineOfficialOtpResponse(payload);
+};
+
+export const startUserAccountDeletionOtpChallenge = async ({
+  accessToken,
+  method = "EMAIL",
+}: {
+  accessToken: string;
+  method?: UserAccountDeletionOtpMethod;
+}): Promise<UserAccountDeletionOtpResponse> => {
+  const normalizedMethod = normalizeUserAccountDeletionOtpMethod(method);
+  if (!normalizedMethod) {
+    throw new ApiClientError({
+      message: "method must be EMAIL or LINE.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/me/delete-account/otp/start`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      method: normalizedMethod,
+    }),
+    fallbackErrorMessage: "Failed to send account deletion code.",
+  });
+
+  return normalizeUserAccountDeletionOtpResponse(payload);
+};
+
+export const verifyUserAccountDeletionOtpChallenge = async ({
+  accessToken,
+  challengeId,
+  otp,
+  method,
+}: {
+  accessToken: string;
+  challengeId: string;
+  otp: string;
+  method?: UserAccountDeletionOtpMethod;
+}): Promise<UserAccountDeletionOtpResponse> => {
+  const normalizedChallengeId = asString(challengeId);
+  if (!normalizedChallengeId) {
+    throw new ApiClientError({
+      message: "challengeId is required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const normalizedMethod = method
+    ? normalizeUserAccountDeletionOtpMethod(method)
+    : null;
+
+  if (method && !normalizedMethod) {
+    throw new ApiClientError({
+      message: "method must be EMAIL or LINE.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/me/delete-account/otp/verify`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      challengeId: normalizedChallengeId,
+      otp: asString(otp),
+      ...(normalizedMethod ? { method: normalizedMethod } : {}),
+    }),
+    fallbackErrorMessage: "Failed to verify account deletion code.",
+  });
+
+  return normalizeUserAccountDeletionOtpResponse(payload);
 };
 
 export const getAdminUserDetail = async ({

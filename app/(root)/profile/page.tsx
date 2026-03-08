@@ -2,17 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Edit, X, Save, LogOut } from "lucide-react";
+import { Edit, X, Save, LogOut, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ApiClientError,
   type CustomerTier,
+  type UserAccountDeletionOtpMethod,
   type UserMeResponse,
   forceLogoutToBlockedPage,
   getUserMe,
   isAccountAccessDeniedError,
+  startUserAccountDeletionOtpChallenge,
   signOutAndRedirect,
   updateUserMeProfile,
+  verifyUserAccountDeletionOtpChallenge,
 } from "@/lib/apiClient";
 import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
@@ -32,6 +35,7 @@ type Profile = {
   linePictureUrl: string;
   lineOfficialVerifiedAt: string;
   lineLoginEnabled: boolean;
+  lineLoginAvailable: boolean;
   emailNotificationsEnabled: boolean;
   lineNotificationsEnabled: boolean;
 };
@@ -51,6 +55,7 @@ const EMPTY_PROFILE: Profile = {
   linePictureUrl: "",
   lineOfficialVerifiedAt: "",
   lineLoginEnabled: false,
+  lineLoginAvailable: false,
   emailNotificationsEnabled: true,
   lineNotificationsEnabled: false,
 };
@@ -61,6 +66,10 @@ const resolveTierLabel = (tier: CustomerTier | null) => {
   if (tier === "REGULAR") return "Regular";
   return "N/A";
 };
+
+const LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL = "https://line.me/R/ti/p/%40404isuyx#~";
+
+const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
 
 const mapUserToProfile = (me: UserMeResponse): Profile => ({
   name: me.displayName || "",
@@ -77,6 +86,7 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   linePictureUrl: me.linePictureUrl || "",
   lineOfficialVerifiedAt: me.lineOfficialVerifiedAt || "",
   lineLoginEnabled: me.lineLoginEnabled,
+  lineLoginAvailable: me.lineLoginAvailable,
   emailNotificationsEnabled: me.emailNotificationsEnabled,
   lineNotificationsEnabled: me.lineNotificationsEnabled,
 });
@@ -103,6 +113,15 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isConnectingLine, setIsConnectingLine] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteOtpMethod, setDeleteOtpMethod] = useState<UserAccountDeletionOtpMethod>("EMAIL");
+  const [deleteOtpChallengeId, setDeleteOtpChallengeId] = useState("");
+  const [deleteOtpCode, setDeleteOtpCode] = useState("");
+  const [deleteOtpMaskedEmail, setDeleteOtpMaskedEmail] = useState("");
+  const [deleteOtpAddOfficialUrl, setDeleteOtpAddOfficialUrl] = useState("");
+  const [deleteOtpInfo, setDeleteOtpInfo] = useState("");
+  const [deleteOtpError, setDeleteOtpError] = useState("");
+  const [deleteOtpBusy, setDeleteOtpBusy] = useState<"send" | "verify" | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -138,6 +157,11 @@ export default function ProfilePage() {
   ) => {
     if (key === "lineLoginEnabled" && value && !profile.lineUserId) {
       setError("Connect a LINE account before enabling LINE login.");
+      return;
+    }
+
+    if (key === "lineLoginEnabled" && value && !profile.lineLoginAvailable) {
+      setError("LINE login is currently unavailable. Please login with email and password.");
       return;
     }
 
@@ -251,27 +275,157 @@ export default function ProfilePage() {
     };
   }, [router]);
 
+  const getSessionAccessTokenOrThrow = async () => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
+    }
+    if (!session?.access_token) {
+      throw new Error("Your session has expired. Please login again.");
+    }
+
+    return session.access_token;
+  };
+
+  const resetDeleteOtpState = (method: UserAccountDeletionOtpMethod) => {
+    setDeleteOtpMethod(method);
+    setDeleteOtpChallengeId("");
+    setDeleteOtpCode("");
+    setDeleteOtpMaskedEmail("");
+    setDeleteOtpAddOfficialUrl("");
+    setDeleteOtpInfo("");
+    setDeleteOtpError("");
+  };
+
+  const handleOpenDeleteModal = () => {
+    setError("");
+    setSuccess("");
+    resetDeleteOtpState("EMAIL");
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (deleteOtpBusy) {
+      return;
+    }
+    setIsDeleteModalOpen(false);
+  };
+
+  const handleDeleteOtpMethodChange = (method: UserAccountDeletionOtpMethod) => {
+    if (deleteOtpBusy) {
+      return;
+    }
+    resetDeleteOtpState(method);
+  };
+
+  const handleSendDeleteOtp = async () => {
+    setDeleteOtpError("");
+    setDeleteOtpInfo("");
+    setDeleteOtpBusy("send");
+
+    try {
+      const accessToken = await getSessionAccessTokenOrThrow();
+      const response = await startUserAccountDeletionOtpChallenge({
+        accessToken,
+        method: deleteOtpMethod,
+      });
+
+      const nextChallengeId = response.challenge?.id || "";
+      if (!nextChallengeId) {
+        throw new Error("Failed to start OTP challenge. Please try again.");
+      }
+
+      setDeleteOtpChallengeId(nextChallengeId);
+      setDeleteOtpMaskedEmail(response.challenge?.maskedEmail || "");
+      setDeleteOtpAddOfficialUrl(response.addOfficialAccountUrl || "");
+      setDeleteOtpInfo(response.message || "Verification code sent.");
+    } catch (err) {
+      if (isAccountAccessDeniedError(err)) {
+        await forceLogoutToBlockedPage(
+          err.payload ?? {
+            message: err.message,
+            code: err.code,
+          },
+        );
+        return;
+      }
+
+      if (err instanceof ApiClientError && err.status === 401) {
+        await signOutAndRedirect("/login");
+        return;
+      }
+
+      setDeleteOtpError(
+        err instanceof Error ? err.message : "Unable to send verification code.",
+      );
+    } finally {
+      setDeleteOtpBusy(null);
+    }
+  };
+
+  const handleVerifyDeleteOtp = async () => {
+    setDeleteOtpError("");
+    setDeleteOtpInfo("");
+
+    if (!deleteOtpChallengeId) {
+      setDeleteOtpError("Send a verification code first.");
+      return;
+    }
+    if (deleteOtpCode.length !== 6) {
+      setDeleteOtpError("Enter a 6 digit code.");
+      return;
+    }
+
+    setDeleteOtpBusy("verify");
+    try {
+      const accessToken = await getSessionAccessTokenOrThrow();
+      const response = await verifyUserAccountDeletionOtpChallenge({
+        accessToken,
+        challengeId: deleteOtpChallengeId,
+        otp: deleteOtpCode,
+        method: deleteOtpMethod,
+      });
+
+      setDeleteOtpInfo(response.message || "Account deleted.");
+      await signOutAndRedirect("/login?accountDeleted=1");
+    } catch (err) {
+      if (isAccountAccessDeniedError(err)) {
+        await forceLogoutToBlockedPage(
+          err.payload ?? {
+            message: err.message,
+            code: err.code,
+          },
+        );
+        return;
+      }
+
+      if (err instanceof ApiClientError && err.status === 401) {
+        await signOutAndRedirect("/login");
+        return;
+      }
+
+      setDeleteOtpError(
+        err instanceof Error ? err.message : "Unable to verify code.",
+      );
+    } finally {
+      setDeleteOtpBusy(null);
+    }
+  };
+
   const handleSave = async () => {
     setError("");
     setSuccess("");
     setIsSaving(true);
 
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        throw new Error(sessionError.message);
-      }
-
-      if (!session?.access_token) {
-        throw new Error("Your session has expired. Please login again.");
-      }
+      const accessToken = await getSessionAccessTokenOrThrow();
 
       const updatedMe = await updateUserMeProfile({
-        accessToken: session.access_token,
+        accessToken,
         payload: {
           displayName: profile.name || null,
           phone: profile.phone || null,
@@ -342,6 +496,8 @@ export default function ProfilePage() {
   const lineOfficialIsVerified = Boolean(
     profile.lineUserId && profile.lineOfficialVerifiedAt,
   );
+  const resolvedDeleteOtpLineAddFriendUrl =
+    deleteOtpAddOfficialUrl || LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL;
 
   if (isLoadingProfile) {
     return (
@@ -474,6 +630,11 @@ export default function ProfilePage() {
           <p className="mb-3 text-xs text-gray-600">
             Account login provider: {profile.authProvider}
           </p>
+          {!profile.lineLoginAvailable ? (
+            <p className="mb-3 text-xs text-amber-700">
+              LINE login is currently unavailable on this server. Email/password login is required.
+            </p>
+          ) : null}
 
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <button
@@ -510,6 +671,7 @@ export default function ProfilePage() {
                 disabled={
                   !isEditing ||
                   !profile.lineUserId ||
+                  !profile.lineLoginAvailable ||
                   profile.authProvider === "LINE"
                 }
                 onChange={(event) =>
@@ -607,23 +769,168 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-      <div className="mt-10">
-        <div className="mb-6 bg-red-50 border border-red-200 p-4">
-          <p className="text-sm text-gray-600 leading-relaxed tracking-wide">
-            Are you sure you want to log out at this time? You will need to sign
-            back in to manage your account, view your profile, or access member
-            benefits.
+      <div className="mt-10 space-y-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+          <h4 className="text-sm font-semibold text-red-800">Delete Account</h4>
+          <p className="mt-2 text-sm text-red-700">
+            This action is permanent. You must verify OTP by Email or LINE to delete your account.
           </p>
+          <button
+            type="button"
+            onClick={handleOpenDeleteModal}
+            className="mt-4 w-full sm:w-auto rounded-lg bg-red-600 px-4 py-2.5 text-sm text-white transition hover:bg-red-700"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Trash2 size={16} />
+              Delete Account
+            </span>
+          </button>
         </div>
-        <button
-          onClick={handleLogout}
-          disabled={isLoggingOut}
-          className="w-full md:w-auto bg-red-400 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-sm tracking-widest text-white hover:bg-red-500 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <LogOut size={16} />
-          {isLoggingOut ? "Logging out..." : "Logout"}
-        </button>
+
+        <div>
+          <div className="mb-6 bg-red-50 border border-red-200 p-4">
+            <p className="text-sm text-gray-600 leading-relaxed tracking-wide">
+              Are you sure you want to log out at this time? You will need to sign
+              back in to manage your account, view your profile, or access member
+              benefits.
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full md:w-auto bg-red-400 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-sm tracking-widest text-white hover:bg-red-500 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <LogOut size={16} />
+            {isLoggingOut ? "Logging out..." : "Logout"}
+          </button>
+        </div>
       </div>
+
+      {isDeleteModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Delete Account</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Choose OTP method, verify code, then your account will be permanently deleted.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseDeleteModal}
+                disabled={deleteOtpBusy !== null}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOtpMethodChange("EMAIL")}
+                  disabled={deleteOtpBusy !== null}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    deleteOtpMethod === "EMAIL"
+                      ? "bg-gray-900 text-white"
+                      : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  Email OTP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOtpMethodChange("LINE")}
+                  disabled={deleteOtpBusy !== null}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    deleteOtpMethod === "LINE"
+                      ? "bg-gray-900 text-white"
+                      : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  LINE OTP
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                {deleteOtpMethod === "EMAIL" ? (
+                  <p className="text-sm text-gray-600">
+                    Send a 6 digit OTP to your account email
+                    {deleteOtpMaskedEmail ? ` (${deleteOtpMaskedEmail})` : ""}.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      Send a 6 digit OTP to your connected LINE account.
+                    </p>
+                    <a
+                      href={resolvedDeleteOtpLineAddFriendUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex text-sm text-green-700 underline underline-offset-2"
+                    >
+                      Add LINE Official Account
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSendDeleteOtp();
+                  }}
+                  disabled={deleteOtpBusy !== null}
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {deleteOtpBusy === "send"
+                    ? "Sending..."
+                    : deleteOtpChallengeId
+                      ? "Resend Code"
+                      : "Send Code"}
+                </button>
+                <input
+                  type="text"
+                  value={deleteOtpCode}
+                  onChange={(event) => setDeleteOtpCode(normalizeOtpInput(event.target.value))}
+                  placeholder="6 digit code"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void handleVerifyDeleteOtp();
+                }}
+                disabled={
+                  deleteOtpBusy !== null ||
+                  deleteOtpCode.length !== 6 ||
+                  !deleteOtpChallengeId
+                }
+                className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteOtpBusy === "verify" ? "Verifying..." : "Verify OTP and Delete Account"}
+              </button>
+
+              {deleteOtpError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {deleteOtpError}
+                </div>
+              ) : null}
+
+              {deleteOtpInfo ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {deleteOtpInfo}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
