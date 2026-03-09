@@ -787,8 +787,8 @@ export default function ProfilePage() {
             <p className="text-sm text-gray-500 mb-4">
               Default membership level.
             </p>
-            <p className="text-sm">• No minimum spending required</p>
-            <p className="text-sm">• Standard purchase access</p>
+            <p className="text-sm">• Assigned automatically for new customers</p>
+            <p className="text-sm">• Upgrade path starts after phone or LINE verification</p>
           </div>
 
           {/* VIP */}
@@ -801,11 +801,10 @@ export default function ProfilePage() {
           >
             <h4 className="text-base font-semibold mb-2">VIP</h4>
             <p className="text-sm text-gray-500 mb-4">
-              Spend over <span className="font-medium">$5,000</span> total
+              Verify your customer identity first
             </p>
-            <p className="text-sm">• Priority customer support</p>
-            <p className="text-sm">• Early access to new collections</p>
-            <p className="text-sm">• Exclusive promotions</p>
+            <p className="text-sm">• Requires verified phone number OR connected LINE account</p>
+            <p className="text-sm">• Unlocks VIP customer targeting and queue priority</p>
           </div>
 
           {/* VVIP */}
@@ -818,11 +817,10 @@ export default function ProfilePage() {
           >
             <h4 className="text-base font-semibold mb-2">VVIP</h4>
             <p className="text-sm text-gray-500 mb-4">
-              Spend over <span className="font-medium">$20,000</span> total
+              Highest customer tier
             </p>
-            <p className="text-sm">• Dedicated account manager</p>
-            <p className="text-sm">• Private invitation events</p>
-            <p className="text-sm">• Maximum loyalty rewards</p>
+            <p className="text-sm">• Requires VIP eligibility (verified phone or connected LINE)</p>
+            <p className="text-sm">• Requires at least 1 completed purchase OR current owned product</p>
           </div>
         </div>
       </div>
