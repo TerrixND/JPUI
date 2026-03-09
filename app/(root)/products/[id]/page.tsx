@@ -26,6 +26,16 @@ const toProductDetailModel = (product: PublicProductRecord): ProductDetailModel 
     const normalizedType = String(entry.type || "").toUpperCase();
     return normalizedType === "PDF" || normalizedType === "CERTIFICATE";
   });
+  const generatedCertificate = product.generatedCertificate;
+  const certificateFileUrl =
+    generatedCertificate?.pdfSignedUrl ||
+    generatedCertificate?.pdfUrl ||
+    certificateMedia?.url ||
+    null;
+  const certificateHtmlPreviewUrl =
+    generatedCertificate?.htmlSignedUrl ||
+    generatedCertificate?.htmlUrl ||
+    null;
 
   return {
     id: product.id,
@@ -49,9 +59,10 @@ const toProductDetailModel = (product: PublicProductRecord): ProductDetailModel 
     sourceType: product.origin,
     media,
     currentOwnership: null,
-    certificate: certificateMedia
+    certificate: certificateFileUrl || certificateHtmlPreviewUrl
       ? {
-          fileUrl: certificateMedia.url,
+          fileUrl: certificateFileUrl,
+          htmlPreviewUrl: certificateHtmlPreviewUrl,
         }
       : null,
   };

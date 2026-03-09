@@ -21,6 +21,7 @@ type ProductOwnership = {
 
 type ProductCertificate = {
   fileUrl?: string | null;
+  htmlPreviewUrl?: string | null;
   serialNumber?: string | null;
   registeredAt?: string | null;
   issuedBy?: string | null;
@@ -497,6 +498,11 @@ export default function ProductDetailClientComponent({
   const handleOpenCertificate = () => {
     if (product.certificate?.fileUrl) {
       window.open(product.certificate.fileUrl, "_blank");
+      return;
+    }
+
+    if (product.certificate?.htmlPreviewUrl) {
+      window.open(product.certificate.htmlPreviewUrl, "_blank");
     }
   };
 
@@ -785,6 +791,29 @@ export default function ProductDetailClientComponent({
                           </span>
                         </div>
                       </button>
+
+                      {product.certificate.htmlPreviewUrl ? (
+                        <div className="rounded-xl border border-stone-200 bg-white p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs tracking-wide uppercase text-stone-500 font-sans">
+                              HTML Preview
+                            </p>
+                            <a
+                              href={product.certificate.htmlPreviewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-emerald-600 hover:text-emerald-700"
+                            >
+                              Open Full Preview
+                            </a>
+                          </div>
+                          <iframe
+                            title="Certificate HTML Preview"
+                            src={product.certificate.htmlPreviewUrl}
+                            className="h-72 w-full rounded-lg border border-stone-200"
+                          />
+                        </div>
+                      ) : null}
 
                       <div className="bg-stone-50 border border-stone-200 rounded-xl p-5">
                         {hasDisplayValue(product.certificate.serialNumber) && (

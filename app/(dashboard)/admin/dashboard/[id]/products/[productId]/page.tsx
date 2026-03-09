@@ -13,6 +13,8 @@ import {
   type AdminAuthCardAction,
   ApiClientError,
   deleteAdminMedia,
+  generateAdminProductCertificateDraft,
+  getAdminProductCertificate,
   getAdminBranchMembers,
   getAdminBranchesWithManagers,
   updateAdminProduct,
@@ -760,7 +762,9 @@ export default function ProductEditPage() {
   const [publicThumbnailFiles, setPublicThumbnailFiles] = useState<MediaFile[]>([]);
   const [publicVideoFiles, setPublicVideoFiles] = useState<MediaFile[]>([]);
   const [publicGalleryFiles, setPublicGalleryFiles] = useState<MediaFile[]>([]);
-  const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
+  const [certificateGeneratorOpen, setCertificateGeneratorOpen] = useState(false);
+  const [certificateSourceFiles, setCertificateSourceFiles] = useState<MediaFile[]>([]);
+  const [certificateGenerating, setCertificateGenerating] = useState(false);
   const [publicVisibilityByFileId, setPublicVisibilityByFileId] = useState<
     Record<string, PublicUploadVisibilityConfig>
   >({});
@@ -818,6 +822,10 @@ export default function ProductEditPage() {
         : ROLE_MEDIA_VISIBILITY_PRESETS.filter(isRoleVisibilityPreset),
     [form.visibility],
   );
+  const generatedCertificateId = useMemo(
+    () => (productRecord?.generatedCertificate?.id ? productRecord.generatedCertificate.id : null),
+    [productRecord?.generatedCertificate?.id],
+  );
   const pendingPublicUploads = useMemo<PendingPublicUpload[]>(
     () => [
       ...publicThumbnailFiles.map((file) => ({
@@ -835,13 +843,8 @@ export default function ProductEditPage() {
         slot: "PUBLIC_GALLERY" as const,
         slotLabel: "More Images",
       })),
-      ...publicCertificateFiles.map((file) => ({
-        file,
-        slot: "PUBLIC_CERTIFICATE" as const,
-        slotLabel: "Certificate File",
-      })),
     ],
-    [publicCertificateFiles, publicGalleryFiles, publicThumbnailFiles, publicVideoFiles],
+    [publicGalleryFiles, publicThumbnailFiles, publicVideoFiles],
   );
   const createDefaultPublicUploadVisibility = useCallback(
     (): PublicUploadVisibilityConfig => ({
@@ -1297,7 +1300,7 @@ export default function ProductEditPage() {
         setPublicThumbnailFiles([]);
         setPublicVideoFiles([]);
         setPublicGalleryFiles([]);
-        setPublicCertificateFiles([]);
+        setCertificateSourceFiles([]);
         setPublicVisibilityPreset(
           productDetail.visibility === "TOP_SHELF"
             ? "TOP_SHELF"
@@ -1557,8 +1560,7 @@ export default function ProductEditPage() {
   const hasAnyPublicMediaUpload =
     publicThumbnailFiles.length > 0 ||
     publicVideoFiles.length > 0 ||
-    publicGalleryFiles.length > 0 ||
-    publicCertificateFiles.length > 0;
+    publicGalleryFiles.length > 0;
   const hasAnyMediaUpload = hasAnyPublicMediaUpload || roleMediaFiles.length > 0;
 
   const handleDeleteExistingMedia = async (media: ProductMedia) => {
@@ -1598,6 +1600,116 @@ export default function ProductEditPage() {
       setError(message);
     } finally {
       setDeletingMediaId(null);
+    }
+  };
+
+  const openCertificateEditor = (certificateId: string) => {
+    const editorPath = `${dashboardBasePath}/products/certificates/${certificateId}`;
+    window.open(editorPath, "_blank", "noopener,noreferrer");
+  };
+
+  const handleEditCertificate = async () => {
+    setError("");
+    setNotice("");
+
+    if (productEditBlocked) {
+      setError(productEditTooltip);
+      return;
+    }
+
+    if (generatedCertificateId) {
+      openCertificateEditor(generatedCertificateId);
+      return;
+    }
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await getAdminProductCertificate({
+        accessToken,
+        productId,
+      });
+      const certificateId = response.certificate?.id;
+      if (!certificateId) {
+        setError("No generated certificate found for this product.");
+        return;
+      }
+
+      setProductRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              generatedCertificate: response.certificate,
+            }
+          : prev,
+      );
+      openCertificateEditor(certificateId);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load generated certificate.";
+      setError(message);
+    }
+  };
+
+  const handleGenerateCertificateDraft = async () => {
+    setError("");
+    setNotice("");
+
+    if (productEditBlocked) {
+      setError(productEditTooltip);
+      return;
+    }
+
+    if (certificateSourceFiles.length !== 1) {
+      setError("Upload one raw certificate image before regenerating.");
+      return;
+    }
+
+    try {
+      setCertificateGenerating(true);
+      const accessToken = await getAccessToken();
+      const uploadedRawImage = await uploadMediaFiles({
+        files: [certificateSourceFiles[0].file],
+        accessToken,
+        visibilityPreset: "ADMIN",
+        allowedRoles: ["ADMIN"],
+      });
+      const rawImageMediaId = uploadedRawImage[0]?.id;
+      if (!rawImageMediaId) {
+        throw new Error("Raw certificate image upload did not return a media id.");
+      }
+
+      const response = await generateAdminProductCertificateDraft({
+        accessToken,
+        productId,
+        rawImageMediaId,
+      });
+      const certificateId = response.certificate?.id;
+      if (!certificateId) {
+        throw new Error("Certificate draft generation returned an invalid response.");
+      }
+
+      setProductRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              generatedCertificate: response.certificate,
+            }
+          : prev,
+      );
+      setNotice("Certificate draft regenerated. Editor opened in a new tab.");
+      setCertificateSourceFiles([]);
+      setCertificateGeneratorOpen(false);
+      openCertificateEditor(certificateId);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to regenerate certificate draft.";
+      setError(message);
+    } finally {
+      setCertificateGenerating(false);
     }
   };
 
@@ -1785,10 +1897,6 @@ export default function ProductEditPage() {
         hasAnyPublicMediaUpload && publicGalleryFiles.length > 0
           ? await uploadPublicSlotFiles(publicGalleryFiles, "PUBLIC_GALLERY")
           : [];
-      const uploadedCertificateMedia =
-        hasAnyPublicMediaUpload && publicCertificateFiles.length > 0
-          ? await uploadPublicSlotFiles(publicCertificateFiles, "PUBLIC_CERTIFICATE")
-          : [];
       const uploadedRoleMediaByPreset: Record<string, string[]> = {};
       const uploadedRoleMedia = [];
 
@@ -1833,8 +1941,7 @@ export default function ProductEditPage() {
             ...uploadedGalleryMedia.map((media) => media.id),
           ]),
         ],
-        certificateMediaId:
-          uploadedCertificateMedia[0]?.id || existingPublicMediaBySlot.certificateMediaId || null,
+        certificateMediaId: existingPublicMediaBySlot.certificateMediaId || null,
       };
       const hasMergedPublicMedia =
         Boolean(mergedPublicMedia.thumbnailMediaId) ||
@@ -2935,16 +3042,45 @@ export default function ProductEditPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File</p>
-              <MediaUploader
-                files={publicCertificateFiles}
-                onChange={setPublicCertificateFiles}
-                maxFiles={1}
-                maxSizeMB={50}
-                maxVideoSizeMB={500}
-                allowedTypes={["PDF"]}
-                helperText="Upload one PDF certificate file."
-              />
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate Generator</p>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCertificateGeneratorOpen(true);
+                      setError("");
+                      setNotice("");
+                    }}
+                    disabled={saving || productEditBlocked}
+                    title={productEditBlocked ? productEditTooltip : undefined}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Regenerate Certificate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleEditCertificate();
+                    }}
+                    disabled={saving || productEditBlocked}
+                    title={productEditBlocked ? productEditTooltip : undefined}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Edit Certificate
+                  </button>
+                </div>
+                {generatedCertificateId ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    Linked certificate ID: {generatedCertificateId}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">
+                    Generate a certificate draft from the raw image, edit it in the editor page,
+                    then save to publish PDF and HTML preview.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -3160,6 +3296,72 @@ export default function ProductEditPage() {
           </button>
         </div>
       </form>
+
+      {certificateGeneratorOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700/60 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Regenerate Certificate
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Upload one raw certificate image to regenerate OCR fields and open the editor.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!certificateGenerating) {
+                    setCertificateGeneratorOpen(false);
+                    setCertificateSourceFiles([]);
+                  }
+                }}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+                disabled={certificateGenerating}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <MediaUploader
+                files={certificateSourceFiles}
+                onChange={setCertificateSourceFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload one clear certificate image for OCR and QR extraction."
+              />
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCertificateGeneratorOpen(false);
+                    setCertificateSourceFiles([]);
+                  }}
+                  disabled={certificateGenerating}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleGenerateCertificateDraft();
+                  }}
+                  disabled={certificateGenerating || certificateSourceFiles.length !== 1}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {certificateGenerating ? "Generating..." : "Generate"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {authCardModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

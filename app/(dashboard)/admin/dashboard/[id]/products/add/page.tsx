@@ -11,6 +11,7 @@ import supabase from "@/lib/supabase";
 import { uploadMediaFiles } from "@/lib/mediaUpload";
 import {
   createAdminProduct,
+  generateAdminProductCertificateDraft,
   getAdminBranchMembers,
   getAdminBranchesWithManagers,
   type CustomerTier,
@@ -197,7 +198,11 @@ export default function AddProductPage() {
   const [publicThumbnailFiles, setPublicThumbnailFiles] = useState<MediaFile[]>([]);
   const [publicVideoFiles, setPublicVideoFiles] = useState<MediaFile[]>([]);
   const [publicGalleryFiles, setPublicGalleryFiles] = useState<MediaFile[]>([]);
-  const [publicCertificateFiles, setPublicCertificateFiles] = useState<MediaFile[]>([]);
+  const [certificateGeneratorOpen, setCertificateGeneratorOpen] = useState(false);
+  const [certificateSourceFiles, setCertificateSourceFiles] = useState<MediaFile[]>([]);
+  const [certificateGenerating, setCertificateGenerating] = useState(false);
+  const [generatedCertificateId, setGeneratedCertificateId] = useState<string | null>(null);
+  const [generatedCertificateLabel, setGeneratedCertificateLabel] = useState("");
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
   const [consignmentContractFiles, setConsignmentContractFiles] = useState<MediaFile[]>([]);
@@ -424,8 +429,7 @@ export default function AddProductPage() {
   const hasAnyPublicMedia =
     publicThumbnailFiles.length > 0 ||
     publicVideoFiles.length > 0 ||
-    publicGalleryFiles.length > 0 ||
-    publicCertificateFiles.length > 0;
+    publicGalleryFiles.length > 0;
   const hasAnyMedia = hasAnyPublicMedia || roleMediaFiles.length > 0;
 
   const ensureMediaUploadMetadata = () => {
@@ -454,6 +458,66 @@ export default function AddProductPage() {
       parseTargetUserIdsInput(publicTargetUserIdsInput).length === 0
     ) {
       throw new Error("Provide at least one target user id for TARGETED_USER public media.");
+    }
+  };
+
+  const handleGenerateCertificateDraft = async () => {
+    setError("");
+    setGeneratedCertificateLabel("");
+
+    if (productCreateBlocked) {
+      setError(productCreateTooltip);
+      return;
+    }
+
+    if (certificateSourceFiles.length !== 1) {
+      setError("Upload one raw certificate image before generating.");
+      return;
+    }
+
+    try {
+      setCertificateGenerating(true);
+      const accessToken = await getAccessToken();
+      const uploadedRawImage = await uploadMediaFiles({
+        files: [certificateSourceFiles[0].file],
+        accessToken,
+        visibilityPreset: "ADMIN",
+        allowedRoles: ["ADMIN"],
+      });
+      const rawImageMediaId = uploadedRawImage[0]?.id;
+
+      if (!rawImageMediaId) {
+        throw new Error("Raw certificate image upload did not return a media id.");
+      }
+
+      const generated = await generateAdminProductCertificateDraft({
+        accessToken,
+        rawImageMediaId,
+      });
+      if (!generated.certificate?.id) {
+        throw new Error("Certificate draft generation returned an invalid response.");
+      }
+
+      const extractedTitle = generated.certificate.extractedFields?.["title"];
+      setGeneratedCertificateId(generated.certificate.id);
+      setGeneratedCertificateLabel(
+        typeof extractedTitle === "string" && extractedTitle.trim()
+          ? extractedTitle
+          : `Certificate ${generated.certificate.id}`,
+      );
+      setCertificateSourceFiles([]);
+      setCertificateGeneratorOpen(false);
+
+      const editorPath = `${dashboardBasePath}/products/certificates/${generated.certificate.id}`;
+      window.open(editorPath, "_blank", "noopener,noreferrer");
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to generate certificate draft.";
+      setError(message);
+    } finally {
+      setCertificateGenerating(false);
     }
   };
 
@@ -595,14 +659,6 @@ export default function AddProductPage() {
               ...publicUploadOptions,
             })
           : [];
-      const uploadedCertificateMedia =
-        publicCertificateFiles.length > 0
-          ? await uploadMediaFiles({
-              files: publicCertificateFiles.map((mediaFile) => mediaFile.file),
-              slot: "PUBLIC_CERTIFICATE",
-              ...publicUploadOptions,
-            })
-          : [];
       const uploadedRoleMedia =
         roleMediaFiles.length > 0
           ? await uploadMediaFiles({
@@ -668,6 +724,7 @@ export default function AddProductPage() {
           consignmentContractMediaId:
             form.sourceType === "CONSIGNED" ? uploadedConsignmentContract[0]?.id || null : null,
           commissionAllocations: normalizedAllocations,
+          ...(generatedCertificateId ? { generatedCertificateId } : {}),
           ...(form.visibility === "TARGETED_USER" ? { targetUserIds: productTargetUserIds } : {}),
           ...(hasAnyPublicMedia
             ? {
@@ -675,7 +732,6 @@ export default function AddProductPage() {
                   thumbnailMediaId: uploadedThumbnailMedia[0]?.id || null,
                   featureVideoMediaId: uploadedFeatureVideoMedia[0]?.id || null,
                   galleryMediaIds: uploadedGalleryMedia.map((media) => media.id),
-                  certificateMediaId: uploadedCertificateMedia[0]?.id || null,
                 },
               }
             : {}),
@@ -1520,16 +1576,31 @@ export default function AddProductPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate File or Image</p>
-              <MediaUploader
-                files={publicCertificateFiles}
-                onChange={setPublicCertificateFiles}
-                maxFiles={1}
-                maxSizeMB={50}
-                maxVideoSizeMB={500}
-                allowedTypes={["IMAGE", "PDF"]}
-                helperText="Upload one PDF or certificate image."
-              />
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Certificate Generator</p>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCertificateGeneratorOpen(true);
+                    setError("");
+                  }}
+                  disabled={loading || productCreateBlocked}
+                  title={productCreateBlocked ? productCreateTooltip : undefined}
+                  className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Generate Certificate
+                </button>
+                {generatedCertificateId ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    Linked draft: {generatedCertificateLabel || generatedCertificateId}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">
+                    Generate a certificate draft, edit it in the new editor page, then this product
+                    will attach that generated certificate on create.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1585,6 +1656,73 @@ export default function AddProductPage() {
           </button>
         </div>
       </form>
+
+      {certificateGeneratorOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700/60 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Generate Certificate
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Upload one raw certificate image, generate OCR draft, then edit it in the
+                  certificate editor.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!certificateGenerating) {
+                    setCertificateGeneratorOpen(false);
+                    setCertificateSourceFiles([]);
+                  }
+                }}
+                className="rounded-lg px-2 py-1 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+                disabled={certificateGenerating}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <MediaUploader
+                files={certificateSourceFiles}
+                onChange={setCertificateSourceFiles}
+                maxFiles={1}
+                maxSizeMB={50}
+                maxVideoSizeMB={500}
+                allowedTypes={["IMAGE"]}
+                helperText="Upload one clear certificate image for OCR and QR extraction."
+              />
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCertificateGeneratorOpen(false);
+                    setCertificateSourceFiles([]);
+                  }}
+                  disabled={certificateGenerating}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleGenerateCertificateDraft();
+                  }}
+                  disabled={certificateGenerating || certificateSourceFiles.length !== 1}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {certificateGenerating ? "Generating..." : "Generate"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

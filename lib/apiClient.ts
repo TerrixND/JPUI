@@ -1066,6 +1066,33 @@ export type AdminProductCommissionAllocation = {
   raw: JsonRecord;
 };
 
+export type AdminGeneratedCertificateRecord = {
+  id: string;
+  productId: string | null;
+  rawMediaId: string | null;
+  pdfMediaId: string | null;
+  status: "DRAFT" | "FINAL" | string;
+  templateName: string | null;
+  extractedFields: JsonRecord | null;
+  extractedText: string | null;
+  qrValue: string | null;
+  htmlContent: string | null;
+  htmlObjectKey: string | null;
+  htmlUrl: string | null;
+  htmlSignedUrl: string | null;
+  pdfObjectKey: string | null;
+  pdfUrl: string | null;
+  pdfSignedUrl: string | null;
+  rawImageUrl: string | null;
+  rawImageSignedUrl: string | null;
+  version: number;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  raw: JsonRecord;
+};
+
 export type AdminProductRecord = {
   id: string;
   sku: string | null;
@@ -1110,11 +1137,21 @@ export type AdminProductRecord = {
   certificateMediaIds: string[];
   media: AdminProductMediaReference[];
   commissionAllocations: AdminProductCommissionAllocation[];
+  generatedCertificate: AdminGeneratedCertificateRecord | null;
   raw: JsonRecord;
 };
 
 export type AdminProductsResponse = AdminPageResponseMeta & {
   items: AdminProductRecord[];
+  raw: unknown;
+};
+
+export type AdminProductCertificateResponse = {
+  message: string | null;
+  certificate: AdminGeneratedCertificateRecord | null;
+  ocr: {
+    confidence: number | null;
+  } | null;
   raw: unknown;
 };
 
@@ -1133,6 +1170,19 @@ export type PublicProductMediaRecord = {
     userId: string;
   }>;
   visibilityPreset: MediaVisibilityPreset | null;
+  raw: JsonRecord;
+};
+
+export type PublicGeneratedCertificateRecord = {
+  id: string;
+  status: string | null;
+  htmlUrl: string | null;
+  htmlSignedUrl: string | null;
+  pdfUrl: string | null;
+  pdfSignedUrl: string | null;
+  pdfMediaId: string | null;
+  version: number | null;
+  updatedAt: string | null;
   raw: JsonRecord;
 };
 
@@ -1161,6 +1211,7 @@ export type PublicProductRecord = {
   minCustomerTier: CustomerTier | null;
   accessListUserIds: string[];
   media: PublicProductMediaRecord[];
+  generatedCertificate: PublicGeneratedCertificateRecord | null;
   createdAt: string | null;
   updatedAt: string | null;
   raw: JsonRecord;
@@ -3184,6 +3235,47 @@ const normalizeAdminProductCommissionAllocation = (
   };
 };
 
+const normalizeAdminGeneratedCertificate = (
+  value: unknown,
+): AdminGeneratedCertificateRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    productId: asNullableString(row.productId),
+    rawMediaId: asNullableString(row.rawMediaId),
+    pdfMediaId: asNullableString(row.pdfMediaId),
+    status: asString(row.status).toUpperCase() || "DRAFT",
+    templateName: asNullableString(row.templateName),
+    extractedFields: asRecord(row.extractedFields),
+    extractedText: asNullableString(row.extractedText),
+    qrValue: asNullableString(row.qrValue),
+    htmlContent: asNullableString(row.htmlContent),
+    htmlObjectKey: asNullableString(row.htmlObjectKey),
+    htmlUrl: asNullableString(row.htmlUrl),
+    htmlSignedUrl: asNullableString(row.htmlSignedUrl),
+    pdfObjectKey: asNullableString(row.pdfObjectKey),
+    pdfUrl: asNullableString(row.pdfUrl),
+    pdfSignedUrl: asNullableString(row.pdfSignedUrl),
+    rawImageUrl: asNullableString(row.rawImageUrl),
+    rawImageSignedUrl: asNullableString(row.rawImageSignedUrl),
+    version: asPositiveInt(row.version) ?? 1,
+    createdByUserId: asNullableString(row.createdByUserId),
+    updatedByUserId: asNullableString(row.updatedByUserId),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    raw: row,
+  };
+};
+
 const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => {
   const row = asRecord(value);
   if (!row) {
@@ -3219,6 +3311,9 @@ const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => 
         .map((entry) => normalizeAdminProductCommissionAllocation(entry))
         .filter((entry): entry is AdminProductCommissionAllocation => Boolean(entry))
     : [];
+  const generatedCertificate = normalizeAdminGeneratedCertificate(
+    row.generatedCertificate ?? row.productCertificate,
+  );
 
   return {
     id,
@@ -3280,7 +3375,28 @@ const normalizeAdminProductRow = (value: unknown): AdminProductRecord | null => 
     ),
     media,
     commissionAllocations,
+    generatedCertificate,
     raw: row,
+  };
+};
+
+const normalizeAdminProductCertificateResponse = (
+  payload: unknown,
+): AdminProductCertificateResponse => {
+  const root = asRecord(payload);
+  const ocr = asRecord(root?.ocr);
+
+  return {
+    message: asNullableString(root?.message),
+    certificate: normalizeAdminGeneratedCertificate(
+      root?.certificate ?? root?.item ?? payload,
+    ),
+    ocr: ocr
+      ? {
+          confidence: asFiniteNumberish(ocr.confidence),
+        }
+      : null,
+    raw: payload,
   };
 };
 
@@ -3310,6 +3426,33 @@ const normalizePublicProductMedia = (
     minCustomerTier: normalized.minCustomerTier,
     targetUsers: normalized.targetUsers,
     visibilityPreset: normalized.visibilityPreset,
+    raw: row,
+  };
+};
+
+const normalizePublicGeneratedCertificate = (
+  value: unknown,
+): PublicGeneratedCertificateRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    status: asNullableString(row.status),
+    htmlUrl: asNullableString(row.htmlUrl),
+    htmlSignedUrl: asNullableString(row.htmlSignedUrl),
+    pdfUrl: asNullableString(row.pdfUrl),
+    pdfSignedUrl: asNullableString(row.pdfSignedUrl),
+    pdfMediaId: asNullableString(row.pdfMediaId),
+    version: asPositiveInt(row.version),
+    updatedAt: asNullableString(row.updatedAt),
     raw: row,
   };
 };
@@ -3363,6 +3506,9 @@ const normalizePublicProductRow = (value: unknown): PublicProductRecord | null =
     minCustomerTier: normalizeCustomerTier(row.minCustomerTier),
     accessListUserIds,
     media,
+    generatedCertificate: normalizePublicGeneratedCertificate(
+      row.generatedCertificate ?? row.productCertificate,
+    ),
     createdAt: asNullableString(row.createdAt),
     updatedAt: asNullableString(row.updatedAt),
     raw: row,
@@ -3989,6 +4135,7 @@ export type AdminProductUpsertPayload = {
   consignmentRate?: number | null;
   consignmentAgreementId?: string | null;
   consignmentContractMediaId?: string | null;
+  generatedCertificateId?: string | null;
   publicMedia?: AdminProductPublicMediaInput | null;
   roleBasedMedia?: AdminProductRoleBasedMediaInput[];
   thumbnailImageId?: string | null;
@@ -4117,6 +4264,9 @@ const normalizeAdminProductPayload = (input: AdminProductUpsertPayload): JsonRec
   }
   if (hasOwn(input, "consignmentContractMediaId")) {
     body.consignmentContractMediaId = asNullableString(input.consignmentContractMediaId);
+  }
+  if (hasOwn(input, "generatedCertificateId")) {
+    body.generatedCertificateId = asNullableString(input.generatedCertificateId);
   }
 
   const normalizedPublicMedia =
@@ -4490,6 +4640,91 @@ export const getAdminProductDetail = async ({
   }
 
   return product;
+};
+
+export const generateAdminProductCertificateDraft = async ({
+  accessToken,
+  rawImageMediaId,
+  productId,
+}: {
+  accessToken: string;
+  rawImageMediaId: string;
+  productId?: string | null;
+}): Promise<AdminProductCertificateResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/product-certificates/generate`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      rawImageMediaId: asString(rawImageMediaId),
+      ...(asNullableString(productId) ? { productId: asNullableString(productId) } : {}),
+    }),
+    fallbackErrorMessage: "Failed to generate certificate draft.",
+  });
+
+  return normalizeAdminProductCertificateResponse(payload);
+};
+
+export const getAdminProductCertificate = async ({
+  accessToken,
+  productId,
+}: {
+  accessToken: string;
+  productId: string;
+}): Promise<AdminProductCertificateResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/certificate`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load product certificate.",
+  });
+
+  return normalizeAdminProductCertificateResponse(payload);
+};
+
+export const getAdminProductCertificateById = async ({
+  accessToken,
+  certificateId,
+}: {
+  accessToken: string;
+  certificateId: string;
+}): Promise<AdminProductCertificateResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/product-certificates/${encodeURIComponent(certificateId)}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load certificate.",
+  });
+
+  return normalizeAdminProductCertificateResponse(payload);
+};
+
+export const saveAdminProductCertificate = async ({
+  accessToken,
+  certificateId,
+  htmlContent,
+}: {
+  accessToken: string;
+  certificateId: string;
+  htmlContent: string;
+}): Promise<AdminProductCertificateResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/product-certificates/${encodeURIComponent(certificateId)}`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      htmlContent: String(htmlContent || ""),
+    }),
+    fallbackErrorMessage: "Failed to save certificate.",
+  });
+
+  return normalizeAdminProductCertificateResponse(payload);
 };
 
 export const startAdminProductAuthCardOtp = async ({
