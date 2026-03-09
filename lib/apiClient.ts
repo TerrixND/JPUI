@@ -4740,9 +4740,13 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
         .map((entry) => normalizeAdminUserBranchMembership(entry))
         .filter((entry): entry is AdminUserBranchMembership => Boolean(entry))
     : [];
+  const resolvedRole = asNullableString(root.role);
   const permissions = asRecord(root.permissions);
   const permissionProfile = asRecord(permissions?.profile);
   const managerType = asString(permissionProfile?.managerType).toUpperCase();
+  const resolvedCustomerTier =
+    normalizeCustomerTier(customerProfile?.tier) ??
+    (asString(resolvedRole).toUpperCase() === "CUSTOMER" ? "REGULAR" : null);
 
   return {
     id: asNullableString(root.id),
@@ -4759,7 +4763,7 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     lineLoginAvailable: root.lineLoginAvailable === true,
     emailNotificationsEnabled,
     lineNotificationsEnabled,
-    role: asNullableString(root.role),
+    role: resolvedRole,
     status: asNullableString(root.status),
     isSetup: root.isSetup === true,
     isMainAdmin: root.isMainAdmin === true,
@@ -4768,10 +4772,10 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     lineId: resolveProfileField(profileSources, "lineId"),
     preferredLanguage: asNullableString(customerProfile?.preferredLanguage),
     city: asNullableString(customerProfile?.city),
-    customerTier: normalizeCustomerTier(customerProfile?.tier),
+    customerTier: resolvedCustomerTier,
     isBranchAdmin:
       managerType === "BRANCH_ADMIN" ||
-      (asString(root.role).toUpperCase() === "MANAGER" &&
+      (asString(resolvedRole).toUpperCase() === "MANAGER" &&
         branchMemberships.some((membership) => membership.isPrimary)),
     branchMemberships,
     permissions,
