@@ -13,7 +13,6 @@ import {
   completePendingSetupForSession,
   precheckLogin,
 } from "@/lib/setupUser";
-import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedirect";
 import Image from "next/image";
@@ -32,7 +31,6 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lineLoading, setLineLoading] = useState(false);
 
   useEffect(() => {
     const normalizedLineAuthError = lineAuthError?.trim();
@@ -126,23 +124,6 @@ const LoginPage = () => {
     }
   };
 
-  const handleLineContinue = async () => {
-    setError("");
-    setLineLoading(true);
-
-    try {
-      await startLineOAuth({
-        returnTo,
-        intent: "login",
-      });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to continue with LINE.",
-      );
-      setLineLoading(false);
-    }
-  };
-
   return (
     <div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center">
       <h3 className="text-base font-semibold text-black">Welcome Back</h3>
@@ -204,36 +185,6 @@ const LoginPage = () => {
               Continue with Google
             </span>
           </Link>
-
-          <button
-            type="button"
-            onClick={handleLineContinue}
-            disabled={loading || lineLoading}
-            className="
-      flex-1 min-w-40
-      group
-      flex items-center justify-center gap-3
-      px-4 py-3.5
-      bg-white
-      border border-gray-200
-      rounded-lg
-      shadow-sm
-      hover:shadow-md hover:border-gray-300
-      transition-all duration-200
-      cursor-pointer disabled:cursor-not-allowed disabled:opacity-60
-    "
-          >
-            <Image
-              src="/icons/Line.png"
-              alt="Line logo"
-              width={20}
-              height={20}
-              className="w-5 h-5 object-contain"
-            />
-            <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
-              {lineLoading ? "Redirecting to LINE..." : "Continue with Line"}
-            </span>
-          </button>
 
           <Link
             href={signupHref}

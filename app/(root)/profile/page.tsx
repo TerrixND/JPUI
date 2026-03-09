@@ -640,11 +640,6 @@ export default function ProfilePage() {
           <p className="mb-3 text-xs text-gray-600">
             Account login provider: {profile.authProvider}
           </p>
-          {!profile.lineLoginAvailable ? (
-            <p className="mb-3 text-xs text-amber-700">
-              LINE login is currently unavailable on this server. Email/password login is required.
-            </p>
-          ) : null}
 
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <button
@@ -674,23 +669,6 @@ export default function ProfilePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={profile.lineLoginEnabled}
-                disabled={
-                  !isEditing ||
-                  !profile.lineUserId ||
-                  !profile.lineLoginAvailable ||
-                  profile.authProvider === "LINE"
-                }
-                onChange={(event) =>
-                  handleToggle("lineLoginEnabled", event.target.checked)
-                }
-              />
-              LINE Login
-            </label>
-
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
