@@ -24,6 +24,7 @@ type Profile = {
   name: string;
   tierCode: CustomerTier | null;
   tierLabel: string;
+  identityLabel: string;
   authProvider: string;
   email: string;
   phone: string;
@@ -44,6 +45,7 @@ const EMPTY_PROFILE: Profile = {
   name: "",
   tierCode: null,
   tierLabel: "N/A",
+  identityLabel: "N/A",
   authProvider: "SUPABASE",
   email: "",
   phone: "",
@@ -67,6 +69,70 @@ const resolveTierLabel = (tier: CustomerTier | null) => {
   return "N/A";
 };
 
+const resolvePrimaryBranchName = (me: UserMeResponse) => {
+  const memberships = Array.isArray(me.branchMemberships) ? me.branchMemberships : [];
+
+  const primaryBranch = memberships.find(
+    (membership) => membership.isPrimary && membership.branch?.name,
+  );
+  if (primaryBranch?.branch?.name) {
+    return primaryBranch.branch.name;
+  }
+
+  const anyBranch = memberships.find((membership) => membership.branch?.name);
+  return anyBranch?.branch?.name || "";
+};
+
+const resolveManagerType = (me: UserMeResponse) => {
+  const permissions =
+    me.permissions && typeof me.permissions === "object" && !Array.isArray(me.permissions)
+      ? (me.permissions as Record<string, unknown>)
+      : null;
+  const profile =
+    permissions?.profile &&
+    typeof permissions.profile === "object" &&
+    !Array.isArray(permissions.profile)
+      ? (permissions.profile as Record<string, unknown>)
+      : null;
+  const managerType = profile?.managerType;
+
+  return typeof managerType === "string" ? managerType.trim().toUpperCase() : "";
+};
+
+const resolveIdentityLabel = (me: UserMeResponse) => {
+  const role = String(me.role || "").trim().toUpperCase();
+
+  if (role === "CUSTOMER") {
+    return resolveTierLabel(me.customerTier);
+  }
+
+  if (role === "ADMIN") {
+    return me.isMainAdmin ? "Main Admin" : "Admin";
+  }
+
+  if (role === "MANAGER") {
+    const managerType = resolveManagerType(me);
+    const branchName = resolvePrimaryBranchName(me);
+
+    if (managerType === "STANDALONE") {
+      return "Standalone Manager";
+    }
+
+    if (managerType === "BRANCH_ADMIN" || me.isBranchAdmin) {
+      return branchName ? `Branch Admin (${branchName})` : "Branch Admin";
+    }
+
+    return branchName ? `Branch Manager (${branchName})` : "Branch Manager";
+  }
+
+  if (role === "SALES") {
+    const branchName = resolvePrimaryBranchName(me);
+    return branchName ? `Sales (${branchName})` : "Sales";
+  }
+
+  return "N/A";
+};
+
 const LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL = "https://line.me/R/ti/p/%40404isuyx#~";
 
 const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
@@ -75,6 +141,7 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   name: me.displayName || "",
   tierCode: me.customerTier,
   tierLabel: resolveTierLabel(me.customerTier),
+  identityLabel: resolveIdentityLabel(me),
   authProvider: (me.authProvider || "SUPABASE").toUpperCase(),
   email: me.email || "",
   phone: me.phone || "",
@@ -526,7 +593,9 @@ export default function ProfilePage() {
             <h4 className="text-lg font-semibold tracking-wide">
               {profile.name || "Unnamed User"}
             </h4>
-            <p className="text-sm text-gray-500">{profile.tierLabel}</p>
+            <p className="text-sm text-gray-500">
+              {isCustomerProfile ? `Tier: ${profile.tierLabel}` : `Role: ${profile.identityLabel}`}
+            </p>
           </div>
         </div>
 
