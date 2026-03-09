@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Edit, X, Save, LogOut, Trash2 } from "lucide-react";
+import { Edit, X, Save, LogOut, Trash2, Shield } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ApiClientError,
@@ -533,13 +533,23 @@ export default function ProfilePage() {
         {/* RIGHT SIDE BUTTONS */}
         <div className="w-full md:w-auto">
           {!isEditing ? (
-            <button
-              onClick={handleEdit}
-              className="w-full md:w-auto bg-blue-500 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-sm tracking-widest text-white hover:bg-blue-600 transition cursor-pointer"
-            >
-              <Edit size={16} />
-              Edit
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => router.push("/profile/security")}
+                className="w-full sm:w-auto border border-gray-300 bg-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-sm tracking-widest text-gray-700 hover:bg-gray-50 transition cursor-pointer"
+              >
+                <Shield size={16} />
+                Security
+              </button>
+              <button
+                onClick={handleEdit}
+                className="w-full sm:w-auto bg-blue-500 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-sm tracking-widest text-white hover:bg-blue-600 transition cursor-pointer"
+              >
+                <Edit size={16} />
+                Edit
+              </button>
+            </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <button

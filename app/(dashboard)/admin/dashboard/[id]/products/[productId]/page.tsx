@@ -1572,7 +1572,9 @@ export default function ProductEditPage() {
       return;
     }
 
-    const confirmed = window.confirm("Delete this media file from the product?");
+    const confirmed = window.confirm(
+      "Move this media file to Recently Deleted? You can restore it within 10 days.",
+    );
     if (!confirmed) {
       return;
     }

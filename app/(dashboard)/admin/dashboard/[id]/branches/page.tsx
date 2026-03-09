@@ -213,14 +213,14 @@ export default function AdminBranches() {
                 status: event.target.value as Filters["status"],
               }))
             }
-            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             <option value={ALL_FILTER}>All Statuses</option>
             <option value="ACTIVE">ACTIVE</option>
             <option value="INACTIVE">INACTIVE</option>
           </select>
 
-          <label className="inline-flex items-center gap-2 px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg text-gray-700 dark:text-gray-300">
+          <label className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl text-gray-700 dark:text-gray-300 cursor-pointer">
             <input
               type="checkbox"
               checked={draftFilters.includeInactive}
@@ -240,7 +240,7 @@ export default function AdminBranches() {
             onChange={(event) => {
               setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
             }}
-            className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -254,7 +254,7 @@ export default function AdminBranches() {
           <button
             type="button"
             onClick={() => setAppliedFilters(draftFilters)}
-            className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors"
           >
             Apply Filters
           </button>
@@ -264,7 +264,7 @@ export default function AdminBranches() {
               setDraftFilters(initialFilters);
               setAppliedFilters(initialFilters);
             }}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Reset
           </button>
@@ -284,11 +284,25 @@ export default function AdminBranches() {
         </div>
 
         {loading ? (
-          <div className="px-5 py-8 text-sm text-gray-500 dark:text-gray-400">Loading branches...</div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="px-5 py-4 animate-pulse flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                  <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/4" />
+                </div>
+                <div className="hidden sm:block h-5 w-16 bg-gray-100 dark:bg-gray-800 rounded-full" />
+              </div>
+            ))}
+          </div>
         ) : error ? (
-          <div className="px-5 py-8 text-sm text-red-600 dark:text-red-400">{error}</div>
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <button type="button" onClick={() => void loadBranches()} className="mt-3 px-4 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl hover:bg-emerald-100 transition-colors">Retry</button>
+          </div>
         ) : rows.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400 dark:text-gray-500 text-sm">No branches found.</div>
+          <div className="px-5 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">No branches found.</div>
         ) : (
           <>
             {/* Desktop table */}

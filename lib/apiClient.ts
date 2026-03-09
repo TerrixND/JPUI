@@ -117,6 +117,58 @@ export type AdminMediaUrlResponse = {
   visibilityPreset: MediaVisibilityPreset | null;
 };
 
+export type AdminDeletedMediaUserSummary = {
+  id: string;
+  email: string | null;
+  role: string | null;
+};
+
+export type AdminDeletedMediaOriginalProduct = {
+  id: string;
+  sku: string | null;
+  name: string | null;
+  status: string | null;
+  isArchived: boolean;
+};
+
+export type AdminDeletedMediaItem = {
+  id: string;
+  type: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  url: string | null;
+  originalUrl: string | null;
+  productId: string | null;
+  consignmentAgreementId: string | null;
+  deletedAt: string | null;
+  purgeAfterAt: string | null;
+  remainingDays: number | null;
+  canRestore: boolean;
+  deletedByUserId: string | null;
+  uploadedByUserId: string | null;
+  deletedFromProductId: string | null;
+  deletedFromConsignmentAgreementId: string | null;
+  originalProduct: AdminDeletedMediaOriginalProduct | null;
+  deletedByUser: AdminDeletedMediaUserSummary | null;
+  uploadedByUser: AdminDeletedMediaUserSummary | null;
+  raw: JsonRecord;
+};
+
+export type AdminDeletedMediaListResponse = {
+  items: AdminDeletedMediaItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  retentionDays: number | null;
+  purge: {
+    scannedCount: number | null;
+    purgedCount: number | null;
+    failedCount: number | null;
+  } | null;
+  raw: unknown;
+};
+
 export type AdminAuditLogRow = {
   id: string;
   action: string;
@@ -1216,7 +1268,7 @@ const normalizeAccountAccess = (value: unknown): AccountAccessState | null => {
       asNonNegativeInt(row.remainingMs) ??
       asNonNegativeInt(row.remainingMilliseconds) ??
       asNonNegativeInt(row.remaining),
-    raw: row,
+    raw: row ?? {},
   };
 };
 
@@ -1772,6 +1824,99 @@ const normalizeMediaUrlResponse = (
     minCustomerTier,
     targetUsers,
     visibilityPreset,
+  };
+};
+
+const normalizeAdminDeletedMediaUserSummary = (
+  payload: unknown,
+): AdminDeletedMediaUserSummary | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row?.email),
+    role: asNullableString(row?.role),
+  };
+};
+
+const normalizeAdminDeletedMediaOriginalProduct = (
+  payload: unknown,
+): AdminDeletedMediaOriginalProduct | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    sku: asNullableString(row?.sku),
+    name: asNullableString(row?.name),
+    status: asNullableString(row?.status),
+    isArchived: row?.isArchived === true,
+  };
+};
+
+const normalizeAdminDeletedMediaItem = (payload: unknown): AdminDeletedMediaItem | null => {
+  const row = asRecord(payload);
+  const id = asString(row?.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    type: asNullableString(row?.type),
+    mimeType: asNullableString(row?.mimeType),
+    sizeBytes: asFiniteNumber(row?.sizeBytes),
+    url: asNullableString(row?.url),
+    originalUrl: asNullableString(row?.originalUrl),
+    productId: asNullableString(row?.productId),
+    consignmentAgreementId: asNullableString(row?.consignmentAgreementId),
+    deletedAt: asNullableString(row?.deletedAt),
+    purgeAfterAt: asNullableString(row?.purgeAfterAt),
+    remainingDays: asFiniteNumber(row?.remainingDays),
+    canRestore: row?.canRestore === true,
+    deletedByUserId: asNullableString(row?.deletedByUserId),
+    uploadedByUserId: asNullableString(row?.uploadedByUserId),
+    deletedFromProductId: asNullableString(row?.deletedFromProductId),
+    deletedFromConsignmentAgreementId: asNullableString(row?.deletedFromConsignmentAgreementId),
+    originalProduct: normalizeAdminDeletedMediaOriginalProduct(row?.originalProduct),
+    deletedByUser: normalizeAdminDeletedMediaUserSummary(row?.deletedByUser),
+    uploadedByUser: normalizeAdminDeletedMediaUserSummary(row?.uploadedByUser),
+    raw: row ?? {},
+  };
+};
+
+const normalizeAdminDeletedMediaListResponse = (
+  payload: unknown,
+): AdminDeletedMediaListResponse => {
+  const root = asRecord(payload) ?? {};
+  const purge = asRecord(root.purge);
+
+  return {
+    items: Array.isArray(root.items)
+      ? root.items
+          .map((entry) => normalizeAdminDeletedMediaItem(entry))
+          .filter((entry): entry is AdminDeletedMediaItem => Boolean(entry))
+      : [],
+    page: asFiniteNumber(root.page) ?? 1,
+    limit: asFiniteNumber(root.limit) ?? 20,
+    total: asFiniteNumber(root.total) ?? 0,
+    totalPages: asFiniteNumber(root.totalPages) ?? 1,
+    retentionDays: asFiniteNumber(root.retentionDays),
+    purge: purge
+      ? {
+          scannedCount: asFiniteNumber(purge.scannedCount),
+          purgedCount: asFiniteNumber(purge.purgedCount),
+          failedCount: asFiniteNumber(purge.failedCount),
+        }
+      : null,
+    raw: payload,
   };
 };
 
@@ -3691,6 +3836,100 @@ export const deleteAdminMedia = async ({
   return payload;
 };
 
+export const getAdminDeletedMedia = async ({
+  accessToken,
+  page = 1,
+  limit = 20,
+  search,
+}: {
+  accessToken: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<AdminDeletedMediaListResponse> => {
+  const query = new URLSearchParams();
+  query.set("page", String(Math.max(1, Math.trunc(page))));
+  query.set("limit", String(Math.min(100, Math.max(1, Math.trunc(limit)))));
+
+  if (search && search.trim()) {
+    query.set("search", search.trim());
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/media/recycle-bin?${query.toString()}`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load deleted media.",
+  });
+
+  return normalizeAdminDeletedMediaListResponse(payload);
+};
+
+export const restoreAdminDeletedMedia = async ({
+  accessToken,
+  mediaId,
+}: {
+  accessToken: string;
+  mediaId: string;
+}): Promise<AdminMediaUrlResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/media/${encodeURIComponent(mediaId)}/restore`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+    fallbackErrorMessage: "Failed to restore media.",
+  });
+
+  const root = asRecord(payload);
+  const normalized = normalizeMediaUrlResponse(root?.media ?? root);
+  if (!normalized) {
+    throw new ApiClientError({
+      message: "Invalid restored media response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return {
+    ...normalized,
+    productId: normalized.productId ?? asNullableString(root?.productId),
+    consignmentAgreementId:
+      normalized.consignmentAgreementId ?? asNullableString(root?.consignmentAgreementId),
+    slot: normalized.slot ?? normalizeMediaSlot(root?.slot),
+  };
+};
+
+export const permanentlyDeleteAdminMedia = async ({
+  accessToken,
+  mediaId,
+}: {
+  accessToken: string;
+  mediaId: string;
+}): Promise<{
+  message: string | null;
+  code: string | null;
+  mediaId: string | null;
+  raw: unknown;
+}> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/media/${encodeURIComponent(mediaId)}/permanent`,
+    method: "DELETE",
+    accessToken,
+    fallbackErrorMessage: "Failed to permanently delete media.",
+  });
+
+  const root = asRecord(payload);
+  return {
+    message: asNullableString(root?.message),
+    code: asNullableString(root?.code),
+    mediaId: asNullableString(root?.mediaId),
+    raw: payload,
+  };
+};
+
 export type AdminProductRoleMediaInput = {
   roleVisibility: string;
   mediaIds: string[];
@@ -4559,6 +4798,25 @@ export const getUserMe = async ({
 
     return normalizeUserMeResponsePayload(payload);
   });
+};
+
+export const syncUserMeEmailFromSupabase = async ({
+  accessToken,
+}: {
+  accessToken: string;
+}): Promise<UserMeResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/user/me/email/sync`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+    fallbackErrorMessage: "Failed to sync account email.",
+  });
+
+  return normalizeUserMeResponsePayload(payload);
 };
 
 export const updateUserMeProfile = async ({

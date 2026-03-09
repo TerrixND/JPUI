@@ -25,6 +25,7 @@ const adminNav: NavItem[] = [
   { label: "Branch Network", pathSuffix: "branches", icon: "building" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Requests", pathSuffix: "requests", icon: "inbox", showRequestDot: true },
+  { label: "Recently Deleted", pathSuffix: "media-recycle-bin", icon: "history" },
   { label: "Staff Rules", pathSuffix: "staff-rules", icon: "shield" },
   { label: "Errors", pathSuffix: "errors", icon: "file" },
   { label: "Logs & Backups", pathSuffix: "logs", icon: "file" },
@@ -294,6 +295,7 @@ export default function Sidebar({
   }, [isMainAdmin, role]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPendingRequests();
   }, [loadPendingRequests]);
 

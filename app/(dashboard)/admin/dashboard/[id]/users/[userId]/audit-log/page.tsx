@@ -110,22 +110,23 @@ export default function AdminUserAuditLogPage() {
         action={
           <Link
             href={`${dashboardBasePath}/users/${userId}`}
-            className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Back to User Detail
           </Link>
         }
       />
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="grid gap-3 md:grid-cols-[220px_160px_1fr]">
+      {/* Filters & Controls */}
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden p-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           <select
             value={scope}
             onChange={(event) => {
               setPage(1);
               setScope(event.target.value as (typeof SCOPE_OPTIONS)[number]);
             }}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+            className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             {SCOPE_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -140,7 +141,7 @@ export default function AdminUserAuditLogPage() {
               setPage(1);
               setLimit(Number(event.target.value) as (typeof PAGE_SIZE_OPTIONS)[number]);
             }}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-emerald-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-200"
+            className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -149,81 +150,124 @@ export default function AdminUserAuditLogPage() {
             ))}
           </select>
 
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-400">
+          <div className="flex items-center px-3 py-2 text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-xl">
             {totalStart}-{totalEnd} of {total}
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-900">
-        <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-700/60">
+      {/* Audit Timeline */}
+      <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200/80 dark:border-gray-700/50 shadow-sm dark:shadow-none overflow-hidden">
+        <div className="border-b border-gray-200 dark:border-gray-700/50 px-5 py-4">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Audit Timeline
           </h2>
         </div>
 
         {loading ? (
-          <div className="space-y-3 px-5 py-5">
+          <div className="space-y-3 p-5">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="h-16 animate-pulse rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/60 dark:bg-gray-800/40"
+                className="h-16 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-700/40"
               />
             ))}
           </div>
         ) : error ? (
-          <div className="px-5 py-6 text-sm text-red-600 dark:text-red-300">{error}</div>
+          <div className="p-5">
+            <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+              {error}
+            </div>
+          </div>
         ) : rows.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-gray-500 dark:text-gray-400">
-            No audit activity found for this user.
+          <div className="p-5">
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-700/50 px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+              No audit activity found for this user.
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-400">
-                  <th className="px-5 py-3 font-medium">Action</th>
-                  <th className="px-5 py-3 font-medium">Message</th>
-                  <th className="px-5 py-3 font-medium">Actor</th>
-                  <th className="px-5 py-3 font-medium">Target</th>
-                  <th className="px-5 py-3 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                  >
-                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">
-                      {row.action}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {row.message || "-"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {row.actorEmail || row.actorId || "system"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
-                      {row.targetId || row.targetType || "-"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
-                      <div>{formatDateTime(row.createdAt)}</div>
-                      <div className="text-xs">{formatRelativeTime(row.createdAt)}</div>
-                    </td>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-900/40 text-left text-gray-500 dark:text-gray-400">
+                    <th className="px-5 py-3 font-medium">Action</th>
+                    <th className="px-5 py-3 font-medium">Message</th>
+                    <th className="px-5 py-3 font-medium">Actor</th>
+                    <th className="px-5 py-3 font-medium">Target</th>
+                    <th className="px-5 py-3 font-medium">Created</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-b border-gray-100 dark:border-gray-700/30 last:border-0"
+                    >
+                      <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">
+                        {row.action}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {row.message || "-"}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {row.actorEmail || row.actorId || "system"}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300">
+                        {row.targetId || row.targetType || "-"}
+                      </td>
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
+                        <div>{formatDateTime(row.createdAt)}</div>
+                        <div className="text-xs">{formatRelativeTime(row.createdAt)}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-700/30">
+              {rows.map((row) => (
+                <div key={row.id} className="px-4 py-3.5 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {row.action}
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                      {formatRelativeTime(row.createdAt)}
+                    </span>
+                  </div>
+                  {row.message && (
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      {row.message}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span>
+                      Actor: {row.actorEmail || row.actorId || "system"}
+                    </span>
+                    <span>
+                      Target: {row.targetId || row.targetType || "-"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                    {formatDateTime(row.createdAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
-        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700/60">
+        {/* Pagination */}
+        <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-700/50 px-5 py-3">
           <button
             type="button"
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             disabled={page === 1}
-            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Prev
           </button>
@@ -234,7 +278,7 @@ export default function AdminUserAuditLogPage() {
             type="button"
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             disabled={page === totalPages}
-            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>
