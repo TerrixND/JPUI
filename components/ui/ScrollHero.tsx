@@ -9,31 +9,34 @@ const slides = [
     id: 1,
     image: "/images/ab1.png",
     eyebrow: "Heritage Collection",
-    title: ["Timeless", "Craftsmanship"],
-    description:
-      "Every jade piece is shaped with precision and decades of mastery.",
-    button: "Explore Heritage",
+    title: ["Handcrafted", "Jade Jewelry"],
+    description: "Each piece is carefully made by skilled artisans with over 30 years of experience.",
+    button: "Explore Collection",
     accent: "#C8A96E",
+    accentRgb: "200, 169, 110",
+    number: "01",
   },
   {
     id: 2,
     image: "/images/ab2.png",
-    eyebrow: "Provenance",
-    title: ["Rare.", "Pure.", "Powerful."],
-    description:
-      "Sourced from the finest origins, refined into wearable art.",
-    button: "Discover Collection",
+    eyebrow: "Premium Quality",
+    title: ["Only the", "Finest Jade"],
+    description: "We hand-select every stone for its color, clarity, and natural beauty.",
+    button: "Shop Jade Pieces",
     accent: "#8FB8A2",
+    accentRgb: "143, 184, 162",
+    number: "02",
   },
   {
     id: 3,
     image: "/images/ab3.png",
-    eyebrow: "New Season",
-    title: ["Luxury", "Redefined"],
-    description:
-      "Minimal form. Maximum elegance. Designed for the modern elite.",
-    button: "Shop Now",
+    eyebrow: "New Arrivals",
+    title: ["Elegant.", "Timeless.", "Yours."],
+    description: "Discover our newest designs — simple, beautiful jewelry for everyday wear.",
+    button: "See New Arrivals",
     accent: "#B8A9C9",
+    accentRgb: "184, 169, 201",
+    number: "03",
   },
 ];
 
@@ -76,20 +79,24 @@ export default function ScrollHero() {
         alt=""
       />
 
+      {/* Overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
-      {/* Text */}
-      <div className="absolute inset-0 flex items-center z-20">
+      {/* Content */}
+      <div className="absolute inset-0 flex items-center justify-center md:justify-start z-20 px-6 md:px-20">
+
         <div
-          className="ml-16 md:ml-24 max-w-2xl flex flex-col gap-5"
+          className="max-w-lg flex flex-col gap-4 md:gap-6 text-center md:text-left"
           style={{ "--accent": slide.accent } as React.CSSProperties}
         >
-          <p className="text-sm uppercase text-white/60">
+          {/* Eyebrow */}
+          <p className="text-[11px] md:text-xs uppercase tracking-[0.25em] text-white/50 font-medium">
             {slide.eyebrow}
           </p>
 
-          <h1 className="text-5xl md:text-7xl font-black text-white leading-none">
+          {/* Title */}
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-semibold text-white leading-tight tracking-tight">
             {slide.title.map((line, i) => (
               <span key={i} className="block">
                 {i === 0 ? (
@@ -106,12 +113,15 @@ export default function ScrollHero() {
             ))}
           </h1>
 
-          <p className="text-white/60 max-w-sm">
+          {/* Description */}
+          <p className="text-white/70 text-sm md:text-base leading-relaxed max-w-md mx-auto md:mx-0">
             {slide.description}
           </p>
 
-          <Link href={"/products"}
-            className="px-6 py-3 text-black font-semibold w-fit cursor-pointer"
+          {/* Button */}
+          <Link
+            href={"/products"}
+            className="px-6 py-3 text-sm font-medium tracking-wide text-black w-fit mx-auto md:mx-0 transition-all duration-300 hover:opacity-90"
             style={{ backgroundColor: "var(--accent)" }}
           >
             {slide.button}
@@ -119,18 +129,16 @@ export default function ScrollHero() {
         </div>
       </div>
 
-      {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 px-16 md:px-24 pb-8 flex items-center gap-6">
+      {/* Controls */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 px-6 md:px-20 pb-6 md:pb-8 flex items-center gap-4 md:gap-6">
 
-        {/* Previous */}
         <button
           onClick={back}
-          className="w-10 h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white"
+          className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white transition"
         >
-          <ChevronLeft />
+          <ChevronLeft size={18} />
         </button>
 
-        {/* Progress */}
         <div className="flex flex-1 gap-1">
           {slides.map((_, i) => (
             <button
@@ -155,12 +163,11 @@ export default function ScrollHero() {
           ))}
         </div>
 
-        {/* Next */}
         <button
           onClick={next}
-          className="w-10 h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white"
+          className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full border border-white/20 text-white/60 hover:text-white transition"
         >
-          <ChevronRight />
+          <ChevronRight size={18} />
         </button>
       </div>
 
