@@ -7,9 +7,17 @@ import {
 } from "@/lib/apiClient";
 import { isVisibleOnPublicProductPage } from "@/lib/mediaVisibility";
 import PageEntranceLoader from "@/components/ui/PageEntranceLoader";
+import { gsap } from "gsap";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type CatalogProduct = {
   id: string;
@@ -21,6 +29,13 @@ type CatalogProduct = {
 };
 
 const ITEMS_PER_PAGE = 16;
+const SORT_OPTIONS = [
+  { value: "", label: "Curated Order" },
+  { value: "Most Asked", label: "Most Asked" },
+  { value: "Latest Items", label: "Latest Items" },
+  { value: "Polished", label: "Polished" },
+  { value: "Raw Stone", label: "Raw Stone" },
+] as const;
 const PLACEHOLDER_IMAGE =
   "data:image/svg+xml," +
   encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800">
@@ -62,12 +77,17 @@ const resolveCardImage = (product: PublicProductRecord) => {
 };
 
 const ProductPage = () => {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const sortButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("");
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
     let isDisposed = false;
@@ -119,9 +139,10 @@ const ProductPage = () => {
 
   const filteredProducts = useMemo(() => {
     let items = [...products];
+    const normalizedSearch = deferredSearch.trim().toLowerCase();
 
-    if (search.trim() !== "") {
-      items = items.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+    if (normalizedSearch !== "") {
+      items = items.filter((p) => p.name.toLowerCase().includes(normalizedSearch));
     }
 
     switch (sort) {
@@ -142,24 +163,204 @@ const ProductPage = () => {
     }
 
     return items;
-  }, [products, search, sort]);
+  }, [deferredSearch, products, sort]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const safePage = Math.min(currentPage, totalPages || 1);
+  const searchQuery = deferredSearch.trim();
+  const activeSortLabel =
+    SORT_OPTIONS.find((option) => option.value === sort)?.label || "Curated Order";
 
   const paginatedProducts = useMemo(() => {
     const start = (safePage - 1) * ITEMS_PER_PAGE;
     return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredProducts, safePage]);
 
+  useEffect(() => {
+    if (!isSortMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (
+        sortMenuRef.current?.contains(target) ||
+        sortButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setIsSortMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSortMenuOpen]);
+
+  useEffect(() => {
+    const menu = sortMenuRef.current;
+
+    if (!menu) {
+      return;
+    }
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    gsap.killTweensOf(menu);
+    gsap.killTweensOf(menu.children);
+
+    if (prefersReducedMotion) {
+      gsap.set(menu, {
+        autoAlpha: isSortMenuOpen ? 1 : 0,
+        y: isSortMenuOpen ? 0 : -8,
+        pointerEvents: isSortMenuOpen ? "auto" : "none",
+      });
+      return;
+    }
+
+    if (isSortMenuOpen) {
+      gsap.set(menu, {
+        pointerEvents: "auto",
+      });
+      gsap.fromTo(
+        menu,
+        {
+          autoAlpha: 0,
+          y: -10,
+        },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.22,
+          ease: "power2.out",
+        },
+      );
+      gsap.fromTo(
+        menu.children,
+        {
+          autoAlpha: 0,
+          y: -6,
+        },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.2,
+          stagger: 0.025,
+          ease: "power2.out",
+          delay: 0.04,
+        },
+      );
+      return;
+    }
+
+    gsap.to(menu, {
+      autoAlpha: 0,
+      y: -10,
+      duration: 0.16,
+      ease: "power2.in",
+      pointerEvents: "none",
+    });
+  }, [isSortMenuOpen]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const ctx = gsap.context(() => {
+      const status = root.querySelector<HTMLElement>("[data-products-status]");
+      if (status) {
+        gsap.fromTo(
+          status,
+          {
+            autoAlpha: 0,
+            y: 10,
+          },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.35,
+            ease: "power2.out",
+            clearProps: "transform,opacity",
+          },
+        );
+      }
+
+      const cards = gsap.utils.toArray<HTMLElement>("[data-product-card]");
+      if (cards.length) {
+        gsap.fromTo(
+          cards,
+          {
+            autoAlpha: 0,
+            y: 18,
+            scale: 0.992,
+          },
+          {
+            autoAlpha: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            stagger: 0.04,
+            ease: "power2.out",
+            clearProps: "transform,opacity",
+          },
+        );
+      }
+
+      const pagination = root.querySelector<HTMLElement>("[data-products-pagination]");
+      if (pagination) {
+        gsap.fromTo(
+          pagination.children,
+          {
+            autoAlpha: 0,
+            y: 14,
+          },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.35,
+            stagger: 0.04,
+            ease: "power2.out",
+            clearProps: "transform,opacity",
+          },
+        );
+      }
+    }, root);
+
+    return () => {
+      ctx.revert();
+    };
+  }, [isLoading, loadError, paginatedProducts, safePage, sort, searchQuery]);
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
     setCurrentPage(1);
   };
 
-  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSort(e.target.value);
+  const handleSortChange = (value: string) => {
+    setSort(value);
     setCurrentPage(1);
+    setIsSortMenuOpen(false);
   };
 
   const goToPage = (page: number) => {
@@ -194,167 +395,258 @@ const ProductPage = () => {
       eyebrow="Jade Palace Selection"
       subtitle="Rare jade, presented with clean restraint."
     >
-      <div className="w-full overflow-hidden bg-white py-10">
-        <div className="relative px-6 py-16 sm:px-12 lg:px-20">
-          <div data-page-intro className="top-0 z-40 bg-white">
-            <div className="mx-auto flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-2xl font-light tracking-tight text-neutral-900 lg:text-4xl">
-                  Collection
-                </h2>
-                <p className="mt-2 text-sm tracking-wide text-neutral-500">
-                  Rare · Refined · Remarkable
+      <div
+        ref={rootRef}
+        className="w-full overflow-hidden bg-white py-10 text-neutral-900"
+      >
+        <div className="px-6 py-16 sm:px-12 lg:px-20">
+          <div className="mx-auto max-w-6xl space-y-8">
+            <section
+              data-page-intro
+              className="flex flex-col gap-5 border-t border-neutral-200 pt-6 lg:flex-row lg:items-end lg:justify-between"
+            >
+              <div className="space-y-2">
+                <p className="text-sm text-neutral-600">
+                  {searchQuery ? `Search: ${searchQuery}` : "All public pieces"}
                 </p>
+                <p className="text-sm text-neutral-400">Sort: {activeSortLabel}</p>
               </div>
 
-              <div className="flex w-full flex-col gap-4 sm:flex-row lg:w-auto">
+              <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
                 <input
                   type="text"
                   placeholder="Search products"
-                  className="w-full border border-neutral-300 px-4 py-3 text-sm transition focus:border-black focus:outline-none sm:w-72"
+                  className="w-full border border-neutral-200 bg-[#fafafa] px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 sm:w-80"
                   value={search}
                   onChange={handleSearchChange}
                 />
-                <select
-                  className="border border-neutral-300 px-4 py-3 text-sm transition focus:border-black focus:outline-none"
-                  value={sort}
-                  onChange={handleSortChange}
-                >
-                  <option value="">Sort By</option>
-                  <option value="Most Asked">Most Asked</option>
-                  <option value="Latest Items">Latest Items</option>
-                  <option value="Polished">Polished</option>
-                  <option value="Raw Stone">Raw Stone</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {search.trim() !== "" && !isLoading && (
-            <div data-page-intro className="mt-8 text-sm text-neutral-500">
-              {filteredProducts.length} products
-            </div>
-          )}
-
-          {isLoading ? (
-            <div data-page-intro className="mt-10 text-sm text-neutral-500">
-              Loading products...
-            </div>
-          ) : loadError ? (
-            <div
-              data-page-intro
-              className="mt-10 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
-            >
-              {loadError}
-            </div>
-          ) : paginatedProducts.length === 0 ? (
-            <div data-page-intro className="mt-10 text-sm text-neutral-500">
-              No products found.
-            </div>
-          ) : (
-            <div
-              data-page-intro
-              className="mt-10 grid grid-cols-2 gap-x-8 gap-y-14 md:grid-cols-4"
-            >
-              {paginatedProducts.map((product) => (
-                <Link
-                  href={`/products/${product.id}`}
-                  key={product.id}
-                  className="group cursor-pointer"
-                >
-                  <div className="relative aspect-3/4 overflow-hidden bg-white">
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      sizes="(max-width: 768px) 50vw, 25vw"
-                      priority={product.id === paginatedProducts[0]?.id}
-                      loading="eager"
-                      unoptimized={isSignedMediaUrl(product.image) || isRemoteMediaUrl(product.image)}
-                      className="object-contain transition duration-700 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-linear-to-t from-black/3 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-                  </div>
-                  <div className="mt-5 space-y-1">
-                    <h3 className="text-left text-sm font-semibold text-neutral-900">
-                      {product.name}
-                    </h3>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {!isLoading && !loadError && totalPages > 1 && (
-            <div
-              data-page-intro
-              className="mt-16 flex items-center justify-between border-t border-neutral-200 pt-8"
-            >
-              <p className="text-xs uppercase tracking-widest text-neutral-400">
-                Page {safePage} of {totalPages}
-              </p>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => goToPage(safePage - 1)}
-                  disabled={safePage === 1}
-                  className="flex h-9 w-9 items-center justify-center text-neutral-400 transition hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-25"
-                  aria-label="Previous page"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M10 12L6 8L10 4"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-
-                {getPageNumbers().map((page, idx) =>
-                  page === "..." ? (
+                <div className="relative">
+                  <button
+                    ref={sortButtonRef}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-8 border border-neutral-200 bg-[#fafafa] px-4 py-3 text-sm text-neutral-900 outline-none transition hover:border-neutral-300 focus:border-neutral-400 sm:min-w-52"
+                    aria-haspopup="menu"
+                    aria-expanded={isSortMenuOpen}
+                    onClick={() => setIsSortMenuOpen((open) => !open)}
+                  >
+                    <span>{activeSortLabel}</span>
                     <span
-                      key={`ellipsis-${idx}`}
-                      className="flex h-9 w-9 items-center justify-center text-xs text-neutral-400"
-                    >
-                      ···
-                    </span>
-                  ) : (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={`flex h-9 w-9 items-center justify-center text-xs tracking-wide transition ${
-                        safePage === page
-                          ? "bg-neutral-900 text-white"
-                          : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                      className={`pointer-events-none text-neutral-400 transition duration-200 ${
+                        isSortMenuOpen ? "rotate-180" : ""
                       }`}
-                      aria-current={safePage === page ? "page" : undefined}
                     >
-                      {page}
-                    </button>
-                  ),
-                )}
-
-                <button
-                  onClick={() => goToPage(safePage + 1)}
-                  disabled={safePage === totalPages}
-                  className="flex h-9 w-9 items-center justify-center text-neutral-400 transition hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-25"
-                  aria-label="Next page"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M6 4L10 8L6 12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path
+                          d="M3.5 5.25L7 8.75L10.5 5.25"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </button>
+                  <div
+                    ref={sortMenuRef}
+                    className="pointer-events-none absolute left-0 top-[calc(100%+8px)] z-20 min-w-full border border-neutral-200 bg-white opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
+                    role="menu"
+                    aria-hidden={!isSortMenuOpen}
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        data-sort-menu-item
+                        className={`block w-full border-b border-neutral-100 px-4 py-3 text-left text-sm transition last:border-b-0 hover:bg-neutral-50 ${
+                          sort === option.value ? "text-neutral-950" : "text-neutral-500"
+                        }`}
+                        onClick={() => handleSortChange(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+            </section>
+
+            <div
+              data-page-intro
+              data-products-status
+              className="flex flex-col gap-2 text-sm text-neutral-500 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p>
+                {isLoading
+                  ? "Preparing the catalogue..."
+                  : loadError
+                    ? "The collection could not be loaded."
+                    : searchQuery
+                      ? `${filteredProducts.length} pieces matching "${searchQuery}".`
+                      : `${filteredProducts.length} pieces currently visible.`}
+              </p>
+              {!isLoading && !loadError ? (
+                <p className="text-sm text-neutral-400">
+                  Page {safePage} of {Math.max(totalPages, 1)}
+                </p>
+              ) : null}
             </div>
-          )}
+
+            {isLoading ? (
+              <div
+                data-page-intro
+                className="border border-neutral-200 bg-[#fafafa] px-6 py-10 text-sm text-neutral-500"
+              >
+                Loading products...
+              </div>
+            ) : loadError ? (
+              <div
+                data-page-intro
+                className="border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-600"
+              >
+                {loadError}
+              </div>
+            ) : paginatedProducts.length === 0 ? (
+              <div
+                data-page-intro
+                className="border border-neutral-200 bg-[#fafafa] px-6 py-10 text-sm text-neutral-500"
+              >
+                No products found.
+              </div>
+            ) : (
+              <div
+                data-page-intro
+                className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4"
+              >
+                {paginatedProducts.map((product) => (
+                  <Link
+                    href={`/products/${product.id}`}
+                    key={product.id}
+                    data-product-card
+                    className="group block cursor-pointer"
+                  >
+                    <article
+                      className="overflow-hidden border border-neutral-200 bg-[#fafafa] p-4 transition duration-300 hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
+                    >
+                      <div className="relative aspect-[4/5] overflow-hidden bg-white">
+                        <Image
+                          src={product.image}
+                          alt={product.name}
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                          priority={product.id === paginatedProducts[0]?.id}
+                          loading={product.id === paginatedProducts[0]?.id ? "eager" : "lazy"}
+                          unoptimized={
+                            isSignedMediaUrl(product.image) || isRemoteMediaUrl(product.image)
+                          }
+                          className="object-contain px-5 py-6 transition duration-500 group-hover:scale-[1.02]"
+                        />
+                      </div>
+
+                      <div className="mt-4 flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-400">
+                            {product.finish === "raw" ? "Raw Stone" : "Polished"}
+                          </p>
+                          <h3 className="mt-2 truncate text-base font-medium tracking-[-0.02em] text-neutral-950">
+                            {product.name}
+                          </h3>
+                        </div>
+                        <span className="mt-1 text-neutral-300 transition duration-300 group-hover:text-neutral-900">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M5 11L11 5"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M6 5H11V10"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                      </div>
+                    </article>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {!isLoading && !loadError && totalPages > 1 && (
+              <div
+                data-page-intro
+                data-products-pagination
+                className="flex flex-col gap-5 border-t border-neutral-200 pt-8 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <p className="text-sm text-neutral-400">
+                  Page {safePage} of {totalPages}
+                </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => goToPage(safePage - 1)}
+                    disabled={safePage === 1}
+                    className="flex h-10 w-10 items-center justify-center border border-neutral-200 bg-white text-neutral-500 transition hover:border-neutral-400 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Previous page"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M10 12L6 8L10 4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+
+                  {getPageNumbers().map((page, idx) =>
+                    page === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="flex h-10 w-10 items-center justify-center text-xs text-neutral-400"
+                      >
+                        ···
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        onClick={() => goToPage(page)}
+                        className={`flex h-10 min-w-10 items-center justify-center border px-3 text-xs transition ${
+                          safePage === page
+                            ? "border-neutral-900 bg-neutral-900 text-white"
+                            : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 hover:text-neutral-900"
+                        }`}
+                        aria-current={safePage === page ? "page" : undefined}
+                      >
+                        {page}
+                      </button>
+                    ),
+                  )}
+
+                  <button
+                    onClick={() => goToPage(safePage + 1)}
+                    disabled={safePage === totalPages}
+                    className="flex h-10 w-10 items-center justify-center border border-neutral-200 bg-white text-neutral-500 transition hover:border-neutral-400 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Next page"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M6 4L10 8L6 12"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </PageEntranceLoader>

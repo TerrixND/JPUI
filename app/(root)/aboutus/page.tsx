@@ -1,4 +1,87 @@
+"use client";
+
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Image from "next/image";
+import { useLayoutEffect, useRef } from "react";
+
+type SplitLineResult = {
+  lines: HTMLSpanElement[];
+  revert: () => void;
+};
+
+function splitElementLines(element: HTMLElement): SplitLineResult | null {
+  const originalHtml = element.innerHTML;
+  const text = element.textContent?.replace(/\s+/g, " ").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  const words = text.split(" ");
+  element.textContent = "";
+
+  words.forEach((word, index) => {
+    const wordSpan = document.createElement("span");
+    wordSpan.textContent = index === words.length - 1 ? word : `${word}\u00A0`;
+    wordSpan.style.display = "inline-block";
+    element.appendChild(wordSpan);
+  });
+
+  const wordSpans = Array.from(element.children) as HTMLSpanElement[];
+
+  if (!wordSpans.length) {
+    element.innerHTML = originalHtml;
+    return null;
+  }
+
+  const lineGroups: HTMLSpanElement[][] = [];
+  let currentTop = wordSpans[0].offsetTop;
+
+  wordSpans.forEach((wordSpan) => {
+    if (Math.abs(wordSpan.offsetTop - currentTop) > 4) {
+      lineGroups.push([]);
+      currentTop = wordSpan.offsetTop;
+    }
+
+    if (!lineGroups.length) {
+      lineGroups.push([]);
+    }
+
+    lineGroups[lineGroups.length - 1].push(wordSpan.cloneNode(true) as HTMLSpanElement);
+  });
+
+  element.textContent = "";
+
+  const lines: HTMLSpanElement[] = [];
+  lineGroups.forEach((group) => {
+    const mask = document.createElement("span");
+    mask.style.display = "block";
+    mask.style.overflow = "hidden";
+
+    const line = document.createElement("span");
+    line.style.display = "block";
+    line.style.willChange = "transform, opacity, filter";
+
+    group.forEach((wordSpan) => {
+      line.appendChild(wordSpan);
+    });
+
+    mask.appendChild(line);
+    element.appendChild(mask);
+    lines.push(line);
+  });
+
+  return {
+    lines,
+    revert: () => {
+      element.innerHTML = originalHtml;
+    },
+  };
+}
+
 export default function AboutUs() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const values = [
     {
       title: "Authenticity",
@@ -88,21 +171,309 @@ export default function AboutUs() {
     },
   ];
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const splitResults = new Map<HTMLElement, SplitLineResult>();
+
+    const ctx = gsap.context(() => {
+      const animateSplitLines = (
+        timeline: gsap.core.Timeline,
+        element: HTMLElement,
+        position: number,
+        seed: number,
+      ) => {
+        const split = splitResults.get(element);
+
+        if (!split?.lines.length) {
+          timeline.fromTo(
+            element,
+            {
+              autoAlpha: 0,
+              x: seed % 2 === 0 ? -58 : 58,
+              y: 28,
+              filter: "blur(10px)",
+            },
+            {
+              autoAlpha: 1,
+              x: 0,
+              y: 0,
+              filter: "blur(0px)",
+              duration: 0.9,
+              ease: "power3.out",
+              clearProps: "transform,opacity,filter",
+            },
+            position,
+          );
+
+          return;
+        }
+
+        timeline.fromTo(
+          split.lines,
+          {
+            autoAlpha: 0,
+            x: (index) => ((index + seed) % 2 === 0 ? -74 : 74),
+            y: (index) => 24 + (index % 3) * 8,
+            rotate: (index) => ((index + seed) % 2 === 0 ? -1.8 : 1.8),
+            filter: "blur(12px)",
+          },
+          {
+            autoAlpha: 1,
+            x: 0,
+            y: 0,
+            rotate: 0,
+            filter: "blur(0px)",
+            duration: 0.92,
+            stagger: 0.09,
+            ease: "power3.out",
+            clearProps: "transform,opacity,filter",
+          },
+          position,
+        );
+      };
+
+      gsap.utils
+        .toArray<HTMLElement>("[data-about-lines]")
+        .forEach((element) => {
+          const split = splitElementLines(element);
+
+          if (split) {
+            splitResults.set(element, split);
+          }
+        });
+
+      const heroItems = gsap.utils.toArray<HTMLElement>("[data-about-hero-item]");
+      if (heroItems.length) {
+        const heroTimeline = gsap.timeline();
+        let heroPosition = 0;
+
+        heroItems.forEach((item, index) => {
+          if (item.hasAttribute("data-about-hero-divider")) {
+            heroTimeline.fromTo(
+              item,
+              {
+                autoAlpha: 0,
+                scaleX: 0,
+                transformOrigin: "center center",
+              },
+              {
+                autoAlpha: 1,
+                scaleX: 1,
+                duration: 0.7,
+                ease: "power2.out",
+                clearProps: "transform,opacity",
+              },
+              heroPosition,
+            );
+
+            heroPosition += 0.12;
+            return;
+          }
+
+          animateSplitLines(heroTimeline, item, heroPosition, index);
+          heroPosition += Math.max(0.2, (splitResults.get(item)?.lines.length ?? 1) * 0.14);
+        });
+      }
+
+      const scrubSections = gsap.utils.toArray<HTMLElement>("[data-about-scrub-section]");
+      scrubSections.forEach((section, sectionIndex) => {
+        const textItems = Array.from(
+          section.querySelectorAll<HTMLElement>("[data-about-text-item]"),
+        );
+        const imageContainer = section.querySelector<HTMLElement>("[data-about-image]");
+        const parallaxImage = section.querySelector<HTMLElement>("[data-about-parallax]");
+
+        if (textItems.length || imageContainer) {
+          const timeline = gsap.timeline({
+            scrollTrigger: {
+              trigger: section,
+              start: "top 84%",
+              end: "top 24%",
+              scrub: 1.1,
+            },
+          });
+
+          if (textItems.length) {
+            textItems.forEach((textItem, itemIndex) => {
+              animateSplitLines(
+                timeline,
+                textItem,
+                itemIndex * 0.14,
+                sectionIndex + itemIndex,
+              );
+            });
+          }
+
+          if (imageContainer) {
+            timeline.fromTo(
+              imageContainer,
+              {
+                autoAlpha: 0,
+                x: 92,
+                y: 54,
+                rotate: 1.8,
+                scale: 1.1,
+                filter: "blur(16px)",
+              },
+              {
+                autoAlpha: 1,
+                x: 0,
+                y: 0,
+                rotate: 0,
+                scale: 1,
+                filter: "blur(0px)",
+                duration: 1.2,
+                ease: "power3.out",
+              },
+              0.08,
+            );
+          }
+        }
+
+        if (parallaxImage) {
+          gsap.fromTo(
+            parallaxImage,
+            {
+              scale: 1.16,
+              yPercent: 8,
+            },
+            {
+              scale: 1.02,
+              yPercent: -4,
+              ease: "none",
+              scrollTrigger: {
+                trigger: section,
+                start: "top bottom",
+                end: "bottom top",
+                scrub: 1.2,
+              },
+            },
+          );
+        }
+      });
+
+      const standaloneLineElements = Array.from(splitResults.keys()).filter(
+        (element) =>
+          !element.closest("[data-about-hero]") &&
+          !element.closest("[data-about-scrub-section]"),
+      );
+
+      standaloneLineElements.forEach((element, index) => {
+        const timeline = gsap.timeline({
+          scrollTrigger: {
+            trigger: element,
+            start: "top 88%",
+            toggleActions: "play none none none",
+          },
+        });
+
+        animateSplitLines(timeline, element, 0, index);
+      });
+
+      const cards = gsap.utils.toArray<HTMLElement>("[data-about-card]");
+      cards.forEach((card, index) => {
+        gsap.fromTo(
+          card,
+          {
+            autoAlpha: 0,
+            x: index % 2 === 0 ? -18 : 18,
+            y: 54,
+            scale: 0.965,
+            filter: "blur(10px)",
+          },
+          {
+            autoAlpha: 1,
+            x: 0,
+            y: 0,
+            scale: 1,
+            filter: "blur(0px)",
+            duration: 0.95,
+            ease: "power3.out",
+            clearProps: "transform,opacity,filter",
+            scrollTrigger: {
+              trigger: card,
+              start: "top 86%",
+              toggleActions: "play none none none",
+            },
+          },
+        );
+      });
+
+      const footer = root.querySelector<HTMLElement>("[data-about-footer]");
+      if (footer) {
+        gsap.fromTo(
+          footer.children,
+          {
+            autoAlpha: 0,
+            y: 30,
+          },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.8,
+            stagger: 0.08,
+            ease: "power3.out",
+            clearProps: "transform,opacity",
+            scrollTrigger: {
+              trigger: footer,
+              start: "top 92%",
+              toggleActions: "play none none none",
+            },
+          },
+        );
+      }
+    }, root);
+
+    return () => {
+      ctx.revert();
+      splitResults.forEach((split) => {
+        split.revert();
+      });
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-white text-gray-800">
+    <div ref={rootRef} className="min-h-screen bg-white text-gray-800">
       {/* ================= Hero ================= */}
-      <section className="px-6 sm:px-12 lg:px-20 py-24 text-center">
-        <p className="text-xs tracking-[0.3em] uppercase text-green-700 mb-5">
+      <section data-about-hero className="px-6 sm:px-12 lg:px-20 py-24 text-center">
+        <p
+          data-about-hero-item
+          data-about-lines
+          className="text-xs tracking-[0.3em] uppercase text-green-700 mb-5"
+        >
           Est. 1998 · Mandalay, Myanmar · MGE Licence No. MGE-2003-0471
         </p>
 
-        <h1 className="text-5xl font-light text-gray-900 mb-6 leading-tight">
+        <h1
+          data-about-hero-item
+          data-about-lines
+          className="text-5xl font-light text-gray-900 mb-6 leading-tight"
+        >
           About Us
         </h1>
 
-        <div className="w-10 h-px bg-green-600 mx-auto mb-8" />
+        <div
+          data-about-hero-item
+          data-about-hero-divider
+          className="w-10 h-px bg-green-600 mx-auto mb-8"
+        />
 
-        <p className="text-gray-500 leading-relaxed text-lg max-w-3xl mx-auto">
+        <p
+          data-about-hero-item
+          data-about-lines
+          className="text-gray-500 leading-relaxed text-lg max-w-3xl mx-auto"
+        >
           JadePalace Pt Co Ltd is Myanmar&apos;s trusted name in the sourcing,
           certification, and global trade of fine jadeite jade — from the mines
           of Hpakant to collectors around the world. Licensed under
@@ -114,31 +485,54 @@ export default function AboutUs() {
       {/* ================= Story ================= */}
       <section className="border-t border-gray-100">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <div className="grid md:grid-cols-2 gap-16 items-center mb-16">
+          <div
+            data-about-scrub-section
+            className="grid md:grid-cols-2 gap-16 items-center mb-16"
+          >
             <div>
-              <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-4">
+              <p
+                data-about-text-item
+                data-about-lines
+                className="text-xs tracking-[0.25em] uppercase text-green-700 mb-4"
+              >
                 Our Story
               </p>
 
-              <h2 className="text-3xl font-light text-gray-900 mb-6">
+              <h2
+                data-about-text-item
+                data-about-lines
+                className="text-3xl font-light text-gray-900 mb-6"
+              >
                 A Quarter Century of Excellence
               </h2>
 
-              <p className="text-gray-500 leading-relaxed mb-4">
+              <p
+                data-about-text-item
+                data-about-lines
+                className="text-gray-500 leading-relaxed mb-4"
+              >
                 Founded in 1998 by U Kelvin Aung in Mandalay, JadePalace began
                 as a three-person workshop on 78th Street with a bold vision —
                 to bring Myanmar&apos;s finest jadeite to the world with
                 complete honesty and meticulous documentation at every step.
               </p>
 
-              <p className="text-gray-500 leading-relaxed mb-4">
+              <p
+                data-about-text-item
+                data-about-lines
+                className="text-gray-500 leading-relaxed mb-4"
+              >
                 In 2003 we formed our first direct mining partnership with a
                 Hpakant cooperative in Kachin State, giving us unbroken
                 chain-of-custody from rough stone to finished piece — a standard
                 rare in the industry at that time.
               </p>
 
-              <p className="text-gray-500 leading-relaxed">
+              <p
+                data-about-text-item
+                data-about-lines
+                className="text-gray-500 leading-relaxed"
+              >
                 Over 26 years we have grown into an internationally recognised
                 house, trusted by jewellers, collectors, and auction houses from
                 Hong Kong to New York. In 2011 we became the first Myanmar jade
@@ -148,11 +542,17 @@ export default function AboutUs() {
             </div>
 
             {/* Story Image */}
-            <div className="w-full h-full bg-gray-100 overflow-hidden">
-              <img
+            <div
+              data-about-image
+              className="relative min-h-[360px] w-full h-full bg-gray-100 overflow-hidden"
+            >
+              <Image
                 src="/images/ab1.png"
                 alt="Our Story at JadePalace"
-                className="w-full h-full object-cover"
+                fill
+                sizes="(min-width: 1024px) 42vw, 100vw"
+                data-about-parallax
+                className="object-cover"
               />
             </div>
           </div>
@@ -165,7 +565,7 @@ export default function AboutUs() {
               { num: "18", label: "Countries Served" },
               { num: "80+", label: "Wholesale Clients" },
             ].map((s, i) => (
-              <div key={i} className="border border-gray-100 p-6">
+              <div key={i} data-about-card className="border border-gray-100 p-6">
                 <div className="text-3xl font-light text-green-700 mb-1">
                   {s.num}
                 </div>
@@ -181,16 +581,22 @@ export default function AboutUs() {
       {/* ================= Milestones ================= */}
       <section className="border-t border-gray-100 bg-gray-50">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2">
+          <p
+            data-about-lines
+            className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2"
+          >
             Company History
           </p>
-          <h2 className="text-3xl font-light text-gray-900 mb-12">
+          <h2
+            data-about-lines
+            className="text-3xl font-light text-gray-900 mb-12"
+          >
             Key Milestones
           </h2>
 
           <div className="grid md:grid-cols-2 gap-x-16 gap-y-8">
             {milestones.map((m, i) => (
-              <div key={i} className="flex gap-6">
+              <div key={i} data-about-card className="flex gap-6">
                 <div className="text-sm font-light text-green-700 w-12 shrink-0 pt-0.5">
                   {m.year}
                 </div>
@@ -209,17 +615,23 @@ export default function AboutUs() {
       {/* ================= Values ================= */}
       <section className="border-t border-gray-100">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2">
+          <p
+            data-about-lines
+            className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2"
+          >
             Our Principles
           </p>
 
-          <h2 className="text-3xl font-light text-gray-900 mb-12">
+          <h2
+            data-about-lines
+            className="text-3xl font-light text-gray-900 mb-12"
+          >
             What We Stand For
           </h2>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {values.map((v, i) => (
-              <div key={i}>
+              <div key={i} data-about-card>
                 <div className="w-6 h-px bg-green-600 mb-5" />
                 <h3 className="text-base text-gray-900 mb-3">{v.title}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">
@@ -234,16 +646,26 @@ export default function AboutUs() {
       {/* ================= Team ================= */}
       <section className="border-t border-gray-100 bg-gray-50">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2">
+          <p
+            data-about-lines
+            className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2"
+          >
             Leadership
           </p>
-          <h2 className="text-3xl font-light text-gray-900 mb-12">
+          <h2
+            data-about-lines
+            className="text-3xl font-light text-gray-900 mb-12"
+          >
             The People Behind JadePalace
           </h2>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {team.map((person, i) => (
-              <div key={i} className="bg-white border border-gray-100 p-6">
+              <div
+                key={i}
+                data-about-card
+                className="bg-white border border-gray-100 p-6"
+              >
                 <p className="text-xs tracking-wider uppercase text-green-700 mb-1">
                   {person.since}
                 </p>
@@ -263,10 +685,16 @@ export default function AboutUs() {
       {/* ================= Certifications ================= */}
       <section className="border-t border-gray-100">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2">
+          <p
+            data-about-lines
+            className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2"
+          >
             Credentials
           </p>
-          <h2 className="text-3xl font-light text-gray-900 mb-12">
+          <h2
+            data-about-lines
+            className="text-3xl font-light text-gray-900 mb-12"
+          >
             Licences &amp; Accreditations
           </h2>
 
@@ -303,7 +731,7 @@ export default function AboutUs() {
                   "Approved consignment supplier for Christie's Hong Kong and Bonhams London Jewels & Jade auctions since 2018. Over 40 lots placed to date.",
               },
             ].map((c, i) => (
-              <div key={i} className="border border-gray-100 p-6">
+              <div key={i} data-about-card className="border border-gray-100 p-6">
                 <div className="w-4 h-px bg-green-600 mb-4" />
                 <h3 className="text-sm text-gray-900 mb-2">{c.name}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">
@@ -318,22 +746,39 @@ export default function AboutUs() {
       {/* ================= Location ================= */}
       <section className="border-t border-gray-100 bg-gray-50">
         <div className="px-6 sm:px-12 lg:px-20 py-20">
-          <div className="grid md:grid-cols-2 gap-16 items-start">
+          <div
+            data-about-scrub-section
+            className="grid md:grid-cols-2 gap-16 items-start"
+          >
             {/* Location Image */}
-            <div className="w-full h-full bg-gray-100 overflow-hidden">
-              <img
+            <div
+              data-about-image
+              className="relative min-h-[420px] w-full h-full bg-gray-100 overflow-hidden"
+            >
+              <Image
                 src="/images/ab2.png"
                 alt="JadePalace Location"
-                className="w-full h-full object-cover"
+                fill
+                sizes="(min-width: 1024px) 42vw, 100vw"
+                data-about-parallax
+                className="object-cover"
               />
             </div>
 
             <div>
-              <p className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2">
+              <p
+                data-about-text-item
+                data-about-lines
+                className="text-xs tracking-[0.25em] uppercase text-green-700 mb-2"
+              >
                 Find Us
               </p>
 
-              <h2 className="text-3xl font-light text-gray-900 mb-10">
+              <h2
+                data-about-text-item
+                data-about-lines
+                className="text-3xl font-light text-gray-900 mb-10"
+              >
                 Rooted in Myanmar
               </h2>
 
@@ -364,7 +809,7 @@ export default function AboutUs() {
                     tag: "Enquiries",
                   },
                 ].map((l, i) => (
-                  <div key={i}>
+                  <div key={i} data-about-text-item>
                     <p className="text-xs tracking-wider uppercase text-gray-500 mb-2">
                       {l.tag}
                     </p>
@@ -381,7 +826,10 @@ export default function AboutUs() {
       </section>
 
       {/* ================= Footer ================= */}
-      <footer className="border-t border-gray-100 px-6 sm:px-12 lg:px-20 py-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer
+        data-about-footer
+        className="border-t border-gray-100 px-6 sm:px-12 lg:px-20 py-8 flex flex-col sm:flex-row items-center justify-between gap-2"
+      >
         <span className="text-xs tracking-widest text-gray-400 uppercase">
           Jade Palace Pt Co Ltd · MGE Licence No. MGE-2003-0471
         </span>
