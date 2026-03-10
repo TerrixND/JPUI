@@ -46,6 +46,7 @@ const OurProcess = () => {
             return (
               <div
                 key={index}
+                data-scroll-reveal
                 className="flex flex-col items-center text-center group"
               >
                 {/* Icon */}

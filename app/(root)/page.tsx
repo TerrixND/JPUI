@@ -2,10 +2,13 @@
 
 import AboutProduct from "@/components/ui/AboutProduct";
 import Footer from "@/components/ui/Footer";
+import PageEntranceLoader from "@/components/ui/PageEntranceLoader";
 import ScrollHero from "@/components/ui/ScrollHero";
+import ScrollRevealSection from "@/components/ui/ScrollRevealSection";
 import NewArrivals from "@/components/ui/NewArrivals";
 import OurProcess from "@/components/ui/OurProcess";
 import LatestInfo from "@/components/ui/LatestInfo";
+import { gsap } from "gsap";
 
 import {
   completePendingSetupForSession,
@@ -36,6 +39,7 @@ import React, { useEffect, useRef, useState } from "react";
 const HomePage = () => {
   const [setupError, setSetupError] = useState("");
   const hasSyncedSetupRef = useRef(false);
+  const homeMainRef = useRef<HTMLElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -299,23 +303,191 @@ const HomePage = () => {
     syncSetupUserAfterCallback();
   }, [router]);
 
+  useEffect(() => {
+    const root = homeMainRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const interactiveElements = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-home-hover]"),
+    );
+
+    const cleanup = interactiveElements.map((element) => {
+      const preset = element.dataset.homeHover || "link";
+      const computedStyle = window.getComputedStyle(element);
+      const baseBoxShadow =
+        computedStyle.boxShadow && computedStyle.boxShadow !== "none"
+          ? computedStyle.boxShadow
+          : "0 0 0 rgba(0,0,0,0)";
+      const xTo = gsap.quickTo(element, "x", {
+        duration: 0.35,
+        ease: "power3.out",
+      });
+      const yTo = gsap.quickTo(element, "y", {
+        duration: 0.35,
+        ease: "power3.out",
+      });
+
+      gsap.set(element, {
+        transformOrigin: "center center",
+        willChange: "transform, box-shadow",
+      });
+
+      const resolveConfig = () => {
+        switch (preset) {
+          case "hero-cta":
+            return {
+              scale: 1.045,
+              lift: -6,
+              shadow: "0 18px 45px rgba(200, 169, 110, 0.28)",
+              magnetic: 14,
+            };
+          case "hero-control":
+            return {
+              scale: 1.08,
+              lift: -4,
+              shadow: "0 14px 32px rgba(0, 0, 0, 0.28)",
+              magnetic: 9,
+            };
+          case "hero-progress":
+            return {
+              scale: 1,
+              lift: 0,
+              shadow: baseBoxShadow,
+              magnetic: 0,
+            };
+          case "button":
+            return {
+              scale: 1.035,
+              lift: -4,
+              shadow: "0 14px 28px rgba(17, 24, 39, 0.16)",
+              magnetic: 6,
+            };
+          case "card":
+            return {
+              scale: 1.018,
+              lift: -6,
+              shadow: "0 20px 38px rgba(17, 24, 39, 0.1)",
+              magnetic: 10,
+            };
+          case "footer-link":
+            return {
+              scale: 1.01,
+              lift: -2,
+              shadow: baseBoxShadow,
+              magnetic: 4,
+            };
+          default:
+            return {
+              scale: 1.02,
+              lift: -3,
+              shadow: "0 10px 24px rgba(17, 24, 39, 0.1)",
+              magnetic: 5,
+            };
+        }
+      };
+
+      const config = resolveConfig();
+
+      const handleEnter = () => {
+        gsap.to(element, {
+          scale: config.scale,
+          y: config.lift,
+          boxShadow: config.shadow,
+          duration: 0.32,
+          ease: "power3.out",
+          overwrite: "auto",
+        });
+      };
+
+      const handleMove = (event: PointerEvent) => {
+        if (config.magnetic <= 0) {
+          return;
+        }
+
+        const rect = element.getBoundingClientRect();
+        const xRatio = (event.clientX - rect.left) / rect.width - 0.5;
+        const yRatio = (event.clientY - rect.top) / rect.height - 0.5;
+
+        xTo(xRatio * config.magnetic);
+        yTo(config.lift + yRatio * Math.max(4, config.magnetic * 0.7));
+      };
+
+      const handleLeave = () => {
+        xTo(0);
+        yTo(0);
+        gsap.to(element, {
+          scale: 1,
+          x: 0,
+          y: 0,
+          boxShadow: baseBoxShadow,
+          duration: 0.45,
+          ease: "power3.out",
+          overwrite: "auto",
+        });
+      };
+
+      element.addEventListener("pointerenter", handleEnter);
+      element.addEventListener("pointermove", handleMove);
+      element.addEventListener("pointerleave", handleLeave);
+
+      return () => {
+        element.removeEventListener("pointerenter", handleEnter);
+        element.removeEventListener("pointermove", handleMove);
+        element.removeEventListener("pointerleave", handleLeave);
+        gsap.killTweensOf(element);
+      };
+    });
+
+    return () => {
+      cleanup.forEach((dispose) => dispose());
+    };
+  }, []);
+
   return (
     <div className="bg-black">
-      <main className="scroll-smooth">
-        <ScrollHero />
+      <PageEntranceLoader
+        title="Jade Palace"
+        eyebrow="Jade Palace"
+        subtitle="Mandalay jade, unveiled with quiet ceremony."
+      >
+        <main ref={homeMainRef} className="scroll-smooth">
+          <div data-page-intro>
+            <ScrollHero />
+          </div>
 
-        <AboutProduct />
-        <NewArrivals />
-        <OurProcess />
-        <LatestInfo />
-        <Footer />
+          <ScrollRevealSection start="top 82%">
+            <AboutProduct />
+          </ScrollRevealSection>
+          <ScrollRevealSection start="top 82%">
+            <NewArrivals />
+          </ScrollRevealSection>
+          <ScrollRevealSection start="top 84%">
+            <OurProcess />
+          </ScrollRevealSection>
+          <ScrollRevealSection start="top 84%">
+            <LatestInfo />
+          </ScrollRevealSection>
+          <ScrollRevealSection start="top bottom-=80">
+            <Footer />
+          </ScrollRevealSection>
 
-        {setupError && (
-          <p className="mt-3 text-sm text-red-600 text-center">
-            Account setup sync failed: {setupError}
-          </p>
-        )}
-      </main>
+          {setupError && (
+            <p
+              data-page-intro
+              className="mt-3 pb-8 text-center text-sm text-red-600"
+            >
+              Account setup sync failed: {setupError}
+            </p>
+          )}
+        </main>
+      </PageEntranceLoader>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { ChevronRight } from "@boxicons/react";
+import Image from "next/image";
 import Link from "next/link";
 import React from "react";
 
@@ -14,7 +14,10 @@ const AboutProduct = () => {
       <div className="px-6 sm:px-12 lg:px-20 relative">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* Image Wrapper */}
-          <div className="relative h-72 md:h-96 overflow-hidden group">
+          <div
+            data-scroll-reveal
+            className="relative h-72 md:h-96 overflow-hidden group"
+          >
             {/* Gradient overlay */}
             <div className="absolute inset-0 bg-linear-to-t from-black/50 via-black/10 to-transparent z-10 pointer-events-none" />
 
@@ -22,10 +25,12 @@ const AboutProduct = () => {
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 bg-linear-to-br from-white/10 via-transparent to-transparent z-20 pointer-events-none" />
 
             {/* Image */}
-            <img
+            <Image
               src="/images/jadeBg.png"
               alt="Jade Necklace"
-              className="absolute inset-0 w-full h-full object-full scale-100 transition-transform duration-700 ease-out"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="absolute inset-0 h-full w-full scale-100 object-cover transition-transform duration-700 ease-out"
             />
 
             {/* Caption */}
@@ -39,7 +44,7 @@ const AboutProduct = () => {
           {/* ===== Right: Content ===== */}
           <div className="flex flex-col justify-between h-full gap-10 lg:pl-10">
             {/* Text block */}
-            <div className="space-y-5">
+            <div data-scroll-reveal className="space-y-5">
               <span className="text-xs tracking-[0.3em] text-neutral-400 uppercase">
                 About Product
               </span>
@@ -59,7 +64,8 @@ const AboutProduct = () => {
 
               <Link
                 href="aboutus"
-                className="inline-flex items-center gap-2 border border-neutral-300 px-6 py-2.5 text-sm tracking-widest uppercase text-neutral-500 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition duration-300"
+                data-home-hover="link"
+                className="inline-flex items-center gap-2 border border-neutral-300 px-6 py-2.5 text-sm tracking-widest uppercase text-neutral-500 transition duration-300 hover:border-neutral-900 hover:bg-neutral-900 hover:text-white"
               >
                 See More →
               </Link>
@@ -68,7 +74,11 @@ const AboutProduct = () => {
             {/* ===== Stats row ===== */}
             <div className="grid grid-cols-3 divide-x divide-neutral-200 border-t border-neutral-200 pt-8">
               {stats.map((stat) => (
-                <div key={stat.label} className="px-4 first:pl-0">
+                <div
+                  key={stat.label}
+                  data-scroll-reveal
+                  className="px-4 first:pl-0"
+                >
                   <p className="text-2xl font-light text-neutral-900">
                     {stat.value}
                   </p>

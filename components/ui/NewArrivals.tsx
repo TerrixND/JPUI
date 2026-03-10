@@ -62,7 +62,10 @@ const NewArrival = () => {
     <section className="w-full bg-white py-20 lg:py-28">
       <div className="px-6 sm:px-12 lg:px-20">
         {/* ===== Header ===== */}
-        <div className="mb-14 flex items-end justify-between">
+        <div
+          data-scroll-reveal
+          className="mb-14 flex items-end justify-between"
+        >
           <div>
             <h2 className="text-3xl lg:text-4xl font-light tracking-tight text-neutral-900">
               New Arrivals
@@ -76,13 +79,15 @@ const NewArrival = () => {
           <div className="hidden md:flex gap-3">
             <button
               onClick={() => scroll("left")}
-              className="w-10 h-10 rounded-full border border-neutral-300 flex items-center justify-center hover:bg-neutral-900 hover:text-white transition"
+              data-home-hover="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-900 hover:text-white"
             >
               ←
             </button>
             <button
               onClick={() => scroll("right")}
-              className="w-10 h-10 rounded-full border border-neutral-300 flex items-center justify-center hover:bg-neutral-900 hover:text-white transition"
+              data-home-hover="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-900 hover:text-white"
             >
               →
             </button>
@@ -97,6 +102,8 @@ const NewArrival = () => {
           {products.map((product) => (
             <div
               key={product.id}
+              data-scroll-reveal
+              data-home-hover="card"
               className="group flex-none w-60 sm:w-65 snap-start cursor-pointer"
             >
               {/* Image */}
@@ -125,10 +132,11 @@ const NewArrival = () => {
         </div>
 
         {/* Mobile View All */}
-        <div className="mt-12 flex justify-center md:hidden">
+        <div data-scroll-reveal className="mt-12 flex justify-center md:hidden">
           <Link
             href="#"
-            className="text-sm tracking-widest uppercase text-neutral-500 hover:text-neutral-900 transition"
+            data-home-hover="link"
+            className="text-sm tracking-widest uppercase text-neutral-500 transition hover:text-neutral-900"
           >
             View All →
           </Link>
