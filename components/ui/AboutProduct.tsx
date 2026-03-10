@@ -58,7 +58,7 @@ const AboutProduct = () => {
               </p>
 
               <Link
-                href="#"
+                href="aboutus"
                 className="inline-flex items-center gap-2 border border-neutral-300 px-6 py-2.5 text-sm tracking-widest uppercase text-neutral-500 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition duration-300"
               >
                 See More →
