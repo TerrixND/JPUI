@@ -5,6 +5,7 @@ import {
   getPublicProducts,
   type PublicProductRecord,
 } from "@/lib/apiClient";
+import { isVisibleOnPublicProductPage } from "@/lib/mediaVisibility";
 import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
@@ -48,7 +49,9 @@ const deriveFinish = (product: PublicProductRecord): "polished" | "raw" => {
 };
 
 const resolveCardImage = (product: PublicProductRecord) => {
-  const media = Array.isArray(product.media) ? product.media : [];
+  const media = (Array.isArray(product.media) ? product.media : []).filter((entry) =>
+    isVisibleOnPublicProductPage(entry),
+  );
   const preferredImage =
     media.find((entry) => (entry.type || "").toUpperCase() === "IMAGE" && entry.url) ||
     media.find((entry) => Boolean(entry.url));

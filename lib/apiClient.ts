@@ -600,6 +600,14 @@ export type AuthenticityProductMediaRecord = {
   url: string | null;
   mimeType: string | null;
   sizeBytes: number | null;
+  visibilitySections: MediaSection[];
+  audience: MediaAudience | null;
+  allowedRoles: MediaRole[];
+  minCustomerTier: CustomerTier | null;
+  targetUsers: Array<{
+    userId: string;
+  }>;
+  visibilityPreset: MediaVisibilityPreset | null;
   raw: JsonRecord;
 };
 
@@ -2461,6 +2469,48 @@ const normalizeAuthenticityMediaRecord = (
     url: asNullableString(row?.url),
     mimeType: asNullableString(row?.mimeType),
     sizeBytes: asFiniteNumber(row?.sizeBytes),
+    visibilitySections: Array.isArray(row?.visibilitySections)
+      ? row.visibilitySections
+          .map((entry) => asString(entry).toUpperCase())
+          .filter((entry): entry is MediaSection => Boolean(entry))
+      : [],
+    audience: (() => {
+      const audience = asString(row?.audience).toUpperCase();
+      return audience === "PUBLIC" ||
+        audience === "TARGETED" ||
+        audience === "ADMIN_ONLY" ||
+        audience === "ROLE_BASED" ||
+        audience === "PRIVATE"
+        ? (audience as MediaAudience)
+        : null;
+    })(),
+    allowedRoles: Array.isArray(row?.allowedRoles)
+      ? row.allowedRoles
+          .map((entry) => asString(entry).toUpperCase())
+          .filter((entry): entry is MediaRole => Boolean(entry))
+      : [],
+    minCustomerTier: normalizeCustomerTier(row?.minCustomerTier),
+    targetUsers: Array.isArray(row?.targetUsers)
+      ? row.targetUsers
+          .map((entry) => asRecord(entry))
+          .map((entry) => ({ userId: asString(entry?.userId) }))
+          .filter((entry) => Boolean(entry.userId))
+      : [],
+    visibilityPreset: (() => {
+      const visibilityPreset = asString(row?.visibilityPreset)
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+      return visibilityPreset === "PUBLIC" ||
+        visibilityPreset === "TOP_SHELF" ||
+        visibilityPreset === "USER_TIER" ||
+        visibilityPreset === "TARGETED_USER" ||
+        visibilityPreset === "PRIVATE" ||
+        visibilityPreset === "ADMIN" ||
+        visibilityPreset === "MANAGER" ||
+        visibilityPreset === "SALES"
+        ? (visibilityPreset as MediaVisibilityPreset)
+        : null;
+    })(),
     raw: row ?? {},
   };
 };
@@ -3944,6 +3994,76 @@ export const getAdminMediaUrl = async ({
     consignmentAgreementId:
       normalized.consignmentAgreementId ?? asNullableString(root?.consignmentAgreementId),
     slot: normalized.slot ?? normalizeMediaSlot(root?.slot),
+  };
+};
+
+export type AdminProductMediaVisibilityResponse = {
+  message: string | null;
+  code: string | null;
+  media: AdminMediaUrlResponse | null;
+  raw: unknown;
+};
+
+export const updateAdminProductMediaVisibility = async ({
+  accessToken,
+  productId,
+  mediaId,
+  visibilityPreset,
+  minCustomerTier,
+  userIds,
+}: {
+  accessToken: string;
+  productId: string;
+  mediaId: string;
+  visibilityPreset?: MediaVisibilityPreset;
+  minCustomerTier?: CustomerTier;
+  userIds?: string[];
+}): Promise<AdminProductMediaVisibilityResponse> => {
+  const body: Record<string, unknown> = {};
+
+  if (visibilityPreset) {
+    body.visibilityPreset = visibilityPreset;
+  }
+  if (minCustomerTier) {
+    body.minCustomerTier = minCustomerTier;
+  }
+  if (Array.isArray(userIds)) {
+    body.userIds = userIds.map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/admin/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(mediaId)}/visibility`,
+    method: "PATCH",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    fallbackErrorMessage: "Failed to update product media visibility.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const normalized = normalizeMediaUrlResponse(root.media ?? root);
+
+  if (!normalized) {
+    throw new ApiClientError({
+      message: "Invalid product media visibility response.",
+      status: 500,
+      payload,
+    });
+  }
+
+  return {
+    message: asNullableString(root.message),
+    code: asNullableString(root.code),
+    media: {
+      ...normalized,
+      productId: normalized.productId ?? asNullableString(root?.productId),
+      consignmentAgreementId:
+        normalized.consignmentAgreementId ?? asNullableString(root?.consignmentAgreementId),
+      slot: normalized.slot ?? normalizeMediaSlot(root?.slot),
+    },
+    raw: payload,
   };
 };
 

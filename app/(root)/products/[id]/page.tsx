@@ -6,6 +6,7 @@ import {
   getPublicProductDetail,
   type PublicProductRecord,
 } from "@/lib/apiClient";
+import { isVisibleOnPublicProductPage } from "@/lib/mediaVisibility";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ComponentProps } from "react";
@@ -14,6 +15,7 @@ type ProductDetailModel = ComponentProps<typeof ProductDetailClientComponent>["p
 
 const toProductDetailModel = (product: PublicProductRecord): ProductDetailModel => {
   const media = (Array.isArray(product.media) ? product.media : [])
+    .filter((entry) => isVisibleOnPublicProductPage(entry))
     .filter((entry) => Boolean(entry.url))
     .map((entry, index) => ({
       id: entry.id,

@@ -27,6 +27,7 @@ import {
   type AdminMediaUrlResponse,
   type MediaSlot,
   type MediaVisibilityPreset,
+  updateAdminProductMediaVisibility,
   verifyAdminProductAuthCardOtp,
 } from "@/lib/apiClient";
 import {
@@ -277,6 +278,12 @@ type RoleMediaVisibilityPreset = Extract<MediaVisibilityPreset, "ADMIN" | "MANAG
 
 type PublicUploadVisibilityConfig = {
   preset: PublicMediaVisibilityPreset;
+  minCustomerTier: CustomerTier | "";
+  targetUserIdsInput: string;
+};
+
+type ExistingMediaVisibilityConfig = {
+  preset: MediaVisibilityPreset;
   minCustomerTier: CustomerTier | "";
   targetUserIdsInput: string;
 };
@@ -664,11 +671,13 @@ function VisibilityPresetChip({
 function ExistingMediaCard({
   media,
   deleting,
+  footer,
   onDelete,
   onRefresh,
 }: {
   media: ProductMedia;
   deleting: boolean;
+  footer?: React.ReactNode;
   onDelete: (media: ProductMedia) => void;
   onRefresh: (rowId: string, mediaId: string) => void;
 }) {
@@ -735,6 +744,7 @@ function ExistingMediaCard({
             {deleting ? "Deleting..." : "Delete"}
           </button>
         </div>
+        {footer}
       </div>
     </div>
   );
@@ -745,8 +755,10 @@ export default function ProductEditPage() {
   const router = useRouter();
   const { dashboardBasePath, isAdminActionBlocked, role } = useRole();
   const productEditBlocked = isAdminActionBlocked("PRODUCT_EDIT");
+  const productVisibilityBlocked = isAdminActionBlocked("PRODUCT_VISIBILITY_MANAGE");
   const productDeleteBlocked = isAdminActionBlocked("PRODUCT_DELETE");
   const productEditTooltip = getAdminActionRestrictionTooltip("PRODUCT_EDIT");
+  const productVisibilityTooltip = getAdminActionRestrictionTooltip("PRODUCT_VISIBILITY_MANAGE");
   const productDeleteTooltip = getAdminActionRestrictionTooltip("PRODUCT_DELETE");
 
   const productId = String(params.productId || "");
@@ -767,6 +779,9 @@ export default function ProductEditPage() {
   const [certificateGenerating, setCertificateGenerating] = useState(false);
   const [publicVisibilityByFileId, setPublicVisibilityByFileId] = useState<
     Record<string, PublicUploadVisibilityConfig>
+  >({});
+  const [existingVisibilityByMediaId, setExistingVisibilityByMediaId] = useState<
+    Record<string, ExistingMediaVisibilityConfig>
   >({});
   const [roleVisibilityPreset, setRoleVisibilityPreset] = useState<RoleMediaVisibilityPreset>("ADMIN");
   const [roleMediaFiles, setRoleMediaFiles] = useState<MediaFile[]>([]);
@@ -790,6 +805,7 @@ export default function ProductEditPage() {
   const [mediaHint, setMediaHint] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
+  const [savingExistingMediaId, setSavingExistingMediaId] = useState<string | null>(null);
   const refreshingMediaIdsRef = useRef<Set<string>>(new Set());
   const [browserOrigin, setBrowserOrigin] = useState("");
   const [authCardModal, setAuthCardModal] = useState<AuthCardActionModalState | null>(null);
@@ -853,6 +869,33 @@ export default function ProductEditPage() {
       targetUserIdsInput: publicTargetUserIdsInput,
     }),
     [publicMinCustomerTier, publicTargetUserIdsInput, publicVisibilityPreset],
+  );
+  const existingMediaVisibilityOptions = useMemo(
+    () =>
+      [...new Set([...PUBLIC_MEDIA_VISIBILITY_PRESETS, ...roleVisibilityOptions])] as MediaVisibilityPreset[],
+    [roleVisibilityOptions],
+  );
+  const createExistingMediaVisibilityDraft = useCallback(
+    (media: ProductMedia): ExistingMediaVisibilityConfig => {
+      const fallbackPreset: MediaVisibilityPreset =
+        media.visibilityPreset ||
+        (media.audience === "PRIVATE"
+          ? "PRIVATE"
+          : media.targetUserIds.length > 0
+            ? "TARGETED_USER"
+            : media.minCustomerTier
+              ? "USER_TIER"
+              : media.audience === "ROLE_BASED"
+                ? roleVisibilityOptions[0] || "ADMIN"
+                : "PUBLIC");
+
+      return {
+        preset: fallbackPreset,
+        minCustomerTier: media.minCustomerTier || "",
+        targetUserIdsInput: media.targetUserIds.join(", "),
+      };
+    },
+    [roleVisibilityOptions],
   );
   const showAuthenticityUrl = role === "admin";
   const authenticityUrl = useMemo(() => {
@@ -1465,6 +1508,32 @@ export default function ProductEditPage() {
     });
   }, [roleMediaFiles, roleVisibilityOptions, roleVisibilityPreset]);
 
+  useEffect(() => {
+    setExistingVisibilityByMediaId((prev) => {
+      let changed = false;
+      const next: Record<string, ExistingMediaVisibilityConfig> = {};
+
+      for (const media of existingMedia) {
+        const mediaKey = toMediaIdentifier(media);
+        const current = prev[mediaKey];
+
+        if (current) {
+          next[mediaKey] = current;
+          continue;
+        }
+
+        next[mediaKey] = createExistingMediaVisibilityDraft(media);
+        changed = true;
+      }
+
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [createExistingMediaVisibilityDraft, existingMedia]);
+
   const updateField = (field: keyof EditForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -1486,6 +1555,20 @@ export default function ProductEditPage() {
     setRoleVisibilityByFileId((prev) => ({
       ...prev,
       [fileId]: preset,
+    }));
+  };
+
+  const updateExistingMediaVisibility = (
+    media: ProductMedia,
+    patch: Partial<ExistingMediaVisibilityConfig>,
+  ) => {
+    const mediaKey = toMediaIdentifier(media);
+    setExistingVisibilityByMediaId((prev) => ({
+      ...prev,
+      [mediaKey]: {
+        ...(prev[mediaKey] || createExistingMediaVisibilityDraft(media)),
+        ...patch,
+      },
     }));
   };
 
@@ -1600,6 +1683,78 @@ export default function ProductEditPage() {
       setError(message);
     } finally {
       setDeletingMediaId(null);
+    }
+  };
+
+  const handleSaveExistingMediaVisibility = async (media: ProductMedia) => {
+    if (productVisibilityBlocked) {
+      setError(productVisibilityTooltip);
+      return;
+    }
+
+    const mediaId = media.mediaId || null;
+    if (!mediaId) {
+      setError("This media file is missing a saved media id and cannot be updated.");
+      return;
+    }
+
+    const mediaKey = toMediaIdentifier(media);
+    const config =
+      existingVisibilityByMediaId[mediaKey] || createExistingMediaVisibilityDraft(media);
+    const targetUserIds = parseTargetUserIdsInput(config.targetUserIdsInput);
+
+    if (config.preset === "USER_TIER" && !config.minCustomerTier) {
+      setError("Select a minimum customer tier before saving this media visibility.");
+      return;
+    }
+
+    if (config.preset === "TARGETED_USER" && targetUserIds.length === 0) {
+      setError("Choose at least one target customer before saving this media visibility.");
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setSavingExistingMediaId(mediaId);
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await updateAdminProductMediaVisibility({
+        accessToken,
+        productId,
+        mediaId,
+        visibilityPreset: config.preset,
+        ...(config.preset === "USER_TIER" && config.minCustomerTier
+          ? { minCustomerTier: config.minCustomerTier }
+          : {}),
+        ...(config.preset === "TARGETED_USER" ? { userIds: targetUserIds } : {}),
+      });
+
+      const updatedMedia = toProductMedia(response.media);
+      if (!updatedMedia) {
+        throw new Error("Updated media response was invalid.");
+      }
+
+      setExistingMedia((prev) =>
+        prev.map((row) =>
+          (row.mediaId || row.id) === mediaId || row.id === media.id ? updatedMedia : row,
+        ),
+      );
+      setExistingVisibilityByMediaId((prev) => {
+        const next = { ...prev };
+        delete next[mediaKey];
+        next[toMediaIdentifier(updatedMedia)] = createExistingMediaVisibilityDraft(updatedMedia);
+        return next;
+      });
+      setNotice(response.message || "Media visibility updated.");
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to update media visibility.";
+      setError(message);
+    } finally {
+      setSavingExistingMediaId(null);
     }
   };
 
@@ -2069,6 +2224,109 @@ export default function ProductEditPage() {
 
   const inputCls =
     "w-full px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors";
+
+  const renderExistingMediaVisibilityEditor = (media: ProductMedia) => {
+    const mediaKey = toMediaIdentifier(media);
+    const config =
+      existingVisibilityByMediaId[mediaKey] || createExistingMediaVisibilityDraft(media);
+    const visibilityOptions = existingMediaVisibilityOptions.includes(config.preset)
+      ? existingMediaVisibilityOptions
+      : [...existingMediaVisibilityOptions, config.preset];
+    const missingMediaId = !media.mediaId;
+    const isSavingVisibility = Boolean(media.mediaId && savingExistingMediaId === media.mediaId);
+    const disabled = isSavingVisibility || productVisibilityBlocked || missingMediaId;
+
+    return (
+      <div className="border-t border-gray-200 dark:border-gray-700/60 pt-2 space-y-3">
+        <div>
+          <label className="block text-[11px] text-gray-600 dark:text-gray-300 mb-1">
+            Visibility
+          </label>
+          <select
+            value={config.preset}
+            onChange={(event) =>
+              updateExistingMediaVisibility(media, {
+                preset: event.target.value as MediaVisibilityPreset,
+              })
+            }
+            disabled={disabled}
+            className={inputCls}
+          >
+            {visibilityOptions.map((preset) => (
+              <option key={`${mediaKey}-${preset}`} value={preset}>
+                {preset.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {config.preset === "USER_TIER" && (
+          <div>
+            <label className="block text-[11px] text-gray-600 dark:text-gray-300 mb-1">
+              Min Customer Tier
+            </label>
+            <select
+              value={config.minCustomerTier}
+              onChange={(event) =>
+                updateExistingMediaVisibility(media, {
+                  minCustomerTier: event.target.value as CustomerTier | "",
+                })
+              }
+              disabled={disabled}
+              className={inputCls}
+            >
+              <option value="">Select tier</option>
+              {MEDIA_CUSTOMER_TIER_OPTIONS.map((tier) => (
+                <option key={`${mediaKey}-${tier}`} value={tier}>
+                  {tier}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {config.preset === "TARGETED_USER" && (
+          <AdminCustomerPicker
+            selectedIds={parseTargetUserIdsInput(config.targetUserIdsInput)}
+            onChange={(nextIds) =>
+              updateExistingMediaVisibility(media, {
+                targetUserIdsInput: nextIds.join(", "),
+              })
+            }
+            getAccessToken={getAccessToken}
+            disabled={disabled}
+            label="Target User IDs"
+            helperText="Choose customers who can view this existing media file."
+          />
+        )}
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              void handleSaveExistingMediaVisibility(media);
+            }}
+            disabled={disabled}
+            title={productVisibilityBlocked ? productVisibilityTooltip : undefined}
+            className="rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSavingVisibility ? "Saving..." : "Save Visibility"}
+          </button>
+          <p
+            className={`text-[11px] ${
+              missingMediaId
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            {missingMediaId
+              ? "This row cannot be updated because its stored media id is missing."
+              : "Visibility updates save immediately for this file."}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -2968,6 +3226,7 @@ export default function ProductEditPage() {
                     key={media.id}
                     media={media}
                     deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
+                    footer={renderExistingMediaVisibilityEditor(media)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}
@@ -2989,6 +3248,7 @@ export default function ProductEditPage() {
                     key={media.id}
                     media={media}
                     deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
+                    footer={renderExistingMediaVisibilityEditor(media)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}
@@ -3215,6 +3475,7 @@ export default function ProductEditPage() {
                     key={media.id}
                     media={media}
                     deleting={productEditBlocked || deletingMediaId === (media.mediaId || media.id)}
+                    footer={renderExistingMediaVisibilityEditor(media)}
                     onDelete={(target) => {
                       void handleDeleteExistingMedia(target);
                     }}

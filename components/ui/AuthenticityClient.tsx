@@ -12,6 +12,7 @@ import {
   type UserMeResponse,
 } from "@/lib/apiClient";
 import { buildAuthRouteWithReturnTo } from "@/lib/authRedirect";
+import { isVisibleOnAuthenticityPage } from "@/lib/mediaVisibility";
 import { completePendingSetupForSession, isAuthBlockedError } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
@@ -317,6 +318,7 @@ const AuthenticityClientComponent = ({
       tier: record.product.tier,
       status: record.product.status || "PENDING",
       media: record.product.media
+        .filter((item) => isVisibleOnAuthenticityPage(item))
         .filter((item) => item.url)
         .map((item, index) => ({
           id: item.id,

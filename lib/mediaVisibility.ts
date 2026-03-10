@@ -116,3 +116,51 @@ export const deriveVisibilityPresetFromMedia = ({
 
   return null;
 };
+
+type PublicFacingMedia = {
+  visibilityPreset?: string | null;
+  audience?: string | null;
+  visibilitySections?: string[] | null;
+  allowedRoles?: string[] | null;
+  minCustomerTier?: string | null;
+  targetUsers?: Array<{ userId?: string | null }> | null;
+};
+
+export const isPublicFacingMedia = (media: PublicFacingMedia | null | undefined) => {
+  if (!media) {
+    return false;
+  }
+
+  const preset = deriveVisibilityPresetFromMedia(media);
+  if (preset) {
+    return isPublicVisibilityPreset(preset);
+  }
+
+  const normalizedAudience = String(media.audience || "").trim().toUpperCase();
+  if (normalizedAudience) {
+    return normalizedAudience !== "ROLE_BASED" && normalizedAudience !== "ADMIN_ONLY";
+  }
+
+  const allowedRoles = Array.isArray(media.allowedRoles) ? media.allowedRoles : [];
+  return allowedRoles.length === 0;
+};
+
+export const isVisibleOnPublicProductPage = (
+  media: PublicFacingMedia | null | undefined,
+) => {
+  if (!isPublicFacingMedia(media)) {
+    return false;
+  }
+
+  const visibilitySections = Array.isArray(media?.visibilitySections)
+    ? media.visibilitySections
+    : [];
+
+  return visibilitySections.some(
+    (section) => String(section || "").trim().toUpperCase() === "PRODUCT_PAGE",
+  );
+};
+
+export const isVisibleOnAuthenticityPage = (
+  media: PublicFacingMedia | null | undefined,
+) => isPublicFacingMedia(media);

@@ -32,8 +32,21 @@ interface MediaUploaderProps {
 
 const ACCEPT_BY_TYPE: Record<MediaFileType, string> = {
   IMAGE: "image/*",
-  VIDEO: "video/*",
+  VIDEO: "video/*,video/quicktime,.mov,.qt",
   PDF: "application/pdf",
+};
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  qt: "video/quicktime",
+  pdf: "application/pdf",
 };
 
 const buildAcceptString = (allowedTypes?: MediaFileType[]) => {
@@ -68,6 +81,20 @@ const resolveType = (mime: string): MediaFileType | null => {
   }
 
   return null;
+};
+
+const resolveMimeType = (file: Pick<File, "name" | "type">) => {
+  const normalized = file.type.trim().toLowerCase();
+  if (normalized) {
+    return normalized;
+  }
+
+  const extensionMatch = /\.([a-z0-9]+)$/i.exec(file.name);
+  if (!extensionMatch) {
+    return "";
+  }
+
+  return MIME_BY_EXTENSION[extensionMatch[1].toLowerCase()] || "";
 };
 
 const uid = () =>
@@ -189,7 +216,8 @@ export default function MediaUploader({
           break;
         }
 
-        const type = resolveType(file.type);
+        const mimeType = resolveMimeType(file);
+        const type = resolveType(mimeType);
         if (!type) {
           setError(
             `"${file.name}" is not supported. Upload images, videos, or PDFs.`,
@@ -316,7 +344,8 @@ export default function MediaUploader({
           {helperText || (
             <>
               Images (image/*) &bull; Videos (video/*) &bull; PDF (application/pdf)
-              &mdash; Images/PDF up to {maxSizeMB} MB each, videos up to {maxVideoSizeMB} MB
+              {" "}
+              including .MOV &mdash; Images/PDF up to {maxSizeMB} MB each, videos up to {maxVideoSizeMB} MB
             </>
           )}
         </p>

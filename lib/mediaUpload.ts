@@ -34,8 +34,36 @@ const resolveMediaType = (mimeType: string): "IMAGE" | "VIDEO" | "PDF" | null =>
   return null;
 };
 
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  qt: "video/quicktime",
+  pdf: "application/pdf",
+};
+
+const resolveFileMimeType = (file: Pick<File, "name" | "type">) => {
+  const normalized = file.type.trim().toLowerCase();
+  if (normalized) {
+    return normalized;
+  }
+
+  const extensionMatch = /\.([a-z0-9]+)$/i.exec(file.name);
+  if (!extensionMatch) {
+    return "";
+  }
+
+  return MIME_BY_EXTENSION[extensionMatch[1].toLowerCase()] || "";
+};
+
 export const validateMediaFileForUpload = (file: File): string | null => {
-  const mediaType = resolveMediaType(file.type);
+  const mimeType = resolveFileMimeType(file);
+  const mediaType = resolveMediaType(mimeType);
 
   if (!mediaType) {
     return `"${file.name}" has an unsupported file type. Only image/*, video/*, and application/pdf are allowed.`;
@@ -85,7 +113,7 @@ export const uploadSingleMediaFile = async ({
     throw new Error(validationError);
   }
 
-  const mimeType = file.type;
+  const mimeType = resolveFileMimeType(file);
   const sizeBytes = file.size;
   const mediaType = resolveMediaType(mimeType);
 
