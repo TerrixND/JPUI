@@ -36,7 +36,8 @@ const formatDateTime = (value: string | null) => {
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "USD",
+  currency: "THB",
+  currencyDisplay: "code",
   maximumFractionDigits: 0,
 });
 

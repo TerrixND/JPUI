@@ -15,6 +15,7 @@ import {
   formatManagerDateTime,
   getManagerProductLabel,
   getManagerProductPreviewUrl,
+  managerMoney,
   managerStatusBadge,
 } from "@/lib/managerDashboardUi";
 
@@ -223,7 +224,7 @@ export default function ManagerInventoryPage() {
                         Sale Min
                       </p>
                       <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
-                        {product.saleRangeMin ?? "-"}
+                        {product.saleRangeMin !== null ? managerMoney.format(product.saleRangeMin) : "-"}
                       </p>
                     </div>
                     <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-800/40">
@@ -231,7 +232,7 @@ export default function ManagerInventoryPage() {
                         Sale Max
                       </p>
                       <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
-                        {product.saleRangeMax ?? "-"}
+                        {product.saleRangeMax !== null ? managerMoney.format(product.saleRangeMax) : "-"}
                       </p>
                     </div>
                   </div>

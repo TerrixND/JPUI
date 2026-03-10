@@ -100,7 +100,8 @@ type AuthCardActionModalState = {
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "USD",
+  currency: "THB",
+  currencyDisplay: "code",
   maximumFractionDigits: 2,
 });
 

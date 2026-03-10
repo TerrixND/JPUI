@@ -16,6 +16,7 @@ import {
 import {
   formatManagerDateTime,
   getManagerProductLabel,
+  managerMoney,
   managerStatusBadge,
 } from "@/lib/managerDashboardUi";
 
@@ -290,7 +291,9 @@ export default function ManagerProductDetailPage() {
                     Sale Range
                   </p>
                   <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {product.saleRangeMin ?? "-"} to {product.saleRangeMax ?? "-"}
+                    {product.saleRangeMin !== null ? managerMoney.format(product.saleRangeMin) : "-"}
+                    {" to "}
+                    {product.saleRangeMax !== null ? managerMoney.format(product.saleRangeMax) : "-"}
                   </p>
                 </div>
                 <div className="rounded-xl bg-gray-50 px-4 py-3 dark:bg-gray-800/40">

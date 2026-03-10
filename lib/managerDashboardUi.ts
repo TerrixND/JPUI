@@ -15,7 +15,8 @@ export const formatManagerDateTime = (value: string | null | undefined) => {
 
 export const managerMoney = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "USD",
+  currency: "THB",
+  currencyDisplay: "code",
   maximumFractionDigits: 0,
 });
 

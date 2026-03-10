@@ -3,13 +3,13 @@
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 
 const possessions = [
-  { id: "pos-01", product: "Widget Pro",       serial: "WP-2026-0042", assignedDate: "Feb 15, 2026", appointment: "APT-310", status: "IN_HAND",  value: "$129.99" },
-  { id: "pos-02", product: "Widget Pro Max",   serial: "WPM-2026-018", assignedDate: "Feb 12, 2026", appointment: "APT-306", status: "IN_HAND",  value: "$249.99" },
-  { id: "pos-03", product: "Gadget X",         serial: "GX-2026-0125", assignedDate: "Feb 10, 2026", appointment: "APT-303", status: "SOLD",     value: "$49.99" },
-  { id: "pos-04", product: "Smart Sensor",     serial: "SS-2026-0089", assignedDate: "Feb 08, 2026", appointment: "APT-298", status: "RETURNED", value: "$89.00" },
-  { id: "pos-05", product: "Flex Cable",       serial: "FC-2026-0201", assignedDate: "Feb 18, 2026", appointment: "APT-312", status: "IN_HAND",  value: "$12.50" },
-  { id: "pos-06", product: "Widget Pro",       serial: "WP-2026-0043", assignedDate: "Feb 14, 2026", appointment: "APT-308", status: "SOLD",     value: "$129.99" },
-  { id: "pos-07", product: "Turbo Charger",    serial: "TC-2026-0067", assignedDate: "Feb 06, 2026", appointment: "APT-295", status: "SOLD",     value: "$34.99" },
+  { id: "pos-01", product: "Widget Pro",       serial: "WP-2026-0042", assignedDate: "Feb 15, 2026", appointment: "APT-310", status: "IN_HAND",  value: "THB 129.99" },
+  { id: "pos-02", product: "Widget Pro Max",   serial: "WPM-2026-018", assignedDate: "Feb 12, 2026", appointment: "APT-306", status: "IN_HAND",  value: "THB 249.99" },
+  { id: "pos-03", product: "Gadget X",         serial: "GX-2026-0125", assignedDate: "Feb 10, 2026", appointment: "APT-303", status: "SOLD",     value: "THB 49.99" },
+  { id: "pos-04", product: "Smart Sensor",     serial: "SS-2026-0089", assignedDate: "Feb 08, 2026", appointment: "APT-298", status: "RETURNED", value: "THB 89.00" },
+  { id: "pos-05", product: "Flex Cable",       serial: "FC-2026-0201", assignedDate: "Feb 18, 2026", appointment: "APT-312", status: "IN_HAND",  value: "THB 12.50" },
+  { id: "pos-06", product: "Widget Pro",       serial: "WP-2026-0043", assignedDate: "Feb 14, 2026", appointment: "APT-308", status: "SOLD",     value: "THB 129.99" },
+  { id: "pos-07", product: "Turbo Charger",    serial: "TC-2026-0067", assignedDate: "Feb 06, 2026", appointment: "APT-295", status: "SOLD",     value: "THB 34.99" },
 ];
 
 function statusStyle(status: string) {

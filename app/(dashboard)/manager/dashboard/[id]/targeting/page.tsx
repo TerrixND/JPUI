@@ -24,6 +24,7 @@ import {
   type ManagerProductSummary,
   type ManagerProductVisibility,
 } from "@/lib/managerApi";
+import { managerMoney } from "@/lib/managerDashboardUi";
 
 const getErrorMessage = (value: unknown) =>
   value instanceof Error ? value.message : "Unexpected error.";
@@ -685,7 +686,10 @@ export default function ManagerTargeting() {
                           </p>
                           {(product.saleRangeMin !== null || product.saleRangeMax !== null) && (
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              Sale range: {product.saleRangeMin ?? "-"} - {product.saleRangeMax ?? "-"}
+                              Sale range:{" "}
+                              {product.saleRangeMin !== null ? managerMoney.format(product.saleRangeMin) : "-"}
+                              {" - "}
+                              {product.saleRangeMax !== null ? managerMoney.format(product.saleRangeMax) : "-"}
                             </p>
                           )}
                         </div>

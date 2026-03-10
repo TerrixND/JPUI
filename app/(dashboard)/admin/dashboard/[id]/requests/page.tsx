@@ -24,6 +24,18 @@ import {
   formatDateTime,
 } from "@/lib/adminUiHelpers";
 
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "THB",
+  currencyDisplay: "code",
+  maximumFractionDigits: 2,
+});
+
+const formatMoney = (value: number | null | undefined) =>
+  value !== null && value !== undefined && Number.isFinite(value)
+    ? money.format(value)
+    : "-";
+
 type ApprovalDecisionDraft = {
   decisionNote: string;
   enableAutoApproveForFuture: boolean;
@@ -725,7 +737,7 @@ export default function AdminRequestsPage() {
                             {product.name || product.sku || product.id}
                           </p>
                           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Sale range: {product.saleRangeMin ?? "-"} to {product.saleRangeMax ?? "-"}
+                            Sale range: {formatMoney(product.saleRangeMin)} to {formatMoney(product.saleRangeMax)}
                           </p>
                           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             Cooldown: {product.requestControl?.cooldownMinutes ?? 60} min

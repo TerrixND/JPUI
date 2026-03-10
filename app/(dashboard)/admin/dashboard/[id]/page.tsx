@@ -27,7 +27,8 @@ const BRANCH_ANALYTICS_REQUEST_ROWS = 10;
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "USD",
+  currency: "THB",
+  currencyDisplay: "code",
   maximumFractionDigits: 0,
 });
 

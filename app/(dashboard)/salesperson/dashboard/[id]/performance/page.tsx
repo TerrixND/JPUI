@@ -6,7 +6,7 @@ import StatCard from "@/components/ui/dashboard/StatCard";
 const performanceStats = [
   {
     label: "Total Sales",
-    value: "$31,200",
+    value: "THB 31,200",
     change: "+12.8%",
     up: true,
     accent: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
@@ -40,8 +40,8 @@ const performanceStats = [
   },
   {
     label: "Commission Earned",
-    value: "$2,496",
-    change: "+$310",
+    value: "THB 2,496",
+    change: "+THB 310",
     up: true,
     accent: "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400",
     icon: (
@@ -53,20 +53,20 @@ const performanceStats = [
 ];
 
 const monthlySales = [
-  { month: "Sep 2025", sales: "$4,200",  appointments: 8,  commission: "$336" },
-  { month: "Oct 2025", sales: "$5,100",  appointments: 10, commission: "$408" },
-  { month: "Nov 2025", sales: "$3,800",  appointments: 7,  commission: "$304" },
-  { month: "Dec 2025", sales: "$6,200",  appointments: 12, commission: "$496" },
-  { month: "Jan 2026", sales: "$5,700",  appointments: 11, commission: "$456" },
-  { month: "Feb 2026", sales: "$6,200",  appointments: 13, commission: "$496" },
+  { month: "Sep 2025", sales: "THB 4,200", appointments: 8,  commission: "THB 336" },
+  { month: "Oct 2025", sales: "THB 5,100", appointments: 10, commission: "THB 408" },
+  { month: "Nov 2025", sales: "THB 3,800", appointments: 7,  commission: "THB 304" },
+  { month: "Dec 2025", sales: "THB 6,200", appointments: 12, commission: "THB 496" },
+  { month: "Jan 2026", sales: "THB 5,700", appointments: 11, commission: "THB 456" },
+  { month: "Feb 2026", sales: "THB 6,200", appointments: 13, commission: "THB 496" },
 ];
 
 const topProducts = [
-  { name: "Widget Pro Max", unitsSold: 8, revenue: "$1,999.92" },
-  { name: "Widget Pro",     unitsSold: 12, revenue: "$1,559.88" },
-  { name: "Gadget X",       unitsSold: 15, revenue: "$749.85" },
-  { name: "Turbo Charger",  unitsSold: 6, revenue: "$209.94" },
-  { name: "Flex Cable",     unitsSold: 20, revenue: "$250.00" },
+  { name: "Widget Pro Max", unitsSold: 8, revenue: "THB 1,999.92" },
+  { name: "Widget Pro",     unitsSold: 12, revenue: "THB 1,559.88" },
+  { name: "Gadget X",       unitsSold: 15, revenue: "THB 749.85" },
+  { name: "Turbo Charger",  unitsSold: 6, revenue: "THB 209.94" },
+  { name: "Flex Cable",     unitsSold: 20, revenue: "THB 250.00" },
 ];
 
 const rankColors = [
@@ -114,8 +114,8 @@ export default function SalespersonPerformance() {
               </thead>
               <tbody>
                 {monthlySales.map((m, i) => {
-                  const prev = i > 0 ? parseFloat(monthlySales[i - 1].sales.replace(/[$,]/g, "")) : 0;
-                  const curr = parseFloat(m.sales.replace(/[$,]/g, ""));
+                  const prev = i > 0 ? parseFloat(monthlySales[i - 1].sales.replace(/[^0-9.]/g, "")) : 0;
+                  const curr = parseFloat(m.sales.replace(/[^0-9.]/g, ""));
                   const up = i === 0 || curr >= prev;
                   return (
                     <tr key={m.month} className="border-b border-gray-50 dark:border-gray-700/40 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
@@ -138,8 +138,8 @@ export default function SalespersonPerformance() {
           {/* Mobile cards */}
           <div className="sm:hidden p-4 space-y-3">
             {monthlySales.map((m, i) => {
-              const prev = i > 0 ? parseFloat(monthlySales[i - 1].sales.replace(/[$,]/g, "")) : 0;
-              const curr = parseFloat(m.sales.replace(/[$,]/g, ""));
+              const prev = i > 0 ? parseFloat(monthlySales[i - 1].sales.replace(/[^0-9.]/g, "")) : 0;
+              const curr = parseFloat(m.sales.replace(/[^0-9.]/g, ""));
               const up = i === 0 || curr >= prev;
               return (
                 <div key={m.month} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">

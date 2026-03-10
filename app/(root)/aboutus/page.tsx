@@ -79,7 +79,7 @@ export default function AboutUs() {
     {
       year: "2022",
       event:
-        "Introduced a blockchain-based provenance ledger for all pieces valued above USD 10,000. Certificate QR codes link to on-chain records.",
+        "Introduced a blockchain-based provenance ledger for all pieces valued above THB 10,000. Certificate QR codes link to on-chain records.",
     },
     {
       year: "2024",
@@ -290,7 +290,7 @@ export default function AboutUs() {
               {
                 name: "Blockchain Provenance Ledger",
                 detail:
-                  "Pieces valued above USD 10,000 are recorded on an immutable distributed ledger. Certificate QR codes link directly to on-chain provenance records. Launched 2022.",
+                  "Pieces valued above THB 10,000 are recorded on an immutable distributed ledger. Certificate QR codes link directly to on-chain provenance records. Launched 2022.",
               },
               {
                 name: "Hpakant Responsible Sourcing Accord",

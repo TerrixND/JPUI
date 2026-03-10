@@ -13,7 +13,7 @@ const upcomingAppointments = [
 const recentActivity = [
   { text: "Appointment APT-308 completed",       time: "1 hour ago",  dot: "bg-green-500" },
   { text: "New appointment APT-315 assigned",     time: "2 hours ago", dot: "bg-blue-500" },
-  { text: "Commission $156 earned on APT-306",   time: "Yesterday",   dot: "bg-purple-500" },
+  { text: "Commission THB 156 earned on APT-306", time: "Yesterday",   dot: "bg-purple-500" },
   { text: "Product Widget Pro Max received",      time: "Yesterday",   dot: "bg-amber-500" },
   { text: "Customer rating: 4.8/5 for APT-305",  time: "2 days ago",  dot: "bg-pink-500" },
 ];
@@ -56,7 +56,7 @@ export default function SalespersonDashboard() {
     },
     {
       label: "Total Sales",
-      value: "$31,200",
+      value: "THB 31,200",
       change: "+12.8%",
       up: true,
       accent: "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400",
@@ -69,8 +69,8 @@ export default function SalespersonDashboard() {
     },
     {
       label: "Commission Earned",
-      value: "$2,496",
-      change: "+$310 this month",
+      value: "THB 2,496",
+      change: "+THB 310 this month",
       up: true,
       accent: "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400",
       href: `${dashboardBasePath}/performance`,
