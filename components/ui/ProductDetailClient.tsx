@@ -336,9 +336,11 @@ type Tab = "details" | "ownership" | "certificate";
 export default function ProductDetailClientComponent({
   product,
   showActions = true,
+  adminEditHref = null,
 }: {
   product: Product;
   showActions?: boolean;
+  adminEditHref?: string | null;
 }) {
   const mediaItems = useMemo(
     () => (Array.isArray(product.media) ? product.media : []),
@@ -624,9 +626,19 @@ export default function ProductDetailClientComponent({
 
           {/* ── Info ── */}
           <div className="space-y-8">
-            <h2 className="text-4xl font-md leading-tight text-stone-800">
-              {product.name}
-            </h2>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <h2 className="text-4xl font-md leading-tight text-stone-800">
+                {product.name}
+              </h2>
+              {adminEditHref ? (
+                <Link
+                  href={adminEditHref}
+                  className="inline-flex items-center justify-center rounded-full border border-emerald-600 bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 hover:border-emerald-700"
+                >
+                  Edit Product
+                </Link>
+              ) : null}
+            </div>
 
             <div className="bg-stone-50 border border-stone-200 rounded-xl p-6">
               <p className="text-xs tracking-[0.2em] uppercase text-stone-500 mb-5 font-sans font-medium">

@@ -4,9 +4,12 @@ import ProductDetailClientComponent from "@/components/ui/ProductDetailClient";
 import {
   ApiClientError,
   getPublicProductDetail,
+  getUserMe,
   type PublicProductRecord,
 } from "@/lib/apiClient";
 import { isVisibleOnPublicProductPage } from "@/lib/mediaVisibility";
+import { getDashboardBasePath, mapBackendRoleToDashboardRole } from "@/lib/roleChecker";
+import supabase from "@/lib/supabase";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ComponentProps } from "react";
@@ -76,6 +79,7 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<ProductDetailModel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [adminEditHref, setAdminEditHref] = useState<string | null>(null);
 
   useEffect(() => {
     let isDisposed = false;
@@ -127,6 +131,62 @@ export default function ProductDetailPage() {
     };
   }, [productId]);
 
+  useEffect(() => {
+    let isDisposed = false;
+
+    const loadAdminEditHref = async () => {
+      if (!productId) {
+        if (!isDisposed) {
+          setAdminEditHref(null);
+        }
+        return;
+      }
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session?.access_token) {
+          if (!isDisposed) {
+            setAdminEditHref(null);
+          }
+          return;
+        }
+
+        const me = await getUserMe({
+          accessToken: session.access_token,
+        });
+        const dashboardRole = mapBackendRoleToDashboardRole(me.role);
+        const userId = me.id || "";
+        const isAdminViewer =
+          dashboardRole === "admin" &&
+          Boolean(userId) &&
+          me.status === "ACTIVE" &&
+          me.isSetup;
+
+        if (!isDisposed) {
+          setAdminEditHref(
+            isAdminViewer
+              ? `${getDashboardBasePath("admin", userId)}/products/${productId}`
+              : null,
+          );
+        }
+      } catch {
+        if (!isDisposed) {
+          setAdminEditHref(null);
+        }
+      }
+    };
+
+    void loadAdminEditHref();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [productId]);
+
   if (isLoading) {
     return (
       <div className="w-full bg-white py-24 px-6 sm:px-12 lg:px-20 text-stone-500">
@@ -152,5 +212,10 @@ export default function ProductDetailPage() {
     );
   }
 
-  return <ProductDetailClientComponent product={product} />;
+  return (
+    <ProductDetailClientComponent
+      product={product}
+      adminEditHref={adminEditHref}
+    />
+  );
 }
