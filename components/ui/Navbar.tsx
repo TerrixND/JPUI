@@ -4,6 +4,7 @@ import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useAuth from "@/hooks/useAuth";
+import { useCart } from "@/hooks/useCart";
 import { usePathname } from "next/navigation";
 import supabase from "@/lib/supabase";
 import { getUserMe } from "@/lib/apiClient";
@@ -20,7 +21,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
-  const totalQuantity = 0; // TODO: connect to real cart state
+  const { count: totalQuantity } = useCart();
   const [isScrolled, setIsScrolled] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
 
@@ -234,21 +235,17 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
         {/* Icons + Hamburger */}
         <div className="flex gap-10 items-center">
-          {totalQuantity > 0 && (
-            <Link href="/cart" className="relative cursor-pointer">
-              <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
+          <Link href="/cart" className="relative cursor-pointer" aria-label="Open appointment cart">
+            <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
+            {totalQuantity > 0 ? (
               <span className="absolute -top-2 -right-3 bg-black text-white text-[10px] px-1.5 py-0.5 rounded-full">
                 {totalQuantity}
               </span>
-            </Link>
-          )}
+            ) : null}
+          </Link>
 
           {isLoggedIn ? (
             <div className="hidden md:flex gap-6 items-center">
-              <Link href="/cart" className="hidden md:block">
-                <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
-              </Link>
-
               <Link href="/profile" className="hidden md:block">
                 <User className={`w-5 h-5 ${iconColor}`} />
               </Link>

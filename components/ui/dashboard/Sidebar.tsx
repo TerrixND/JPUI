@@ -22,6 +22,7 @@ const adminNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Products", pathSuffix: "products", icon: "box" },
   { label: "Users", pathSuffix: "users", icon: "users" },
+  { label: "Staff Map", pathSuffix: "staff-map", icon: "map" },
   { label: "Branch Network", pathSuffix: "branches", icon: "building" },
   { label: "Inventory", pathSuffix: "inventory", icon: "clipboard" },
   { label: "Requests", pathSuffix: "requests", icon: "inbox", showRequestDot: true },
@@ -148,6 +149,17 @@ function NavIcon({ icon }: { icon: string }) {
           />
         </svg>
       );
+    case "map":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 6.75 3.75 4.5v12.75L9 19.5m0-12.75L15 4.5m-6 2.25v12.75m6-15 5.25 2.25v12.75L15 17.25m0-12.75v12.75"
+          />
+        </svg>
+      );
     case "shield":
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,6 +243,7 @@ export default function Sidebar({
     role,
     isMainAdmin,
     isBranchAdmin,
+    canViewStaffMap,
     email,
     displayName,
     dashboardBasePath,
@@ -244,6 +257,10 @@ export default function Sidebar({
         ? { ...baseRoleMeta, label: "Branch Admin" }
         : baseRoleMeta;
   const normalizedPathname = normalizePath(pathname);
+  const navItems =
+    role === "admin"
+      ? adminNav.filter((item) => item.pathSuffix !== "staff-map" || canViewStaffMap)
+      : navByRole[role];
 
   const loadPendingRequests = useCallback(async () => {
     if (role !== "admin" && role !== "manager") {
@@ -366,7 +383,7 @@ export default function Sidebar({
         </div>
 
         <nav className="flex-1 px-4 py-3 space-y-0.5 overflow-y-auto">
-          {navByRole[role].map((item) => {
+          {navItems.map((item) => {
             const href = buildHref(dashboardBasePath, item.pathSuffix);
             const normalizedHref = normalizePath(href);
             const isActive =

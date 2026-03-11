@@ -1,5 +1,7 @@
 "use client";
 
+import GoogleLocationAutocomplete from "@/components/ui/location/GoogleLocationAutocomplete";
+import LocationMapDialog from "@/components/ui/location/LocationMapDialog";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -19,10 +21,18 @@ import {
   updateUserMeProfile,
   verifyUserAccountDeletionOtpChallenge,
 } from "@/lib/apiClient";
+import {
+  buildLocationLabel,
+  createLocationSelectionFromValues,
+  normalizeExactLocationRecord,
+  type GoogleLocationSelection,
+} from "@/lib/googleMaps";
 import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 
 type Profile = {
+  role: string;
+  isMainAdmin: boolean;
   name: string;
   tierCode: CustomerTier | null;
   tierLabel: string;
@@ -30,9 +40,12 @@ type Profile = {
   authProvider: string;
   email: string;
   phone: string;
-  location: string;
+  city: string;
+  country: string;
+  timezone: string;
   lineId: string;
   language: string;
+  exactLocation: GoogleLocationSelection | null;
   lineUserId: string;
   lineDisplayName: string;
   linePictureUrl: string;
@@ -44,6 +57,8 @@ type Profile = {
 };
 
 const EMPTY_PROFILE: Profile = {
+  role: "",
+  isMainAdmin: false,
   name: "",
   tierCode: null,
   tierLabel: "N/A",
@@ -51,9 +66,12 @@ const EMPTY_PROFILE: Profile = {
   authProvider: "SUPABASE",
   email: "",
   phone: "",
-  location: "",
+  city: "",
+  country: "",
+  timezone: "",
   lineId: "",
   language: "English",
+  exactLocation: null,
   lineUserId: "",
   lineDisplayName: "",
   linePictureUrl: "",
@@ -140,6 +158,8 @@ const LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL = "https://line.me/R/ti/p/%40404isuyx
 const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
 
 const mapUserToProfile = (me: UserMeResponse): Profile => ({
+  role: (me.role || "").toUpperCase(),
+  isMainAdmin: me.isMainAdmin === true,
   name: me.displayName || "",
   tierCode: me.customerTier,
   tierLabel: resolveTierLabel(me.customerTier),
@@ -147,9 +167,12 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   authProvider: (me.authProvider || "SUPABASE").toUpperCase(),
   email: me.email || "",
   phone: me.phone || "",
-  location: me.city || "",
+  city: me.city || "",
+  country: me.country || "",
+  timezone: me.timezone || "",
   lineId: me.lineId || "",
   language: me.preferredLanguage || "English",
+  exactLocation: normalizeExactLocationRecord(me.exactGeoLocation),
   lineUserId: me.lineUserId || "",
   lineDisplayName: me.lineDisplayName || "",
   linePictureUrl: me.linePictureUrl || "",
@@ -164,7 +187,6 @@ type ProfileTextField =
   | "name"
   | "email"
   | "phone"
-  | "location"
   | "lineId"
   | "language"
   | "lineUserId"
@@ -184,6 +206,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isConnectingLine, setIsConnectingLine] = useState(false);
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteOtpMethod, setDeleteOtpMethod] = useState<UserAccountDeletionOtpMethod>("EMAIL");
   const [deleteOtpChallengeId, setDeleteOtpChallengeId] = useState("");
@@ -472,6 +495,23 @@ export default function ProfilePage() {
     setProfile((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleCustomerLocationChange = (selection: GoogleLocationSelection | null) => {
+    setProfile((prev) => ({
+      ...prev,
+      city: selection?.city || "",
+      country: selection?.country || "",
+      timezone: selection ? selection.timezone || prev.timezone : "",
+    }));
+  };
+
+  const handleExactLocationChange = (selection: GoogleLocationSelection | null) => {
+    setProfile((prev) => ({
+      ...prev,
+      exactLocation: selection,
+      timezone: selection ? selection.timezone || prev.timezone : prev.timezone,
+    }));
+  };
+
   const handleToggle = (
     key: "emailNotificationsEnabled" | "lineNotificationsEnabled" | "lineLoginEnabled",
     value: boolean,
@@ -694,7 +734,24 @@ export default function ProfilePage() {
           phone: profile.phone || null,
           lineId: profile.lineId || null,
           preferredLanguage: isCustomerProfile ? profile.language || null : undefined,
-          city: isCustomerProfile ? profile.location || null : undefined,
+          city: isCustomerProfile ? profile.city || null : undefined,
+          country: isCustomerProfile ? profile.country || null : undefined,
+          timezone: profile.timezone || null,
+          exactGeoLocation:
+            !isCustomerProfile && !profile.isMainAdmin
+              ? (profile.exactLocation
+                  ? {
+                      placeId: profile.exactLocation.placeId,
+                      formattedAddress: profile.exactLocation.formattedAddress,
+                      city: profile.exactLocation.city,
+                      country: profile.exactLocation.country,
+                      timezone: profile.exactLocation.timezone,
+                      latitude: profile.exactLocation.latitude,
+                      longitude: profile.exactLocation.longitude,
+                      label: profile.exactLocation.label,
+                    }
+                  : null)
+              : undefined,
           lineUserId: profile.lineUserId || null,
           lineDisplayName: profile.lineDisplayName || null,
           linePictureUrl: profile.linePictureUrl || null,
@@ -750,6 +807,16 @@ export default function ProfilePage() {
     deleteOtpAddOfficialUrl || LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL;
   const avatarSrc = profile.linePictureUrl || "/images/naruto.jpg";
   const isRemoteAvatar = /^https?:\/\//i.test(avatarSrc);
+  const locationLabel = buildLocationLabel({
+    city: profile.city,
+    country: profile.country,
+  });
+  const isStaffExactLocationEditable =
+    !isCustomerProfile &&
+    !profile.isMainAdmin &&
+    (profile.role === "ADMIN" || profile.role === "MANAGER" || profile.role === "SALES");
+  const canViewExactLocationMap =
+    profile.exactLocation?.latitude !== null && profile.exactLocation?.longitude !== null;
 
   /* ── Loading state ── */
   if (isLoadingProfile) {
@@ -829,7 +896,7 @@ export default function ProfilePage() {
             {[
               { icon: Mail, label: "Email", value: profile.email || "Not set" },
               { icon: Phone, label: "Phone", value: profile.phone || "Not set" },
-              { icon: MapPin, label: "Location", value: profile.location || "Not set" },
+              { icon: MapPin, label: "Location", value: locationLabel || "Not set" },
             ].map((item) => (
               <div
                 key={item.label}
@@ -923,14 +990,12 @@ export default function ProfilePage() {
                 ["name", "Full Name"],
                 ["email", "Email Address"],
                 ["phone", "Phone Number"],
-                ["location", "Location"],
                 ["lineId", "LINE ID"],
                 ["lineUserId", "LINE User ID"],
                 ["lineDisplayName", "LINE Display Name"],
               ] as [ProfileTextField, string][]
             ).map(([key, label]) => {
-              const isReadOnly =
-                key === "email" || !isEditing || (key === "location" && !isCustomerProfile);
+              const isReadOnly = key === "email" || !isEditing;
 
               return (
                 <div key={key} data-anim="field" data-profile-input-wrap className="relative">
@@ -987,6 +1052,77 @@ export default function ProfilePage() {
               />
             </div>
           </div>
+
+          {isCustomerProfile ? (
+            <div className="mt-8 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-medium text-neutral-900">Customer Location</h3>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    Update the city, country, and timezone stored on your account.
+                  </p>
+                </div>
+                {profile.timezone ? (
+                  <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                    {profile.timezone}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-5">
+                <GoogleLocationAutocomplete
+                  label="Location"
+                  value={
+                    profile.city || profile.country || profile.timezone
+                      ? createLocationSelectionFromValues({
+                          city: profile.city,
+                          country: profile.country,
+                          timezone: profile.timezone,
+                        })
+                      : null
+                  }
+                  onChange={handleCustomerLocationChange}
+                  disabled={!isEditing}
+                  helperText="Only city, country, and timezone are persisted for customers."
+                  mode="city"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {isStaffExactLocationEditable ? (
+            <div className="mt-8 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-medium text-neutral-900">Exact Staff Location</h3>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    Main admin can review this on the new staff map. Use current location to keep
+                    the map accurate.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLocationDialogOpen(true)}
+                  disabled={!canViewExactLocationMap}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-600 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  Location Button
+                </button>
+              </div>
+
+              <div className="mt-5">
+                <GoogleLocationAutocomplete
+                  label="Exact Location"
+                  value={profile.exactLocation}
+                  onChange={handleExactLocationChange}
+                  disabled={!isEditing}
+                  helperText="Stores precise coordinates, formatted address, and timezone for internal staff operations."
+                  mode="address"
+                />
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {/* ── LINE & Notifications ── */}
@@ -1171,6 +1307,25 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <LocationMapDialog
+        open={isLocationDialogOpen}
+        title={profile.name || "Staff Location"}
+        subtitle={profile.exactLocation?.label || "Current exact location on file."}
+        markers={
+          profile.exactLocation
+            ? [
+                {
+                  id: profile.lineUserId || profile.email || profile.name || "profile-location",
+                  title: profile.name || "Staff member",
+                  subtitle: profile.exactLocation.label,
+                  location: profile.exactLocation,
+                },
+              ]
+            : []
+        }
+        onClose={() => setIsLocationDialogOpen(false)}
+      />
 
       {/* ─── Delete Modal ─── */}
       {isDeleteModalOpen && (

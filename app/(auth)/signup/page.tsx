@@ -1,5 +1,6 @@
 "use client";
 
+import GoogleLocationAutocomplete from "@/components/ui/location/GoogleLocationAutocomplete";
 import InputBox from "@/components/ui/InputBox";
 import {
   ApiClientError,
@@ -8,6 +9,7 @@ import {
   isAccountAccessDeniedError,
   redirectToBlockedPage,
 } from "@/lib/apiClient";
+import { type GoogleLocationSelection } from "@/lib/googleMaps";
 import {
   bootstrapAdmin,
   clearPendingSetupPayload,
@@ -41,11 +43,12 @@ const SignupPage = () => {
   const loginHref = buildAuthRouteWithReturnTo("/login", returnTo);
 
   const [fullName, setFullName] = useState("");
-  const [city, setCity] = useState("");
   const [phNo, setPhNo] = useState("");
   const [lineID, setLineID] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedLocation, setSelectedLocation] =
+    useState<GoogleLocationSelection | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -75,7 +78,9 @@ const SignupPage = () => {
         phone: phNo.trim() || undefined,
         lineId: lineID.trim() || undefined,
         preferredLanguage: selected.code || undefined,
-        city: city.trim() || undefined,
+        city: selectedLocation?.city || undefined,
+        country: selectedLocation?.country || undefined,
+        timezone: selectedLocation?.timezone || undefined,
       };
 
       const precheckResult = await precheckSignup({
@@ -202,13 +207,30 @@ const SignupPage = () => {
             placeholder="Rain John"
             type="text"
           />
-          <InputBox
-            value={city}
-            onChange={(event) => setCity(event.target.value)}
-            label="City"
-            placeholder="Bangkok"
-            type="text"
-          />
+          <div className="md:col-span-2">
+            <GoogleLocationAutocomplete
+              label="City"
+              value={selectedLocation}
+              onChange={setSelectedLocation}
+              placeholder="Search your city"
+              helperText="Use Google Places or your current location. Jade Palace stores only city, country, and timezone for customer accounts."
+              mode="city"
+            />
+            {selectedLocation ? (
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                {selectedLocation.country ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+                    {selectedLocation.country}
+                  </span>
+                ) : null}
+                {selectedLocation.timezone ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+                    {selectedLocation.timezone}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <InputBox
             value={email}
             onChange={(event) => setEmail(event.target.value)}

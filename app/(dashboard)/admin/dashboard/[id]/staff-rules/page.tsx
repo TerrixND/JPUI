@@ -42,6 +42,7 @@ const ADMIN_CAPABILITY_OPTIONS: Array<{
   { key: "canManageStaffRules", label: "Manage staff rules" },
   { key: "canRestrictUsers", label: "Restrict users" },
   { key: "canBanUsers", label: "Ban users" },
+  { key: "canViewStaffMap", label: "Staff map" },
 ];
 
 const MANAGER_CAPABILITY_OPTIONS: Array<{
@@ -68,6 +69,7 @@ const DEFAULT_ADMIN_CAPABILITIES: StaffRuleAdminCapabilities = {
   canManageStaffRules: true,
   canRestrictUsers: true,
   canBanUsers: true,
+  canViewStaffMap: true,
 };
 
 const DEFAULT_MANAGER_CAPABILITIES: StaffRuleManagerCapabilities = {

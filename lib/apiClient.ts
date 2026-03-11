@@ -297,6 +297,7 @@ export type StaffRuleAdminCapabilities = {
   canManageStaffRules?: boolean;
   canRestrictUsers?: boolean;
   canBanUsers?: boolean;
+  canViewStaffMap?: boolean;
 };
 
 export type StaffRuleManagerCapabilities = {
@@ -492,6 +493,9 @@ export type UserMeResponse = {
   lineId: string | null;
   preferredLanguage: string | null;
   city: string | null;
+  country: string | null;
+  timezone: string | null;
+  exactGeoLocation: JsonRecord | null;
   customerTier: CustomerTier | null;
   isBranchAdmin: boolean;
   branchMemberships: AdminUserBranchMembership[];
@@ -506,6 +510,9 @@ export type UpdateUserMeProfilePayload = {
   lineId?: string | null;
   preferredLanguage?: string | null;
   city?: string | null;
+  country?: string | null;
+  timezone?: string | null;
+  exactGeoLocation?: JsonRecord | null;
   lineUserId?: string | null;
   lineDisplayName?: string | null;
   linePictureUrl?: string | null;
@@ -1228,6 +1235,114 @@ export type PublicProductRecord = {
 export type PublicProductsResponse = {
   items: PublicProductRecord[];
   raw: unknown;
+};
+
+export type PublicBranchRecord = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  city: string | null;
+  address: string | null;
+  status: string | null;
+  raw: JsonRecord;
+};
+
+export type AppointmentAutofillRecord = {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  lineId: string | null;
+  language: string | null;
+  city: string | null;
+  country: string | null;
+  timezone: string | null;
+  tier: CustomerTier | null;
+  raw: JsonRecord | null;
+};
+
+export type AppointmentAutofillResponse = {
+  canAutofill: boolean;
+  data: AppointmentAutofillRecord | null;
+  raw: unknown;
+};
+
+export type CustomerAppointmentItemRecord = {
+  id: string;
+  productId: string | null;
+  requestedSource: string | null;
+  fulfillmentStatus: string | null;
+  reservedAt: string | null;
+  product: {
+    id: string;
+    sku: string | null;
+    name: string | null;
+    color: string | null;
+    status: string | null;
+    tier: string | null;
+    media: PublicProductMediaRecord[];
+  } | null;
+  raw: JsonRecord;
+};
+
+export type CustomerAppointmentRecord = {
+  id: string;
+  branchId: string | null;
+  customerId: string | null;
+  customerType: string | null;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  lineId: string | null;
+  userEnteredCity: string | null;
+  language: string | null;
+  preferredContact: string | null;
+  status: string | null;
+  queuePriority: number | null;
+  queueReason: string | null;
+  appointmentDate: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  branch: PublicBranchRecord | null;
+  items: CustomerAppointmentItemRecord[];
+  raw: JsonRecord;
+};
+
+export type AdminStaffMapLocationRecord = {
+  id: string;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  isMainAdmin: boolean;
+  displayName: string | null;
+  phone: string | null;
+  lineId: string | null;
+  branchName: string | null;
+  city: string | null;
+  country: string | null;
+  timezone: string | null;
+  exactGeoLocation: JsonRecord | null;
+  raw: JsonRecord;
+};
+
+export type AdminStaffMapResponse = {
+  items: AdminStaffMapLocationRecord[];
+  total: number;
+  raw: unknown;
+};
+
+export type CreateAppointmentPayload = {
+  branchId: string;
+  appointmentDate: string;
+  productIds?: string[];
+  preferredContact?: "EMAIL" | "PHONE" | "LINE" | string | null;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  lineId?: string | null;
+  language?: string | null;
+  userEnteredCity?: string | null;
+  notes?: string | null;
 };
 
 export type AdminInventoryProfitAnalytics = {
@@ -2974,6 +3089,39 @@ const normalizeAdminActionResponse = (
   };
 };
 
+const normalizeAdminStaffMapLocation = (
+  value: unknown,
+): AdminStaffMapLocationRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: asNullableString(row.email),
+    role: asNullableString(row.role),
+    status: asNullableString(row.status),
+    isMainAdmin: row.isMainAdmin === true,
+    displayName: asNullableString(row.displayName),
+    phone: asNullableString(row.phone),
+    lineId: asNullableString(row.lineId),
+    branchName:
+      asNullableString(row.branchName) ??
+      asNullableString(asRecord(row.primaryBranch)?.name),
+    city: asNullableString(row.city),
+    country: asNullableString(row.country),
+    timezone: asNullableString(row.timezone),
+    exactGeoLocation: asRecord(row.exactGeoLocation),
+    raw: row,
+  };
+};
+
 const normalizeAdminEmailOtpChallenge = (value: unknown): AdminEmailOtpChallenge | null => {
   const row = asRecord(value);
   if (!row) {
@@ -3596,6 +3744,188 @@ const extractPublicProductRows = (payload: unknown): unknown[] => {
     if (Array.isArray(nestedData.products)) {
       return nestedData.products;
     }
+  }
+
+  return [];
+};
+
+const normalizePublicBranchRow = (value: unknown): PublicBranchRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    code: asNullableString(row.code),
+    name: asNullableString(row.name),
+    city: asNullableString(row.city),
+    address: asNullableString(row.address),
+    status: asNullableString(row.status),
+    raw: row,
+  };
+};
+
+const extractPublicBranchRows = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  if (Array.isArray(root.branches)) {
+    return root.branches;
+  }
+  if (Array.isArray(root.items)) {
+    return root.items;
+  }
+  if (Array.isArray(root.data)) {
+    return root.data;
+  }
+
+  const nestedData = asRecord(root.data);
+  if (nestedData?.branches && Array.isArray(nestedData.branches)) {
+    return nestedData.branches;
+  }
+
+  return [];
+};
+
+const normalizeAppointmentAutofillRecord = (
+  value: unknown,
+): AppointmentAutofillRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  return {
+    name: asNullableString(row.name),
+    email: asNullableString(row.email),
+    phone: asNullableString(row.phone),
+    lineId: asNullableString(row.lineId),
+    language: asNullableString(row.language),
+    city: asNullableString(row.city),
+    country: asNullableString(row.country),
+    timezone: asNullableString(row.timezone),
+    tier: normalizeCustomerTier(row.tier),
+    raw: row,
+  };
+};
+
+const normalizeCustomerAppointmentItem = (
+  value: unknown,
+): CustomerAppointmentItemRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const product = asRecord(row.product);
+
+  return {
+    id,
+    productId: asNullableString(row.productId),
+    requestedSource: asNullableString(row.requestedSource),
+    fulfillmentStatus: asNullableString(row.fulfillmentStatus),
+    reservedAt: asNullableString(row.reservedAt),
+    product: product
+      ? {
+          id: asString(product.id),
+          sku: asNullableString(product.sku),
+          name: asNullableString(product.name),
+          color: asNullableString(product.color),
+          status: asNullableString(product.status),
+          tier: asNullableString(product.tier),
+          media: Array.isArray(product.media)
+            ? product.media
+                .map((entry) => normalizePublicProductMedia(entry))
+                .filter((entry): entry is PublicProductMediaRecord => Boolean(entry))
+            : [],
+        }
+      : null,
+    raw: row,
+  };
+};
+
+const normalizeCustomerAppointment = (
+  value: unknown,
+): CustomerAppointmentRecord | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    branchId: asNullableString(row.branchId),
+    customerId: asNullableString(row.customerId),
+    customerType: asNullableString(row.customerType),
+    name: asNullableString(row.name),
+    email: asNullableString(row.email),
+    phone: asNullableString(row.phone),
+    lineId: asNullableString(row.lineId),
+    userEnteredCity: asNullableString(row.userEnteredCity),
+    language: asNullableString(row.language),
+    preferredContact: asNullableString(row.preferredContact),
+    status: asNullableString(row.status),
+    queuePriority: asFiniteNumberish(row.queuePriority),
+    queueReason: asNullableString(row.queueReason),
+    appointmentDate: asNullableString(row.appointmentDate),
+    notes: asNullableString(row.notes),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    branch: normalizePublicBranchRow(row.branch),
+    items: Array.isArray(row.items)
+      ? row.items
+          .map((entry) => normalizeCustomerAppointmentItem(entry))
+          .filter((entry): entry is CustomerAppointmentItemRecord => Boolean(entry))
+      : [],
+    raw: row,
+  };
+};
+
+const extractCustomerAppointmentRows = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  if (Array.isArray(root.items)) {
+    return root.items;
+  }
+  if (Array.isArray(root.appointments)) {
+    return root.appointments;
+  }
+  if (Array.isArray(root.data)) {
+    return root.data;
+  }
+
+  const nestedData = asRecord(root.data);
+  if (nestedData?.appointments && Array.isArray(nestedData.appointments)) {
+    return nestedData.appointments;
   }
 
   return [];
@@ -4670,6 +5000,110 @@ export const getPublicProductDetail = async ({
   return product;
 };
 
+export const getPublicBranches = async (): Promise<PublicBranchRecord[]> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/public/branches`,
+    method: "GET",
+    fallbackErrorMessage: "Failed to load branches.",
+  });
+
+  return extractPublicBranchRows(payload)
+    .map((row) => normalizePublicBranchRow(row))
+    .filter((row): row is PublicBranchRecord => Boolean(row));
+};
+
+export const getPublicAppointmentAutofill = async ({
+  accessToken,
+}: {
+  accessToken?: string;
+} = {}): Promise<AppointmentAutofillResponse> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/public/appointments/autofill`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load appointment autofill data.",
+  });
+
+  const root = asRecord(payload);
+
+  return {
+    canAutofill: root?.canAutofill === true,
+    data: normalizeAppointmentAutofillRecord(root?.data),
+    raw: payload,
+  };
+};
+
+export const createPublicAppointment = async ({
+  accessToken,
+  payload,
+}: {
+  accessToken?: string;
+  payload: CreateAppointmentPayload;
+}): Promise<CustomerAppointmentRecord> => {
+  const body = {
+    branchId: asString(payload.branchId),
+    appointmentDate: asString(payload.appointmentDate),
+    productIds: Array.isArray(payload.productIds)
+      ? payload.productIds.map((entry) => asString(entry)).filter(Boolean)
+      : [],
+    preferredContact: asNullableString(payload.preferredContact),
+    name: asNullableString(payload.name),
+    email: asNullableString(payload.email),
+    phone: asNullableString(payload.phone),
+    lineId: asNullableString(payload.lineId),
+    language: asNullableString(payload.language),
+    userEnteredCity: asNullableString(payload.userEnteredCity),
+    notes: asNullableString(payload.notes),
+  };
+
+  if (!body.branchId || !body.appointmentDate) {
+    throw new ApiClientError({
+      message: "branchId and appointmentDate are required.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const responsePayload = await fetchJson({
+    path: `${API_BASE_PATH}/public/appointments`,
+    method: "POST",
+    accessToken,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    fallbackErrorMessage: "Failed to create appointment.",
+  });
+
+  const appointment = normalizeCustomerAppointment(responsePayload);
+  if (!appointment) {
+    throw new ApiClientError({
+      message: "Invalid appointment response.",
+      status: 500,
+      payload: responsePayload,
+    });
+  }
+
+  return appointment;
+};
+
+export const getCustomerAppointments = async ({
+  accessToken,
+}: {
+  accessToken: string;
+}): Promise<CustomerAppointmentRecord[]> => {
+  const payload = await fetchJson({
+    path: `${API_BASE_PATH}/customer/me/appointments`,
+    method: "GET",
+    accessToken,
+    fallbackErrorMessage: "Failed to load appointments.",
+  });
+
+  return extractCustomerAppointmentRows(payload)
+    .map((row) => normalizeCustomerAppointment(row))
+    .filter((row): row is CustomerAppointmentRecord => Boolean(row));
+};
+
 export const getAdminProducts = async ({
   accessToken,
   page,
@@ -5089,6 +5523,14 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     phone: asNullableString(accountDetails?.phone),
     lineId: asNullableString(accountDetails?.lineId),
   };
+  const adminProfile = asRecord(profileSources.adminProfile);
+  const managerProfile = asRecord(profileSources.managerProfile);
+  const salespersonProfile = asRecord(profileSources.salespersonProfile);
+  const exactGeoLocation =
+    asRecord(salespersonProfile?.exactGeoLocation) ??
+    asRecord(managerProfile?.exactGeoLocation) ??
+    asRecord(adminProfile?.exactGeoLocation) ??
+    null;
 
   const branchMemberships = Array.isArray(root.branchMemberships)
     ? root.branchMemberships
@@ -5127,6 +5569,12 @@ const normalizeUserMeResponsePayload = (payload: unknown): UserMeResponse => {
     lineId: resolveProfileField(profileSources, "lineId"),
     preferredLanguage: asNullableString(customerProfile?.preferredLanguage),
     city: asNullableString(customerProfile?.city),
+    country: asNullableString(customerProfile?.country),
+    timezone:
+      asNullableString(customerProfile?.timezone) ??
+      asNullableString(exactGeoLocation?.timezone) ??
+      asNullableString(exactGeoLocation?.timezoneId),
+    exactGeoLocation,
     customerTier: resolvedCustomerTier,
     isBranchAdmin:
       managerType === "BRANCH_ADMIN" ||
@@ -5201,6 +5649,15 @@ export const updateUserMeProfile = async ({
   }
   if (Object.prototype.hasOwnProperty.call(payload, "city")) {
     body.city = payload.city ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "country")) {
+    body.country = payload.country ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "timezone")) {
+    body.timezone = payload.timezone ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "exactGeoLocation")) {
+    body.exactGeoLocation = payload.exactGeoLocation ?? null;
   }
   if (Object.prototype.hasOwnProperty.call(payload, "lineUserId")) {
     body.lineUserId = payload.lineUserId ?? null;
@@ -5577,6 +6034,37 @@ export const getAdminUserDetail = async ({
       return detail;
     },
   );
+};
+
+export const getAdminStaffMap = async ({
+  accessToken,
+}: {
+  accessToken: string;
+}): Promise<AdminStaffMapResponse> => {
+  return runWithInFlightDeduplication(`getAdminStaffMap:${accessToken}`, async () => {
+    const payload = await fetchJson({
+      path: `${API_BASE_PATH}/admin/staff-map`,
+      method: "GET",
+      accessToken,
+      fallbackErrorMessage: "Failed to load staff map.",
+    });
+
+    const root = asRecord(payload) ?? {};
+    const rawItems = Array.isArray(root.records)
+      ? root.records
+      : Array.isArray(root.items)
+        ? root.items
+        : [];
+    const items = rawItems
+      .map((entry) => normalizeAdminStaffMapLocation(entry))
+      .filter((entry): entry is AdminStaffMapLocationRecord => Boolean(entry));
+
+    return {
+      items,
+      total: asPositiveInt(root.total) ?? items.length,
+      raw: payload,
+    };
+  });
 };
 
 export const updateAdminUserPermissions = async ({

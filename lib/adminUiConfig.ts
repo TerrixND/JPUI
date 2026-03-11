@@ -15,7 +15,8 @@ export type AdminCapabilityKey =
   | "canManageProductVisibility"
   | "canManageStaffRules"
   | "canRestrictUsers"
-  | "canBanUsers";
+  | "canBanUsers"
+  | "canViewStaffMap";
 
 export type AdminCapabilityDefinition = {
   key: AdminCapabilityKey;
@@ -92,6 +93,12 @@ export const ADMIN_CAPABILITY_DEFINITIONS: AdminCapabilityDefinition[] = [
     label: "Ban Users",
     helper: "Apply timed bans. Permanent termination remains a main admin action.",
     approval: "Main admin approval",
+  },
+  {
+    key: "canViewStaffMap",
+    label: "Staff Map",
+    helper: "Open the live internal staff map with exact staff locations.",
+    approval: "Direct",
   },
 ];
 

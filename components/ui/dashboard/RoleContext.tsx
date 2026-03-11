@@ -15,6 +15,7 @@ interface RoleContextType {
   userId: string;
   isMainAdmin: boolean;
   isBranchAdmin: boolean;
+  canViewStaffMap: boolean;
   email: string | null;
   displayName: string | null;
   dashboardBasePath: string;
@@ -33,6 +34,7 @@ export function RoleProvider({
   userId,
   isMainAdmin,
   isBranchAdmin,
+  canViewStaffMap,
   email,
   displayName,
   adminCapabilities,
@@ -43,6 +45,7 @@ export function RoleProvider({
   userId: string;
   isMainAdmin: boolean;
   isBranchAdmin?: boolean;
+  canViewStaffMap?: boolean;
   email?: string | null;
   displayName?: string | null;
   adminCapabilities?: AdminCapabilityState;
@@ -56,6 +59,7 @@ export function RoleProvider({
       userId,
       isMainAdmin,
       isBranchAdmin: isBranchAdmin === true,
+      canViewStaffMap: canViewStaffMap === true || isMainAdmin,
       email: email ?? null,
       displayName: displayName ?? null,
       dashboardBasePath: getDashboardBasePath(role, userId),
@@ -68,6 +72,7 @@ export function RoleProvider({
     [
       isMainAdmin,
       isBranchAdmin,
+      canViewStaffMap,
       email,
       displayName,
       normalizedAdminCapabilities,

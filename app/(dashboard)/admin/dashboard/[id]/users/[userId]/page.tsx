@@ -1,5 +1,6 @@
 "use client";
 
+import LocationMapDialog from "@/components/ui/location/LocationMapDialog";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -31,6 +32,10 @@ import {
   type AdminCapabilityKey,
   type ManagerCapabilityKey,
 } from "@/lib/adminUiConfig";
+import {
+  buildLocationLabel,
+  normalizeExactLocationRecord,
+} from "@/lib/googleMaps";
 import {
   accountStatusBadge,
   formatDate,
@@ -375,6 +380,7 @@ export default function AdminUserDetailPage() {
   const [error, setError] = useState("");
   const [uiMessage, setUiMessage] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
 
   const [permissionDraft, setPermissionDraft] = useState<PermissionDraft>(() =>
     readPermissionDraft(null),
@@ -455,6 +461,37 @@ export default function AdminUserDetailPage() {
   const permissionBadge = useMemo(
     () => permissionEditabilityBadge(detail?.role, detail?.isMainAdmin),
     [detail],
+  );
+  const customerProfile = useMemo(
+    () => asRecord(detail?.customerProfile),
+    [detail?.customerProfile],
+  );
+  const exactLocation = useMemo(
+    () =>
+      normalizeExactLocationRecord(
+        asRecord(detail?.salespersonProfile)?.exactGeoLocation ??
+          asRecord(detail?.managerProfile)?.exactGeoLocation ??
+          asRecord(detail?.adminProfile)?.exactGeoLocation,
+      ),
+    [detail?.adminProfile, detail?.managerProfile, detail?.salespersonProfile],
+  );
+  const locationLabel = useMemo(
+    () =>
+      exactLocation?.label ||
+      buildLocationLabel({
+        city:
+          (typeof customerProfile?.city === "string" ? customerProfile.city : null) || null,
+        country:
+          (typeof customerProfile?.country === "string" ? customerProfile.country : null) || null,
+      }),
+    [customerProfile, exactLocation],
+  );
+  const timezoneLabel = useMemo(
+    () =>
+      exactLocation?.timezone ||
+      (typeof customerProfile?.timezone === "string" ? customerProfile.timezone : null) ||
+      "-",
+    [customerProfile, exactLocation],
   );
   const canEditPermissions =
     Boolean(detail) &&
@@ -830,6 +867,15 @@ export default function AdminUserDetailPage() {
               >
                 {permissionBadge.label}
               </span>
+              {exactLocation?.latitude !== null && exactLocation?.longitude !== null ? (
+                <button
+                  type="button"
+                  onClick={() => setIsLocationDialogOpen(true)}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                >
+                  Location Button
+                </button>
+              ) : null}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -837,6 +883,8 @@ export default function AdminUserDetailPage() {
               <InfoField label="Email" value={getUserEmail(detail)} />
               <InfoField label="Phone" value={getUserPhone(detail)} />
               <InfoField label="Line ID" value={getUserLineId(detail)} />
+              <InfoField label="Location" value={locationLabel || "-"} />
+              <InfoField label="Timezone" value={timezoneLabel} />
               <InfoField label="User ID" value={detail.id} mono />
               <InfoField label="Role" value={roleLabel} />
               <InfoField label="Branch Scope" value={roleContext || primaryBranch} />
@@ -847,6 +895,25 @@ export default function AdminUserDetailPage() {
           </>
         )}
       </SectionCard>
+
+      <LocationMapDialog
+        open={isLocationDialogOpen}
+        title={displayName}
+        subtitle={exactLocation?.label || "Exact staff location"}
+        markers={
+          exactLocation
+            ? [
+                {
+                  id: detail?.id || userId,
+                  title: displayName,
+                  subtitle: exactLocation.label,
+                  location: exactLocation,
+                },
+              ]
+            : []
+        }
+        onClose={() => setIsLocationDialogOpen(false)}
+      />
 
       <SectionCard
         title="History Links"

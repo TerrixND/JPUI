@@ -6,6 +6,8 @@ type SetupUserPayload = {
   lineUserId?: string;
   preferredLanguage?: string;
   city?: string;
+  country?: string;
+  timezone?: string;
 };
 
 type OnboardingMode = "setup-user" | "bootstrap-admin";

@@ -32,6 +32,7 @@ type DashboardAuthState = {
   status: string | null;
   isMainAdmin: boolean;
   isBranchAdmin: boolean;
+  canViewStaffMap: boolean;
   email: string | null;
   displayName: string | null;
   accountAccess: AccountAccessState | null;
@@ -45,6 +46,7 @@ const initialAuthState: DashboardAuthState = {
   status: null,
   isMainAdmin: false,
   isBranchAdmin: false,
+  canViewStaffMap: false,
   email: null,
   displayName: null,
   accountAccess: null,
@@ -107,6 +109,26 @@ const normalizeAccountAccess = (value: unknown): AccountAccessState | null => {
         : null,
     raw: row,
   };
+};
+
+const hasStaffMapCapability = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const permissions = value as Record<string, unknown>;
+  const profile =
+    permissions.profile && typeof permissions.profile === "object" && !Array.isArray(permissions.profile)
+      ? (permissions.profile as Record<string, unknown>)
+      : null;
+  const capabilities =
+    profile?.capabilities &&
+    typeof profile.capabilities === "object" &&
+    !Array.isArray(profile.capabilities)
+      ? (profile.capabilities as Record<string, unknown>)
+      : null;
+
+  return capabilities?.canViewStaffMap === true;
 };
 
 const formatRemainingTime = (remainingMs: number | null) => {
@@ -454,6 +476,7 @@ export default function DashboardLayout({
             status: me.status || null,
             isMainAdmin: me.isMainAdmin,
             isBranchAdmin: me.isBranchAdmin,
+            canViewStaffMap: me.isMainAdmin || hasStaffMapCapability(me.permissions),
             email: me.email,
             displayName: me.displayName,
             accountAccess: me.accountAccess,
@@ -494,6 +517,7 @@ export default function DashboardLayout({
             status: null,
             isMainAdmin: false,
             isBranchAdmin: false,
+            canViewStaffMap: false,
             email: null,
             displayName: null,
             accountAccess: null,
@@ -702,6 +726,7 @@ export default function DashboardLayout({
         userId={authState.userId}
         isMainAdmin={authState.isMainAdmin}
         isBranchAdmin={authState.isBranchAdmin}
+        canViewStaffMap={authState.canViewStaffMap}
         email={authState.email}
         displayName={authState.displayName}
         adminCapabilities={adminCapabilities}

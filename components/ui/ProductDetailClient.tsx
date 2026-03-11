@@ -4,7 +4,9 @@ import {
   getPublicMediaUrl,
   mapPageContextToMediaSection,
 } from "@/lib/apiClient";
+import { useCart } from "@/hooks/useCart";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ProductMediaItem = {
@@ -262,7 +264,8 @@ const toCompactSerial = (value: string) => {
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     AVAILABLE: "bg-emerald-50 text-emerald-600 border-emerald-200",
-    RESERVED: "bg-amber-50 text-amber-600 border-amber-200",
+    PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+    BUSY: "bg-orange-50 text-orange-700 border-orange-200",
     SOLD: "bg-red-50 text-red-600 border-red-200",
   };
   return (
@@ -278,6 +281,8 @@ const StatusBadge = ({ status }: { status: string }) => {
 const TierBadge = ({ tier }: { tier: string }) => {
   const styles: Record<string, string> = {
     STANDARD: "text-stone-500 border-stone-300 bg-stone-50",
+    VIP: "text-emerald-700 border-emerald-300 bg-emerald-50",
+    ULTRA_RARE: "text-amber-700 border-amber-300 bg-amber-50",
     PREMIUM: "text-amber-700 border-amber-300 bg-amber-50",
     EXCLUSIVE: "text-violet-700 border-violet-300 bg-violet-50",
   };
@@ -342,6 +347,8 @@ export default function ProductDetailClientComponent({
   showActions?: boolean;
   adminEditHref?: string | null;
 }) {
+  const router = useRouter();
+  const { addItem, contains } = useCart();
   const mediaItems = useMemo(
     () => (Array.isArray(product.media) ? product.media : []),
     [product.media],
@@ -351,6 +358,7 @@ export default function ProductDetailClientComponent({
   const [activeMedia, setActiveMedia] = useState(primaryMedia);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [mediaUrlById, setMediaUrlById] = useState<Record<string, string>>({});
+  const [cartNotice, setCartNotice] = useState<string | null>(null);
 
   const refreshPublicMediaUrl = useCallback(
     async (mediaId: string) => {
@@ -407,10 +415,36 @@ export default function ProductDetailClientComponent({
     setActiveMedia(primaryMedia);
   }, [primaryMedia]);
 
+  useEffect(() => {
+    if (!cartNotice) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCartNotice(null);
+    }, 2400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [cartNotice]);
+
   const activeMediaUrl =
     activeMedia && activeMedia.id
       ? mediaUrlById[activeMedia.id] || activeMedia.url
       : PLACEHOLDER_SVG;
+  const primaryImageMedia = useMemo(
+    () =>
+      mediaItems.find(
+        (item: ProductMediaItem) => String(item.type || "").toUpperCase() === "IMAGE",
+      ) ?? null,
+    [mediaItems],
+  );
+  const cartImageUrl = primaryImageMedia?.id
+    ? mediaUrlById[primaryImageMedia.id] || primaryImageMedia.url
+    : null;
+  const isAvailableForAppointment = String(product.status || "").toUpperCase() === "AVAILABLE";
+  const isInCart = contains(product.id);
   const measurementTriplet = parseMeasurementTriplet(product.measurementMm);
   const resolvedLength = (() => {
     const directLength = toFiniteNumber(product.length);
@@ -507,6 +541,51 @@ export default function ProductDetailClientComponent({
       window.open(product.certificate.htmlPreviewUrl, "_blank");
     }
   };
+
+  const handleAddToCart = useCallback(() => {
+    if (!isAvailableForAppointment) {
+      setCartNotice("This jade piece is no longer available for appointment.");
+      return false;
+    }
+
+    addItem({
+      id: product.id,
+      name: product.name,
+      sku: product.sku || null,
+      color: product.color || null,
+      tier: product.tier || null,
+      status: product.status || null,
+      imageId: primaryImageMedia?.id || null,
+      imageUrl: cartImageUrl || null,
+      detailHref: `/products/${encodeURIComponent(product.id)}`,
+    });
+    setCartNotice(
+      isInCart
+        ? "This piece is already in your appointment cart."
+        : "Added to your appointment cart.",
+    );
+    return true;
+  }, [
+    addItem,
+    cartImageUrl,
+    isAvailableForAppointment,
+    isInCart,
+    primaryImageMedia?.id,
+    product.color,
+    product.id,
+    product.name,
+    product.sku,
+    product.status,
+    product.tier,
+  ]);
+
+  const handleReserveItem = useCallback(() => {
+    if (!handleAddToCart()) {
+      return;
+    }
+
+    router.push("/cart");
+  }, [handleAddToCart, router]);
 
   return (
     <div className="text-black w-full bg-white py-20 lg:py-28">
@@ -869,13 +948,41 @@ export default function ProductDetailClientComponent({
 
             {/* Actions */}
             {showActions ? (
-              <div className="flex gap-3 pt-1">
-                <button className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold shadow-sm">
-                  Reserve Item
-                </button>
-                <button className="flex-1 border border-stone-200 hover:border-stone-400 text-stone-500 hover:text-stone-700 text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold">
-                  Add to Cart
-                </button>
+              <div className="pt-1 space-y-3">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleReserveItem}
+                    disabled={!isAvailableForAppointment}
+                    className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:bg-stone-300 disabled:text-stone-500 disabled:cursor-not-allowed text-white text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold shadow-sm"
+                  >
+                    {isAvailableForAppointment
+                      ? isInCart
+                        ? "Open Appointment Cart"
+                        : "Reserve Item"
+                      : "Unavailable"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    disabled={!isAvailableForAppointment}
+                    className="flex-1 border border-stone-200 hover:border-stone-400 disabled:border-stone-200 disabled:text-stone-400 disabled:cursor-not-allowed text-stone-500 hover:text-stone-700 text-xs tracking-[0.2em] uppercase py-3.5 rounded-lg transition-colors font-sans font-semibold"
+                  >
+                    {isAvailableForAppointment
+                      ? isInCart
+                        ? "In Appointment Cart"
+                        : "Add to Cart"
+                      : "Not Available"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-500 font-sans">
+                  Concierge appointments confirm availability before any piece is reserved.
+                </p>
+                {cartNotice ? (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-sans">
+                    {cartNotice}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
