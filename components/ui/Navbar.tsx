@@ -2,7 +2,7 @@
 
 import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useAuth from "@/hooks/useAuth";
 import { usePathname } from "next/navigation";
 import supabase from "@/lib/supabase";
@@ -11,12 +11,15 @@ import {
   getDashboardBasePath,
   mapBackendRoleToDashboardRole,
 } from "@/lib/roleChecker";
+import { gsap } from "gsap";
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const authUser = useAuth();
   const isLoggedIn = Boolean(authUser);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const totalQuantity = 0; // TODO: connect to real cart state
   const [isScrolled, setIsScrolled] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
@@ -126,6 +129,84 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     };
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    const menu = mobileMenuRef.current;
+    if (!menu) return;
+
+    if (menuOpen) {
+      const links = menu.querySelectorAll<HTMLElement>("[data-mobile-link]");
+
+      gsap.set(menu, { autoAlpha: 0, height: 0 });
+      gsap.set(links, { autoAlpha: 0, x: -20 });
+
+      const tl = gsap.timeline({
+        defaults: { ease: "power3.out" },
+      });
+
+      tl.to(menu, {
+        autoAlpha: 1,
+        height: "auto",
+        duration: 0.4,
+      }).to(
+        links,
+        {
+          autoAlpha: 1,
+          x: 0,
+          duration: 0.35,
+          stagger: 0.06,
+          clearProps: "transform,opacity",
+        },
+        "-=0.2",
+      );
+    }
+  }, [menuOpen]);
+
+  const handleCloseMenu = useCallback(() => {
+    const menu = mobileMenuRef.current;
+    if (!menu || isAnimating) return;
+
+    setIsAnimating(true);
+    const links = menu.querySelectorAll<HTMLElement>("[data-mobile-link]");
+
+    const tl = gsap.timeline({
+      defaults: { ease: "power2.in" },
+      onComplete: () => {
+        setMenuOpen(false);
+        setIsAnimating(false);
+      },
+    });
+
+    tl.to(links, {
+      autoAlpha: 0,
+      x: -16,
+      duration: 0.2,
+      stagger: 0.03,
+    }).to(
+      menu,
+      {
+        autoAlpha: 0,
+        height: 0,
+        duration: 0.3,
+      },
+      "-=0.1",
+    );
+  }, [isAnimating]);
+
+  const toggleMenu = useCallback(() => {
+    if (isAnimating) return;
+    if (menuOpen) {
+      handleCloseMenu();
+    } else {
+      setMenuOpen(true);
+    }
+  }, [menuOpen, isAnimating, handleCloseMenu]);
+
+  const handleLinkClick = useCallback(() => {
+    if (menuOpen) {
+      handleCloseMenu();
+    }
+  }, [menuOpen, handleCloseMenu]);
+
   return (
     <div
       className={`z-100 w-full fixed top-0 left-0 transition-all duration-300 ${
@@ -196,7 +277,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
           <button
             className="md:hidden cursor-pointer ml-1"
-            onClick={() => setMenuOpen((prev) => !prev)}
+            onClick={toggleMenu}
             aria-label="Toggle menu"
           >
             {menuOpen ? (
@@ -210,33 +291,43 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
       {/* Mobile Dropdown */}
       {menuOpen && (
-        <div className="md:hidden flex flex-col px-6 py-4 gap-4 bg-white border-t border-gray-100">
+        <div
+          ref={mobileMenuRef}
+          className="md:hidden flex flex-col px-6 py-4 gap-1 bg-white border-t border-gray-100 overflow-hidden"
+        >
           {navLinks.map(({ label, href }) => (
             <Link
               key={label}
-              className="text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+              data-mobile-link
+              className="text-sm text-black hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors duration-200 py-2.5 px-3 rounded-lg"
               href={href}
-              onClick={() => setMenuOpen(false)}
+              onClick={handleLinkClick}
             >
               {label}
             </Link>
           ))}
 
+          <div data-mobile-link className="my-1 h-px bg-gray-100" />
+
           {isLoggedIn ? (
             <>
               <Link
                 href="/cart"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+                data-mobile-link
+                onClick={handleLinkClick}
+                className="flex items-center gap-2 text-sm text-black hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors duration-200 py-2.5 px-3 rounded-lg"
               >
+                <ShoppingBag className="w-4 h-4" />
                 Cart
               </Link>
 
               <Link
                 href="/profile"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+                data-mobile-link
+                onClick={handleLinkClick}
+                className="flex items-center gap-2 text-sm text-black hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors duration-200 py-2.5 px-3 rounded-lg"
               >
+                <User className="w-4 h-4" />
                 Profile
               </Link>
             </>
@@ -244,16 +335,18 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
             <>
               <Link
                 href="/login"
-                onClick={() => setMenuOpen(false)}
-                className="text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+                data-mobile-link
+                onClick={handleLinkClick}
+                className="text-sm text-black hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors duration-200 py-2.5 px-3 rounded-lg"
               >
                 Login
               </Link>
 
               <Link
                 href="/signup"
-                onClick={() => setMenuOpen(false)}
-                className="text-sm text-black hover:text-gray-500 transition-colors duration-200 py-1"
+                data-mobile-link
+                onClick={handleLinkClick}
+                className="mt-1 text-center text-sm border border-black text-black hover:bg-black hover:text-white transition-colors duration-200 py-2.5 px-3 rounded-lg"
               >
                 Sign Up
               </Link>

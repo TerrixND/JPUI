@@ -78,7 +78,6 @@ export default function ScrollHero() {
           const backwardDistance = (prev - normalized + total) % total;
           directionRef.current = forwardDistance <= backwardDistance ? 1 : -1;
         }
-
         return normalized;
       });
     },
@@ -104,184 +103,113 @@ export default function ScrollHero() {
     const activeContent = contentRefs.current[current];
     const direction = directionRef.current;
 
-    if (!activeBackground || !activeContent) {
-      return;
-    }
+    if (!activeBackground || !activeContent) return;
 
     const revealTargets = Array.from(
       activeContent.querySelectorAll<HTMLElement>("[data-hero-reveal]"),
     );
 
-    backgroundRefs.current.forEach((element, index) => {
-      if (!element) {
-        return;
-      }
-
-      gsap.killTweensOf(element);
-      gsap.set(element, {
-        zIndex: index === current ? 2 : 1,
-      });
+    /* z-index setup */
+    backgroundRefs.current.forEach((el, i) => {
+      if (!el) return;
+      gsap.killTweensOf(el);
+      gsap.set(el, { zIndex: i === current ? 2 : 1 });
     });
 
-    contentRefs.current.forEach((element, index) => {
-      if (!element) {
-        return;
-      }
-
-      gsap.killTweensOf(element);
-      gsap.set(element, {
-        zIndex: index === current ? 4 : 3,
-      });
+    contentRefs.current.forEach((el, i) => {
+      if (!el) return;
+      gsap.killTweensOf(el);
+      gsap.set(el, { zIndex: i === current ? 4 : 3 });
     });
 
-    progressRefs.current.forEach((element) => {
-      if (!element) {
-        return;
-      }
-
-      gsap.killTweensOf(element);
-      gsap.set(element, {
-        scaleX: 0,
-        transformOrigin: "left center",
-      });
+    progressRefs.current.forEach((el) => {
+      if (!el) return;
+      gsap.killTweensOf(el);
+      gsap.set(el, { scaleX: 0, transformOrigin: "left center" });
     });
 
+    /* reduced motion fallback */
     if (reducedMotion) {
-      backgroundRefs.current.forEach((element, index) => {
-        if (!element) {
-          return;
-        }
-
-        gsap.set(element, {
-          autoAlpha: index === current ? 1 : 0,
-          scale: index === current ? 1 : 1.06,
-        });
+      backgroundRefs.current.forEach((el, i) => {
+        if (!el) return;
+        gsap.set(el, { autoAlpha: i === current ? 1 : 0, scale: 1 });
       });
-
-      contentRefs.current.forEach((element, index) => {
-        if (!element) {
-          return;
-        }
-
-        gsap.set(element, {
-          autoAlpha: index === current ? 1 : 0,
-        });
+      contentRefs.current.forEach((el, i) => {
+        if (!el) return;
+        gsap.set(el, { autoAlpha: i === current ? 1 : 0 });
       });
-
       const activeBar = progressRefs.current[current];
-      if (activeBar) {
-        gsap.set(activeBar, {
-          scaleX: 1,
-          transformOrigin: "left center",
-        });
-      }
+      if (activeBar) gsap.set(activeBar, { scaleX: 1, transformOrigin: "left center" });
 
       autoplayTweenRef.current = gsap.delayedCall(DURATION_SECONDS, () => {
         directionRef.current = 1;
         setCurrent((prev) => (prev + 1) % total);
       });
-
-      return () => {
-        autoplayTweenRef.current?.kill();
-      };
+      return () => { autoplayTweenRef.current?.kill(); };
     }
 
-    transitionTimelineRef.current = gsap.timeline({
-      defaults: {
-        ease: "power3.out",
-      },
-    });
+    /* ── Build transition timeline ── */
+    const tl = gsap.timeline({ defaults: { ease: "power2.inOut" } });
+    transitionTimelineRef.current = tl;
 
-    backgroundRefs.current.forEach((element, index) => {
-      if (!element) {
-        return;
-      }
+    /* Background: smooth crossfade with gentle Ken Burns */
+    backgroundRefs.current.forEach((el, i) => {
+      if (!el) return;
 
-      if (index === current) {
-        transitionTimelineRef.current?.fromTo(
-          element,
-          {
-            autoAlpha: 0,
-            scale: 1.18,
-            xPercent: direction * 7,
-            filter: "blur(10px)",
-          },
+      if (i === current) {
+        tl.fromTo(
+          el,
+          { autoAlpha: 0, scale: 1.06 },
           {
             autoAlpha: 1,
             scale: 1,
-            xPercent: 0,
-            filter: "blur(0px)",
-            duration: 1.35,
+            duration: 1.2,
+            ease: "power3.out",
           },
           0,
         );
-        return;
+      } else {
+        tl.to(
+          el,
+          {
+            autoAlpha: 0,
+            scale: 1.04,
+            duration: 0.8,
+            ease: "power2.inOut",
+          },
+          0,
+        );
       }
-
-      transitionTimelineRef.current?.to(
-        element,
-        {
-          autoAlpha: 0,
-          scale: 1.08,
-          xPercent: direction * -5,
-          filter: "blur(6px)",
-          duration: 0.9,
-          ease: "power2.out",
-        },
-        0,
-      );
     });
 
-    contentRefs.current.forEach((element, index) => {
-      if (!element || index === current) {
-        return;
-      }
-
-      transitionTimelineRef.current?.to(
-        element,
-        {
-          autoAlpha: 0,
-          duration: 0.35,
-          ease: "power2.out",
-        },
-        0,
-      );
+    /* Old content: fade out quickly */
+    contentRefs.current.forEach((el, i) => {
+      if (!el || i === current) return;
+      tl.to(el, { autoAlpha: 0, duration: 0.3, ease: "power2.out" }, 0);
     });
 
-    gsap.set(revealTargets, {
-      autoAlpha: 0,
-      y: 28,
-      x: direction * 22,
-      filter: "blur(10px)",
-    });
+    /* New content: elegant staggered entrance */
+    gsap.set(revealTargets, { autoAlpha: 0, y: 30 });
 
-    transitionTimelineRef.current
-      ?.fromTo(
-        activeContent,
-        {
-          autoAlpha: 0,
-          x: direction * 18,
-        },
-        {
-          autoAlpha: 1,
-          x: 0,
-          duration: 0.5,
-        },
-        0.12,
-      )
-      .to(
-        revealTargets,
-        {
-          autoAlpha: 1,
-          y: 0,
-          x: 0,
-          filter: "blur(0px)",
-          duration: 0.9,
-          stagger: 0.11,
-        },
-        0.2,
-      );
+    tl.fromTo(
+      activeContent,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.4, ease: "power2.out" },
+      0.25,
+    ).to(
+      revealTargets,
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.7,
+        stagger: 0.1,
+        ease: "expo.out",
+        clearProps: "transform,opacity",
+      },
+      0.35,
+    );
 
+    /* Progress bar */
     const activeBar = progressRefs.current[current];
     autoplayTweenRef.current = activeBar
       ? gsap.to(activeBar, {
@@ -313,19 +241,18 @@ export default function ScrollHero() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
+      {/* Background images */}
       <div className="absolute inset-0">
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            ref={(node) => {
-              backgroundRefs.current[index] = node;
-            }}
+            ref={(node) => { backgroundRefs.current[index] = node; }}
             className="absolute inset-0"
           >
             <div
               className="absolute inset-0 z-10"
               style={{
-                background: `radial-gradient(circle at 78% 24%, rgba(${slide.accentRgb}, 0.28), transparent 26%), radial-gradient(circle at 18% 80%, rgba(${slide.accentRgb}, 0.12), transparent 26%)`,
+                background: `radial-gradient(circle at 78% 24%, rgba(${slide.accentRgb}, 0.22), transparent 30%), radial-gradient(circle at 18% 80%, rgba(${slide.accentRgb}, 0.10), transparent 30%)`,
               }}
             />
             <Image
@@ -340,16 +267,16 @@ export default function ScrollHero() {
         ))}
       </div>
 
-      <div className="absolute inset-0 z-[2] bg-gradient-to-r from-black/72 via-black/42 to-black/12" />
-      <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+      {/* Gradient overlays */}
+      <div className="absolute inset-0 z-[2] bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
+      <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
+      {/* Content slides */}
       <div className="absolute inset-0 z-20">
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            ref={(node) => {
-              contentRefs.current[index] = node;
-            }}
+            ref={(node) => { contentRefs.current[index] = node; }}
             aria-hidden={index !== current}
             className="absolute inset-0 flex items-center justify-center px-6 md:justify-start md:px-20"
             style={{
@@ -360,7 +287,7 @@ export default function ScrollHero() {
             <div className="max-w-xl text-center md:text-left">
               <p
                 data-hero-reveal
-                className="text-[11px] font-medium uppercase tracking-[0.34em] text-white/55 md:text-xs"
+                className="text-[11px] font-medium uppercase tracking-[0.34em] text-white/50 md:text-xs"
               >
                 {slide.eyebrow}
               </p>
@@ -388,7 +315,7 @@ export default function ScrollHero() {
 
               <p
                 data-hero-reveal
-                className="mx-auto mt-6 max-w-md text-sm leading-relaxed text-white/72 md:mx-0 md:text-base"
+                className="mx-auto mt-6 max-w-md text-sm leading-relaxed text-white/65 md:mx-0 md:text-base"
               >
                 {slide.description}
               </p>
@@ -400,13 +327,13 @@ export default function ScrollHero() {
                 <Link
                   href="/products"
                   data-home-hover="hero-cta"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 px-6 py-3 text-sm font-medium tracking-[0.08em] text-black shadow-[0_10px_24px_rgba(0,0,0,0.24)] transition-all duration-300 hover:opacity-90"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 px-6 py-3 text-sm font-medium tracking-[0.08em] text-black shadow-[0_8px_20px_rgba(0,0,0,0.2)] transition-all duration-300 hover:opacity-90"
                   style={{ backgroundColor: "var(--accent)" }}
                 >
                   {slide.button}
                 </Link>
 
-                <div className="flex items-center gap-4 text-white/55">
+                <div className="flex items-center gap-4 text-white/50">
                   <span className="text-sm tracking-[0.35em]">{slide.number}</span>
                   <span
                     className="h-px w-16"
@@ -422,31 +349,30 @@ export default function ScrollHero() {
         ))}
       </div>
 
+      {/* Navigation bar */}
       <div className="absolute bottom-0 left-0 right-0 z-30 px-6 pb-6 md:px-20 md:pb-8">
         <div className="flex items-center gap-4 md:gap-6">
           <button
             onClick={back}
             data-home-hover="hero-control"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 backdrop-blur-sm transition hover:text-white md:h-10 md:w-10"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 backdrop-blur-sm transition-colors duration-200 hover:border-white/40 hover:text-white md:h-10 md:w-10"
             aria-label="Previous slide"
           >
             <ChevronLeft size={18} />
           </button>
 
-          <div className="flex flex-1 gap-1">
+          <div className="flex flex-1 gap-1.5">
             {slides.map((slide, index) => (
               <button
                 key={slide.id}
                 onClick={() => goTo(index)}
                 data-home-hover="hero-progress"
-                className="relative flex-1 overflow-hidden bg-white/18 transition-[opacity,transform] duration-300 hover:opacity-100"
+                className="relative flex-1 overflow-hidden bg-white/15 transition-opacity duration-300 hover:opacity-100"
                 aria-label={`Go to slide ${index + 1}`}
               >
                 <span className="block h-[2px] w-full" />
                 <span
-                  ref={(node) => {
-                    progressRefs.current[index] = node;
-                  }}
+                  ref={(node) => { progressRefs.current[index] = node; }}
                   className="absolute inset-y-0 left-0 right-0"
                   style={{
                     backgroundColor: slide.accent,
@@ -459,10 +385,10 @@ export default function ScrollHero() {
           </div>
 
           <div className="hidden min-w-[100px] flex-col items-end text-right md:flex">
-            <span className="text-[10px] uppercase tracking-[0.38em] text-white/35">
+            <span className="text-[10px] uppercase tracking-[0.38em] text-white/30">
               Slide
             </span>
-            <span className="mt-1 text-sm tracking-[0.28em] text-white/65">
+            <span className="mt-1 text-sm tracking-[0.28em] text-white/60">
               {activeSlide.number}
             </span>
           </div>
@@ -470,7 +396,7 @@ export default function ScrollHero() {
           <button
             onClick={next}
             data-home-hover="hero-control"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 backdrop-blur-sm transition hover:text-white md:h-10 md:w-10"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 backdrop-blur-sm transition-colors duration-200 hover:border-white/40 hover:text-white md:h-10 md:w-10"
             aria-label="Next slide"
           >
             <ChevronRight size={18} />

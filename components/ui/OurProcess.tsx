@@ -60,7 +60,7 @@ const OurProcess = () => {
                 </h4>
 
                 {/* Description */}
-                <p className="mt-3 text-sm text-gray-00 leading-relaxed max-w-xs">
+                <p className="mt-3 text-sm text-gray-500 leading-relaxed max-w-xs">
                   {item.description}
                 </p>
               </div>

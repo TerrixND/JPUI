@@ -314,6 +314,9 @@ const HomePage = () => {
       return;
     }
 
+    const hoverEnabled = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (!hoverEnabled) return;
+
     const interactiveElements = Array.from(
       root.querySelectorAll<HTMLElement>("[data-home-hover]"),
     );
@@ -326,34 +329,31 @@ const HomePage = () => {
           ? computedStyle.boxShadow
           : "0 0 0 rgba(0,0,0,0)";
       const xTo = gsap.quickTo(element, "x", {
-        duration: 0.35,
+        duration: 0.45,
         ease: "power3.out",
       });
       const yTo = gsap.quickTo(element, "y", {
-        duration: 0.35,
+        duration: 0.45,
         ease: "power3.out",
       });
 
-      gsap.set(element, {
-        transformOrigin: "center center",
-        willChange: "transform, box-shadow",
-      });
+      gsap.set(element, { transformOrigin: "center center" });
 
       const resolveConfig = () => {
         switch (preset) {
           case "hero-cta":
             return {
-              scale: 1.045,
-              lift: -6,
-              shadow: "0 18px 45px rgba(200, 169, 110, 0.28)",
-              magnetic: 14,
+              scale: 1.03,
+              lift: -4,
+              shadow: "0 14px 36px rgba(200, 169, 110, 0.22)",
+              magnetic: 10,
             };
           case "hero-control":
             return {
-              scale: 1.08,
-              lift: -4,
-              shadow: "0 14px 32px rgba(0, 0, 0, 0.28)",
-              magnetic: 9,
+              scale: 1.06,
+              lift: -3,
+              shadow: "0 10px 24px rgba(0, 0, 0, 0.22)",
+              magnetic: 7,
             };
           case "hero-progress":
             return {
@@ -364,31 +364,31 @@ const HomePage = () => {
             };
           case "button":
             return {
-              scale: 1.035,
-              lift: -4,
-              shadow: "0 14px 28px rgba(17, 24, 39, 0.16)",
-              magnetic: 6,
+              scale: 1.025,
+              lift: -3,
+              shadow: "0 10px 24px rgba(17, 24, 39, 0.12)",
+              magnetic: 5,
             };
           case "card":
             return {
-              scale: 1.018,
-              lift: -6,
-              shadow: "0 20px 38px rgba(17, 24, 39, 0.1)",
-              magnetic: 10,
+              scale: 1.015,
+              lift: -4,
+              shadow: "0 14px 30px rgba(17, 24, 39, 0.08)",
+              magnetic: 7,
             };
           case "footer-link":
             return {
-              scale: 1.01,
-              lift: -2,
+              scale: 1.008,
+              lift: -1,
               shadow: baseBoxShadow,
-              magnetic: 4,
+              magnetic: 3,
             };
           default:
             return {
-              scale: 1.02,
-              lift: -3,
-              shadow: "0 10px 24px rgba(17, 24, 39, 0.1)",
-              magnetic: 5,
+              scale: 1.015,
+              lift: -2,
+              shadow: "0 8px 20px rgba(17, 24, 39, 0.08)",
+              magnetic: 4,
             };
         }
       };
@@ -400,23 +400,21 @@ const HomePage = () => {
           scale: config.scale,
           y: config.lift,
           boxShadow: config.shadow,
-          duration: 0.32,
+          duration: 0.4,
           ease: "power3.out",
           overwrite: "auto",
         });
       };
 
       const handleMove = (event: PointerEvent) => {
-        if (config.magnetic <= 0) {
-          return;
-        }
+        if (config.magnetic <= 0) return;
 
         const rect = element.getBoundingClientRect();
         const xRatio = (event.clientX - rect.left) / rect.width - 0.5;
         const yRatio = (event.clientY - rect.top) / rect.height - 0.5;
 
         xTo(xRatio * config.magnetic);
-        yTo(config.lift + yRatio * Math.max(4, config.magnetic * 0.7));
+        yTo(config.lift + yRatio * Math.max(3, config.magnetic * 0.6));
       };
 
       const handleLeave = () => {
@@ -427,7 +425,25 @@ const HomePage = () => {
           x: 0,
           y: 0,
           boxShadow: baseBoxShadow,
-          duration: 0.45,
+          duration: 0.55,
+          ease: "elastic.out(1, 0.5)",
+          overwrite: "auto",
+        });
+      };
+
+      const handleDown = () => {
+        gsap.to(element, {
+          scale: 0.975,
+          duration: 0.12,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      };
+
+      const handleUp = () => {
+        gsap.to(element, {
+          scale: config.scale,
+          duration: 0.3,
           ease: "power3.out",
           overwrite: "auto",
         });
@@ -436,11 +452,15 @@ const HomePage = () => {
       element.addEventListener("pointerenter", handleEnter);
       element.addEventListener("pointermove", handleMove);
       element.addEventListener("pointerleave", handleLeave);
+      element.addEventListener("pointerdown", handleDown);
+      element.addEventListener("pointerup", handleUp);
 
       return () => {
         element.removeEventListener("pointerenter", handleEnter);
         element.removeEventListener("pointermove", handleMove);
         element.removeEventListener("pointerleave", handleLeave);
+        element.removeEventListener("pointerdown", handleDown);
+        element.removeEventListener("pointerup", handleUp);
         gsap.killTweensOf(element);
       };
     });

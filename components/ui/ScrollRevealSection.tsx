@@ -19,22 +19,16 @@ export default function ScrollRevealSection({
   className = "",
   itemSelector = "[data-scroll-reveal]",
   start = "top 78%",
-  stagger = 0.12,
-  y = 56,
-  duration = 0.95,
+  stagger = 0.1,
+  y = 44,
+  duration = 0.75,
 }: ScrollRevealSectionProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
-
-    if (!root) {
-      return;
-    }
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
+    if (!root) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     gsap.registerPlugin(ScrollTrigger);
 
@@ -46,18 +40,13 @@ export default function ScrollRevealSection({
       if (!targets.length) {
         gsap.fromTo(
           root,
-          {
-            autoAlpha: 0,
-            y,
-            filter: "blur(12px)",
-          },
+          { autoAlpha: 0, y },
           {
             autoAlpha: 1,
             y: 0,
-            filter: "blur(0px)",
             duration,
             ease: "power3.out",
-            clearProps: "transform,filter,opacity",
+            clearProps: "transform,opacity",
             scrollTrigger: {
               trigger: root,
               start,
@@ -72,8 +61,7 @@ export default function ScrollRevealSection({
       gsap.set(targets, {
         autoAlpha: 0,
         y,
-        filter: "blur(12px)",
-        willChange: "transform, opacity, filter",
+        willChange: "transform, opacity",
       });
 
       gsap.timeline({
@@ -86,17 +74,14 @@ export default function ScrollRevealSection({
       }).to(targets, {
         autoAlpha: 1,
         y: 0,
-        filter: "blur(0px)",
         duration,
         stagger,
         ease: "power3.out",
-        clearProps: "transform,opacity,filter,willChange",
+        clearProps: "transform,opacity,willChange",
       });
     }, root);
 
-    return () => {
-      ctx.revert();
-    };
+    return () => ctx.revert();
   }, [duration, itemSelector, stagger, start, y]);
 
   return (
