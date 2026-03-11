@@ -1293,6 +1293,7 @@ export type CustomerAppointmentRecord = {
   email: string | null;
   phone: string | null;
   lineId: string | null;
+  autoLocatedCity: string | null;
   userEnteredCity: string | null;
   language: string | null;
   preferredContact: string | null;
@@ -1341,6 +1342,7 @@ export type CreateAppointmentPayload = {
   phone?: string | null;
   lineId?: string | null;
   language?: string | null;
+  autoLocatedCity?: string | null;
   userEnteredCity?: string | null;
   notes?: string | null;
 };
@@ -3879,12 +3881,13 @@ const normalizeCustomerAppointment = (
     branchId: asNullableString(row.branchId),
     customerId: asNullableString(row.customerId),
     customerType: asNullableString(row.customerType),
-    name: asNullableString(row.name),
-    email: asNullableString(row.email),
-    phone: asNullableString(row.phone),
-    lineId: asNullableString(row.lineId),
-    userEnteredCity: asNullableString(row.userEnteredCity),
-    language: asNullableString(row.language),
+      name: asNullableString(row.name),
+      email: asNullableString(row.email),
+      phone: asNullableString(row.phone),
+      lineId: asNullableString(row.lineId),
+      autoLocatedCity: asNullableString(row.autoLocatedCity),
+      userEnteredCity: asNullableString(row.userEnteredCity),
+      language: asNullableString(row.language),
     preferredContact: asNullableString(row.preferredContact),
     status: asNullableString(row.status),
     queuePriority: asFiniteNumberish(row.queuePriority),
@@ -5049,11 +5052,12 @@ export const createPublicAppointment = async ({
     preferredContact: asNullableString(payload.preferredContact),
     name: asNullableString(payload.name),
     email: asNullableString(payload.email),
-    phone: asNullableString(payload.phone),
-    lineId: asNullableString(payload.lineId),
-    language: asNullableString(payload.language),
-    userEnteredCity: asNullableString(payload.userEnteredCity),
-    notes: asNullableString(payload.notes),
+      phone: asNullableString(payload.phone),
+      lineId: asNullableString(payload.lineId),
+      language: asNullableString(payload.language),
+      autoLocatedCity: asNullableString(payload.autoLocatedCity),
+      userEnteredCity: asNullableString(payload.userEnteredCity),
+      notes: asNullableString(payload.notes),
   };
 
   if (!body.branchId || !body.appointmentDate) {

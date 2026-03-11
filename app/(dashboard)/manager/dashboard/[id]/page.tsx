@@ -6,6 +6,7 @@ import StatCard from "@/components/ui/dashboard/StatCard";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
+import { getManagerAppointmentLocationLabel } from "@/lib/managerDashboardUi";
 import {
   filterManagerBranchStaff,
   getManagerAnalyticsBranches,
@@ -514,21 +515,24 @@ export default function ManagerDashboard() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   No pending appointments in the selected branch scope.
                 </p>
-              ) : (
-                appointments.slice(0, 4).map((appointment) => (
-                  <div
-                    key={appointment.id}
-                    className="rounded-xl border border-gray-200 dark:border-gray-700/60 p-3"
+                ) : (
+                  appointments.slice(0, 4).map((appointment) => (
+                    <div
+                      key={appointment.id}
+                      className="rounded-xl border border-gray-200 dark:border-gray-700/60 p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {appointment.customerName || "Walk-in customer"}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {formatDateTime(appointment.appointmentDate)}
-                        </p>
-                      </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {appointment.customerName || "Walk-in customer"}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {formatDateTime(appointment.appointmentDate)}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {getManagerAppointmentLocationLabel(appointment)}
+                          </p>
+                        </div>
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${appointmentTone(
                           appointment.status,

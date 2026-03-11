@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY:
       process.env.NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY ||
       process.env.GOOGLE_MAPS_PLATFORM_API_KEY ||
-      process.env.GOOGLE_CLOUD_API_KEY ||
       "",
   },
   experimental: {

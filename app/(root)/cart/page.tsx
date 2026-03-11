@@ -13,7 +13,12 @@ import {
   type CustomerAppointmentRecord,
   type PublicBranchRecord,
 } from "@/lib/apiClient";
-import { geocodeAddress, haversineDistanceKm } from "@/lib/googleMaps";
+import {
+  geocodeAddress,
+  haversineDistanceKm,
+  normalizeStoredLocationSelection,
+  resolveLocationLabel,
+} from "@/lib/googleMaps";
 import supabase from "@/lib/supabase";
 import { ArrowRight, LoaderCircle, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -178,6 +183,7 @@ export default function CartPage() {
   const [isCustomerSession, setIsCustomerSession] = useState(false);
   const [tierLabel, setTierLabel] = useState("");
   const [customerCountry, setCustomerCountry] = useState("");
+  const [customerLocationDistrict, setCustomerLocationDistrict] = useState("");
   const [branchSelectionNote, setBranchSelectionNote] = useState("");
   const [isResolvingBranch, setIsResolvingBranch] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -232,6 +238,15 @@ export default function CartPage() {
     Boolean(form.branchId) &&
     Boolean(form.appointmentDate) &&
     (isCustomerSession || (Boolean(form.name.trim()) && Boolean(form.email.trim())));
+  const staffFacingLocationLabel = useMemo(
+    () =>
+      resolveLocationLabel({
+        district: customerLocationDistrict,
+        city: form.userEnteredCity,
+        country: customerCountry,
+      }),
+    [customerCountry, customerLocationDistrict, form.userEnteredCity],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -249,6 +264,9 @@ export default function CartPage() {
         if (sessionError) throw sessionError;
 
         const token = session?.access_token ?? null;
+        const metadataLocation = normalizeStoredLocationSelection(
+          session?.user?.user_metadata,
+        );
         const autofill = await getPublicAppointmentAutofill({
           accessToken: token ?? undefined,
         });
@@ -266,6 +284,7 @@ export default function CartPage() {
         setIsCustomerSession(autofill.canAutofill);
         setTierLabel(String(autofill.data?.tier || "").replace(/_/g, " "));
         setCustomerCountry(autofill.data?.country || "");
+        setCustomerLocationDistrict(metadataLocation?.district || "");
         setForm((current) => ({
           ...current,
           branchId:
@@ -492,6 +511,7 @@ export default function CartPage() {
           lineId: asOptionalText(form.lineId),
           language: asOptionalText(form.language),
           userEnteredCity: asOptionalText(form.userEnteredCity),
+          autoLocatedCity: asOptionalText(staffFacingLocationLabel || form.userEnteredCity),
           notes: asOptionalText(form.notes),
         },
       });

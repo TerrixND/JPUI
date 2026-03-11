@@ -14,6 +14,7 @@ import {
   type ManagerBranchUser,
   type ManagerPendingAppointment,
 } from "@/lib/managerApi";
+import { getManagerAppointmentLocationLabel } from "@/lib/managerDashboardUi";
 
 const getErrorMessage = (value: unknown) =>
   value instanceof Error ? value.message : "Unexpected error.";
@@ -336,6 +337,14 @@ export default function ManagerAppointments() {
             };
             const isExpanded = expandedAppointmentId === appointment.id;
             const productOptions = appointmentProductOptions[appointment.id] || [];
+            const appointmentLocation = getManagerAppointmentLocationLabel(appointment);
+            const appointmentContact = [
+              appointment.customerEmail,
+              appointment.customerPhone,
+              appointment.customerLineId ? `LINE ${appointment.customerLineId}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
 
             return (
               <div
@@ -362,6 +371,20 @@ export default function ManagerAppointments() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {formatDateTime(appointment.appointmentDate)}
                   </p>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 dark:border-gray-700/60 dark:bg-gray-800/40 dark:text-gray-300">
+                  <p>{appointmentContact || "No customer contact details on file."}</p>
+                  <p className="mt-1">
+                    Location: {appointmentLocation}
+                  </p>
+                  {appointment.preferredContact || appointment.language ? (
+                    <p className="mt-1">
+                      {[appointment.preferredContact, appointment.language]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-1">

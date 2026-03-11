@@ -1233,6 +1233,11 @@ export type ManagerPendingAppointment = {
   customerType: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerLineId: string | null;
+  preferredContact: string | null;
+  language: string | null;
+  autoLocatedCity: string | null;
+  userEnteredCity: string | null;
   notes: string | null;
   branch: ManagerBranchRef | null;
   items: ManagerPendingAppointmentItem[];
@@ -1306,16 +1311,31 @@ const normalizePendingAppointment = (
       asNullableString(customer?.name),
     customerType:
       asNullableString(row.customerType) || asNullableString(customer?.type),
-    customerEmail:
-      asNullableString(row.email) ||
-      asNullableString(row.customerEmail) ||
-      asNullableString(customer?.email),
-    customerPhone:
-      asNullableString(row.phone) ||
-      asNullableString(row.customerPhone) ||
-      asNullableString(customer?.phone),
-    notes: asNullableString(row.notes),
-    branch: normalizeManagerBranch(row.branch),
+      customerEmail:
+        asNullableString(row.email) ||
+        asNullableString(row.customerEmail) ||
+        asNullableString(customer?.email),
+      customerPhone:
+        asNullableString(row.phone) ||
+        asNullableString(row.customerPhone) ||
+        asNullableString(customer?.phone),
+      customerLineId:
+        asNullableString(row.lineId) ||
+        asNullableString(row.customerLineId) ||
+        asNullableString(customer?.lineId),
+      preferredContact: asNullableString(row.preferredContact),
+      language:
+        asNullableString(row.language) || asNullableString(customer?.language),
+      autoLocatedCity:
+        asNullableString(row.autoLocatedCity) ||
+        asNullableString(row.autoLocation) ||
+        asNullableString(customer?.location),
+      userEnteredCity:
+        asNullableString(row.userEnteredCity) ||
+        asNullableString(row.customerCity) ||
+        asNullableString(customer?.city),
+      notes: asNullableString(row.notes),
+      branch: normalizeManagerBranch(row.branch),
     items: itemRows
       .map((entry) => normalizeAppointmentItem(entry))
       .filter((entry): entry is ManagerPendingAppointmentItem => Boolean(entry)),

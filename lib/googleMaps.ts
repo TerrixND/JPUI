@@ -2,6 +2,7 @@ export type GoogleLocationMode = "city" | "address";
 
 export type GoogleLocationSelection = {
   label: string;
+  district: string;
   city: string;
   country: string;
   timezone: string;
@@ -13,6 +14,7 @@ export type GoogleLocationSelection = {
 };
 
 export type ResolvedGoogleLocation = {
+  district: string;
   city: string;
   country: string;
   timezone: string;
@@ -54,7 +56,7 @@ export const loadGoogleMaps = async (): Promise<typeof google> => {
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) {
     throw new Error(
-      "Google Maps API key is missing. Set NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY or expose GOOGLE_MAPS_PLATFORM_API_KEY in Next config.",
+      "Google Maps API key is missing. Set NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY or GOOGLE_MAPS_PLATFORM_API_KEY. Do not use GOOGLE_CLOUD_API_KEY for the browser Maps JavaScript API.",
     );
   }
 
@@ -137,16 +139,110 @@ const resolveAddressComponent = (
   return "";
 };
 
-const resolveCity = (
+const normalizeLocationToken = (value: string | null | undefined) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const resolveAddressComponentAcrossPlaces = (
+  addressComponentsList: Array<google.maps.GeocoderAddressComponent[] | undefined>,
+  candidates: string[],
+  blockedTokens: string[] = [],
+) => {
+  const blocked = new Set(blockedTokens.filter(Boolean));
+
+  for (const addressComponents of addressComponentsList) {
+    const match = resolveAddressComponent(addressComponents, candidates);
+    if (!match) {
+      continue;
+    }
+
+    if (blocked.has(normalizeLocationToken(match))) {
+      continue;
+    }
+
+    return match;
+  }
+
+  return "";
+};
+
+const resolveDistrict = (
   addressComponents: google.maps.GeocoderAddressComponent[] | undefined,
 ) =>
   resolveAddressComponent(addressComponents, [
+    "sublocality_level_1",
+    "sublocality",
+    "sublocality_level_2",
+    "administrative_area_level_3",
+    "neighborhood",
+  ]);
+
+const resolveCity = (
+  addressComponents: google.maps.GeocoderAddressComponent[] | undefined,
+  fallbackPlaces: Array<google.maps.GeocoderResult | google.maps.places.PlaceResult> = [],
+) => {
+  const fallbackAddressComponents = fallbackPlaces.map((place) => place.address_components);
+  const district = resolveDistrict(addressComponents);
+  const districtToken = normalizeLocationToken(district);
+
+  const directLocality = resolveAddressComponent(addressComponents, [
     "locality",
     "postal_town",
-    "administrative_area_level_2",
-    "administrative_area_level_1",
-    "sublocality_level_1",
   ]);
+  if (directLocality) {
+    return directLocality;
+  }
+
+  const fallbackLocality = resolveAddressComponentAcrossPlaces(
+    fallbackAddressComponents,
+    ["locality", "postal_town"],
+    [districtToken],
+  );
+  if (fallbackLocality) {
+    return fallbackLocality;
+  }
+
+  const directAdminLevel2 = resolveAddressComponent(addressComponents, [
+    "administrative_area_level_2",
+  ]);
+  if (
+    directAdminLevel2 &&
+    normalizeLocationToken(directAdminLevel2) !== districtToken
+  ) {
+    return directAdminLevel2;
+  }
+
+  const fallbackAdminLevel2 = resolveAddressComponentAcrossPlaces(
+    fallbackAddressComponents,
+    ["administrative_area_level_2"],
+    [districtToken],
+  );
+  if (fallbackAdminLevel2) {
+    return fallbackAdminLevel2;
+  }
+
+  const directAdminLevel1 = resolveAddressComponent(addressComponents, [
+    "administrative_area_level_1",
+  ]);
+  if (
+    directAdminLevel1 &&
+    normalizeLocationToken(directAdminLevel1) !== districtToken
+  ) {
+    return directAdminLevel1;
+  }
+
+  const fallbackAdminLevel1 = resolveAddressComponentAcrossPlaces(
+    fallbackAddressComponents,
+    ["administrative_area_level_1"],
+    [districtToken],
+  );
+  if (fallbackAdminLevel1) {
+    return fallbackAdminLevel1;
+  }
+
+  return directAdminLevel2 || directAdminLevel1 || district;
+};
 
 const resolveCountry = (
   addressComponents: google.maps.GeocoderAddressComponent[] | undefined,
@@ -202,9 +298,11 @@ export const resolveTimeZoneForCoordinates = async ({
 export const extractResolvedGoogleLocation = async ({
   place,
   source,
+  fallbackPlaces = [],
 }: {
   place: google.maps.places.PlaceResult | google.maps.GeocoderResult;
   source: ResolvedGoogleLocation["source"];
+  fallbackPlaces?: Array<google.maps.GeocoderResult | google.maps.places.PlaceResult>;
 }): Promise<ResolvedGoogleLocation> => {
   const addressComponents = place.address_components;
   const latitude = place.geometry?.location?.lat?.() ?? null;
@@ -215,7 +313,8 @@ export const extractResolvedGoogleLocation = async ({
       : resolveBrowserTimeZone();
 
   return {
-    city: resolveCity(addressComponents),
+    district: resolveDistrict(addressComponents),
+    city: resolveCity(addressComponents, fallbackPlaces),
     country: resolveCountry(addressComponents),
     timezone,
     formattedAddress: resolveFormattedAddress(place),
@@ -235,7 +334,7 @@ export const reverseGeocodeCurrentPosition = async ({
 }) => {
   const googleMaps = await loadGoogleMaps();
 
-  return new Promise<google.maps.GeocoderResult>((resolve, reject) => {
+  return new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
     const geocoder = new googleMaps.maps.Geocoder();
     geocoder.geocode(
       {
@@ -250,7 +349,7 @@ export const reverseGeocodeCurrentPosition = async ({
           return;
         }
 
-        resolve(results[0]);
+        resolve(results);
       },
     );
   });
@@ -269,14 +368,15 @@ export const resolveCurrentPositionLocation = async () => {
     });
   });
 
-  const result = await reverseGeocodeCurrentPosition({
+  const results = await reverseGeocodeCurrentPosition({
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
   });
 
   return extractResolvedGoogleLocation({
-    place: result,
+    place: results[0],
     source: "geolocation",
+    fallbackPlaces: results.slice(1),
   });
 };
 
@@ -342,16 +442,38 @@ export const resolveAutocompleteTypes = (mode: GoogleLocationMode) =>
   mode === "city" ? ["(cities)"] : ["geocode"];
 
 export const resolveLocationLabel = ({
+  district,
   city,
   country,
 }: {
+  district?: string | null;
   city?: string | null;
   country?: string | null;
-}) => [city, country].filter(Boolean).join(", ");
+}) => {
+  const seen = new Set<string>();
+
+  return [district, city, country]
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      if (!value) {
+        return false;
+      }
+
+      const token = value.toLowerCase();
+      if (seen.has(token)) {
+        return false;
+      }
+
+      seen.add(token);
+      return true;
+    })
+    .join(", ");
+};
 
 export const buildLocationLabel = (
   selection:
     | {
+        district?: string | null;
         city?: string | null;
         country?: string | null;
         formattedAddress?: string | null;
@@ -364,14 +486,15 @@ export const buildLocationLabel = (
   }
 
   return (
-    selection.label ||
     resolveLocationLabel(selection) ||
+    selection.label ||
     selection.formattedAddress ||
     ""
   );
 };
 
 export const createLocationSelectionFromValues = ({
+  district,
   city,
   country,
   timezone,
@@ -382,6 +505,7 @@ export const createLocationSelectionFromValues = ({
   label = "",
   source = "PROFILE",
 }: {
+  district?: string | null;
   city?: string | null;
   country?: string | null;
   timezone?: string | null;
@@ -392,12 +516,20 @@ export const createLocationSelectionFromValues = ({
   label?: string | null;
   source?: string;
 }) => {
+  const nextDistrict = district || "";
   const nextCity = city || "";
   const nextCountry = country || "";
   const nextTimezone = timezone || "";
-  const nextLabel = label || resolveLocationLabel({ city: nextCity, country: nextCountry });
+  const nextLabel =
+    label ||
+    resolveLocationLabel({
+      district: nextDistrict,
+      city: nextCity,
+      country: nextCountry,
+    });
 
   if (
+    !nextDistrict &&
     !nextCity &&
     !nextCountry &&
     !nextTimezone &&
@@ -412,6 +544,7 @@ export const createLocationSelectionFromValues = ({
 
   return {
     label: nextLabel,
+    district: nextDistrict,
     city: nextCity,
     country: nextCountry,
     timezone: nextTimezone,
@@ -423,12 +556,20 @@ export const createLocationSelectionFromValues = ({
   } satisfies GoogleLocationSelection;
 };
 
-export const normalizeExactLocationRecord = (value: unknown) => {
+export const normalizeStoredLocationSelection = (value: unknown) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
   const row = value as Record<string, unknown>;
+  const address =
+    row.address && typeof row.address === "object" && !Array.isArray(row.address)
+      ? (row.address as Record<string, unknown>)
+      : null;
+  const components =
+    row.components && typeof row.components === "object" && !Array.isArray(row.components)
+      ? (row.components as Record<string, unknown>)
+      : null;
   const latitude =
     typeof row.latitude === "number"
       ? row.latitude
@@ -443,6 +584,14 @@ export const normalizeExactLocationRecord = (value: unknown) => {
         : null;
 
   return createLocationSelectionFromValues({
+    district:
+      typeof row.district === "string"
+        ? row.district
+        : typeof address?.district === "string"
+          ? address.district
+          : typeof components?.district === "string"
+            ? components.district
+            : null,
     city: typeof row.city === "string" ? row.city : null,
     country: typeof row.country === "string" ? row.country : null,
     timezone:
@@ -458,21 +607,35 @@ export const normalizeExactLocationRecord = (value: unknown) => {
         ? row.formattedAddress
         : typeof row.address === "string"
           ? row.address
+          : typeof address?.formattedAddress === "string"
+            ? address.formattedAddress
           : null,
     placeId: typeof row.placeId === "string" ? row.placeId : null,
-    label: typeof row.label === "string" ? row.label : "",
+    label:
+      typeof row.locationLabel === "string"
+        ? row.locationLabel
+        : typeof row.label === "string"
+          ? row.label
+          : "",
     source: typeof row.source === "string" ? row.source : "PROFILE",
   });
 };
+
+export const normalizeExactLocationRecord = normalizeStoredLocationSelection;
 
 const toLocationSelection = (
   location: ResolvedGoogleLocation,
   source: string,
 ): GoogleLocationSelection => ({
   label:
-    resolveLocationLabel({ city: location.city, country: location.country }) ||
+    resolveLocationLabel({
+      district: location.district,
+      city: location.city,
+      country: location.country,
+    }) ||
     location.formattedAddress ||
     "",
+  district: location.district,
   city: location.city,
   country: location.country,
   timezone: location.timezone,

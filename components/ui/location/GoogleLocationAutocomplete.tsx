@@ -114,6 +114,10 @@ export default function GoogleLocationAutocomplete({
 
     try {
       const selection = await getCurrentLocationSelection();
+      if (mode === "city" && !selection.city) {
+        throw new Error("Unable to resolve the city from your current location.");
+      }
+
       onChange({
         ...selection,
         source: mode === "city" ? "GEOLOCATION" : "STAFF_PROFILE",
@@ -199,14 +203,22 @@ export default function GoogleLocationAutocomplete({
       {!hasGoogleMapsApiKey() ? (
         <p className="mt-2 text-xs text-amber-700">
           Google Maps API key is not exposed to the frontend. Set
-          `NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY` or expose the existing key through Next config.
+          `NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_API_KEY` or `GOOGLE_MAPS_PLATFORM_API_KEY`, then
+          restart the Next dev server. Do not use `GOOGLE_CLOUD_API_KEY` for Maps JavaScript.
         </p>
       ) : null}
       {statusMessage ? <p className="mt-2 text-xs text-emerald-700">{statusMessage}</p> : null}
       {errorMessage ? <p className="mt-2 text-xs text-red-600">{errorMessage}</p> : null}
       {value ? (
         <p className="mt-2 text-xs text-slate-500">
-          Stored: {[value.city, value.country, value.timezone].filter(Boolean).join(" / ") || value.label}
+          Stored: {[
+            value.district,
+            value.city,
+            value.country,
+            value.timezone,
+          ]
+            .filter(Boolean)
+            .join(" / ") || value.label}
         </p>
       ) : null}
     </div>

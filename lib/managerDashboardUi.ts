@@ -1,4 +1,9 @@
-import type { ManagerBranchRef, ManagerBranchUser, ManagerProductSummary } from "./managerApi";
+import type {
+  ManagerBranchRef,
+  ManagerBranchUser,
+  ManagerPendingAppointment,
+  ManagerProductSummary,
+} from "./managerApi";
 
 export const formatManagerDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
@@ -58,3 +63,7 @@ export const getManagerProductPreviewUrl = (
   product.media.find((entry) => entry.url)?.url ||
   product.media.find((entry) => entry.originalUrl)?.originalUrl ||
   "";
+
+export const getManagerAppointmentLocationLabel = (
+  appointment: Pick<ManagerPendingAppointment, "autoLocatedCity" | "userEnteredCity">,
+) => appointment.autoLocatedCity || appointment.userEnteredCity || "-";

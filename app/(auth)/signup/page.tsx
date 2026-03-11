@@ -82,6 +82,11 @@ const SignupPage = () => {
         country: selectedLocation?.country || undefined,
         timezone: selectedLocation?.timezone || undefined,
       };
+      const authMetadata = {
+        ...profilePayload,
+        district: selectedLocation?.district || undefined,
+        locationLabel: selectedLocation?.label || undefined,
+      };
 
       const precheckResult = await precheckSignup({
         flow: "SETUP_USER",
@@ -93,7 +98,7 @@ const SignupPage = () => {
         email: normalizedEmail,
         password,
         options: {
-          data: profilePayload,
+          data: authMetadata,
         },
       });
 
@@ -218,6 +223,16 @@ const SignupPage = () => {
             />
             {selectedLocation ? (
               <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                {selectedLocation.district ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+                    {selectedLocation.district}
+                  </span>
+                ) : null}
+                {selectedLocation.city ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+                    {selectedLocation.city}
+                  </span>
+                ) : null}
                 {selectedLocation.country ? (
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
                     {selectedLocation.country}

@@ -25,6 +25,7 @@ import {
   buildLocationLabel,
   createLocationSelectionFromValues,
   normalizeExactLocationRecord,
+  normalizeStoredLocationSelection,
   type GoogleLocationSelection,
 } from "@/lib/googleMaps";
 import { startLineOAuth } from "@/lib/lineAuth";
@@ -183,6 +184,55 @@ const mapUserToProfile = (me: UserMeResponse): Profile => ({
   lineNotificationsEnabled: me.lineNotificationsEnabled,
 });
 
+const asMetadataRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const resolveCustomerLocationSelection = ({
+  profile,
+  metadata,
+}: {
+  profile: Pick<Profile, "city" | "country" | "timezone">;
+  metadata: unknown;
+}) => {
+  const metadataSelection = normalizeStoredLocationSelection(metadata);
+
+  return createLocationSelectionFromValues({
+    district: metadataSelection?.district || null,
+    city: profile.city || metadataSelection?.city || "",
+    country: profile.country || metadataSelection?.country || "",
+    timezone: profile.timezone || metadataSelection?.timezone || "",
+    formattedAddress: metadataSelection?.formattedAddress || null,
+    placeId: metadataSelection?.placeId || null,
+    label: metadataSelection?.label || "",
+    source: metadataSelection?.source || "PROFILE",
+  });
+};
+
+const buildCustomerLocationMetadataPayload = ({
+  currentMetadata,
+  selection,
+  profile,
+}: {
+  currentMetadata: Record<string, unknown>;
+  selection: GoogleLocationSelection | null;
+  profile: Pick<Profile, "city" | "country" | "timezone">;
+}) => ({
+  ...currentMetadata,
+  city: profile.city || null,
+  country: profile.country || null,
+  timezone: profile.timezone || null,
+  district: selection?.district || null,
+  locationLabel:
+    buildLocationLabel(
+      selection || {
+        city: profile.city,
+        country: profile.country,
+      },
+    ) || null,
+});
+
 type ProfileTextField =
   | "name"
   | "email"
@@ -200,6 +250,10 @@ export default function ProfilePage() {
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [originalProfile, setOriginalProfile] = useState<Profile>(EMPTY_PROFILE);
+  const [customerLocationSelection, setCustomerLocationSelection] =
+    useState<GoogleLocationSelection | null>(null);
+  const [originalCustomerLocationSelection, setOriginalCustomerLocationSelection] =
+    useState<GoogleLocationSelection | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCustomerProfile, setIsCustomerProfile] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -496,6 +550,7 @@ export default function ProfilePage() {
   };
 
   const handleCustomerLocationChange = (selection: GoogleLocationSelection | null) => {
+    setCustomerLocationSelection(selection);
     setProfile((prev) => ({
       ...prev,
       city: selection?.city || "",
@@ -543,6 +598,7 @@ export default function ProfilePage() {
     setError("");
     setSuccess("");
     setOriginalProfile(profile);
+    setOriginalCustomerLocationSelection(customerLocationSelection);
     setIsEditing(true);
   };
 
@@ -550,6 +606,7 @@ export default function ProfilePage() {
     setError("");
     setSuccess("");
     setProfile(originalProfile);
+    setCustomerLocationSelection(originalCustomerLocationSelection);
     setIsEditing(false);
   };
 
@@ -583,9 +640,18 @@ export default function ProfilePage() {
         if (!isActive) return;
 
         const nextProfile = mapUserToProfile(me);
+        const nextIsCustomerProfile = (me.role || "").toUpperCase() === "CUSTOMER";
+        const nextCustomerLocation = nextIsCustomerProfile
+          ? resolveCustomerLocationSelection({
+              profile: nextProfile,
+              metadata: session.user.user_metadata,
+            })
+          : null;
         setProfile(nextProfile);
         setOriginalProfile(nextProfile);
-        setIsCustomerProfile((me.role || "").toUpperCase() === "CUSTOMER");
+        setCustomerLocationSelection(nextCustomerLocation);
+        setOriginalCustomerLocationSelection(nextCustomerLocation);
+        setIsCustomerProfile(nextIsCustomerProfile);
       } catch (err) {
         if (isAccountAccessDeniedError(err)) {
           await forceLogoutToBlockedPage(
@@ -743,6 +809,7 @@ export default function ProfilePage() {
                   ? {
                       placeId: profile.exactLocation.placeId,
                       formattedAddress: profile.exactLocation.formattedAddress,
+                      district: profile.exactLocation.district,
                       city: profile.exactLocation.city,
                       country: profile.exactLocation.country,
                       timezone: profile.exactLocation.timezone,
@@ -762,10 +829,49 @@ export default function ProfilePage() {
       });
 
       const nextProfile = mapUserToProfile(updatedMe);
+      const nextCustomerLocation = isCustomerProfile
+        ? createLocationSelectionFromValues({
+            district: customerLocationSelection?.district || null,
+            city: nextProfile.city || "",
+            country: nextProfile.country || "",
+            timezone: nextProfile.timezone || "",
+            formattedAddress: customerLocationSelection?.formattedAddress || null,
+            placeId: customerLocationSelection?.placeId || null,
+            label: customerLocationSelection?.label || "",
+            source: customerLocationSelection?.source || "PROFILE",
+          })
+        : null;
+      let nextSuccessMessage = "Profile updated.";
+
+      if (isCustomerProfile) {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+        if (sessionError) {
+          throw new Error(sessionError.message);
+        }
+
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: buildCustomerLocationMetadataPayload({
+            currentMetadata: asMetadataRecord(session?.user?.user_metadata),
+            selection: nextCustomerLocation,
+            profile: nextProfile,
+          }),
+        });
+
+        if (metadataError) {
+          nextSuccessMessage =
+            "Profile updated. Sign out and back in if appointment location details still look stale.";
+        }
+      }
+
       setProfile(nextProfile);
       setOriginalProfile(nextProfile);
+      setCustomerLocationSelection(nextCustomerLocation);
+      setOriginalCustomerLocationSelection(nextCustomerLocation);
       setIsCustomerProfile((updatedMe.role || "").toUpperCase() === "CUSTOMER");
-      setSuccess("Profile updated.");
+      setSuccess(nextSuccessMessage);
       setIsEditing(false);
     } catch (err) {
       if (isAccountAccessDeniedError(err)) {
@@ -807,10 +913,17 @@ export default function ProfilePage() {
     deleteOtpAddOfficialUrl || LINE_OFFICIAL_ACCOUNT_ADD_FRIEND_URL;
   const avatarSrc = profile.linePictureUrl || "/images/naruto.jpg";
   const isRemoteAvatar = /^https?:\/\//i.test(avatarSrc);
-  const locationLabel = buildLocationLabel({
-    city: profile.city,
-    country: profile.country,
-  });
+  const locationLabel = buildLocationLabel(
+    isCustomerProfile
+      ? customerLocationSelection || {
+          city: profile.city,
+          country: profile.country,
+        }
+      : {
+          city: profile.city,
+          country: profile.country,
+        },
+  );
   const isStaffExactLocationEditable =
     !isCustomerProfile &&
     !profile.isMainAdmin &&
@@ -1072,15 +1185,7 @@ export default function ProfilePage() {
               <div className="mt-5">
                 <GoogleLocationAutocomplete
                   label="Location"
-                  value={
-                    profile.city || profile.country || profile.timezone
-                      ? createLocationSelectionFromValues({
-                          city: profile.city,
-                          country: profile.country,
-                          timezone: profile.timezone,
-                        })
-                      : null
-                  }
+                  value={customerLocationSelection}
                   onChange={handleCustomerLocationChange}
                   disabled={!isEditing}
                   helperText="Only city, country, and timezone are persisted for customers."
