@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import DashboardLineRedirect from "@/components/ui/dashboard/DashboardLineRedirect";
 import Sidebar from "@/components/ui/dashboard/Sidebar";
 import Navbar from "@/components/ui/dashboard/Navbar";
 import { RoleProvider, type Role } from "@/components/ui/dashboard/RoleContext";
@@ -732,6 +733,7 @@ export default function DashboardLayout({
         adminCapabilities={adminCapabilities}
         refreshAdminCapabilities={refreshAdminCapabilities}
       >
+        <DashboardLineRedirect />
         <div className="flex jp-h-vh-screen bg-gray-50 dark:bg-gray-950 overflow-hidden overscroll-none transition-colors duration-200">
           {adminRestrictionNotice && (
             <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 shadow-md">

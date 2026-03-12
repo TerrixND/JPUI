@@ -36,6 +36,7 @@ const adminNav: NavItem[] = [
 const managerNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Appointments", pathSuffix: "appointments", icon: "calendar" },
+  { label: "LINE", pathSuffix: "line", icon: "chat" },
   { label: "Appointment History", pathSuffix: "appointment-history", icon: "history" },
   { label: "Users", pathSuffix: "users", icon: "users" },
   { label: "Requests", pathSuffix: "requests", icon: "inbox", showRequestDot: true },
@@ -48,6 +49,7 @@ const managerNav: NavItem[] = [
 const salespersonNav: NavItem[] = [
   { label: "Dashboard", pathSuffix: "", icon: "grid" },
   { label: "Appointments", pathSuffix: "appointments", icon: "calendar" },
+  { label: "LINE", pathSuffix: "line", icon: "chat" },
   { label: "Possessions", pathSuffix: "possessions", icon: "box" },
   { label: "Performance", pathSuffix: "performance", icon: "chart" },
 ];
@@ -223,6 +225,17 @@ function NavIcon({ icon }: { icon: string }) {
             strokeLinejoin="round"
             strokeWidth={2}
             d="M20 13V7a2 2 0 00-2-2H6a2 2 0 00-2 2v6m16 0l-2.586 5.172A2 2 0 0115.618 20H8.382a2 2 0 01-1.796-1.106L4 13m16 0h-4a2 2 0 01-2 2h-4a2 2 0 01-2-2H4"
+          />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M8 10h8m-8 4h4m-4-10h8a4 4 0 014 4v8a4 4 0 01-4 4H8l-4 3V8a4 4 0 014-4z"
           />
         </svg>
       );

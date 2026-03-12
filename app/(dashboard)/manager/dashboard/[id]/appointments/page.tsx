@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
+import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   approveManagerAppointment,
   createManagerAppointmentPossession,
   filterManagerBranchStaff,
+  getManagerAppointments,
   getManagerAnalyticsBranches,
   getManagerBranchUsers,
-  getManagerPendingAppointments,
+  type ManagerAppointmentHistoryRecord,
   type ManagerBranchUser,
-  type ManagerPendingAppointment,
 } from "@/lib/managerApi";
 import { getManagerAppointmentLocationLabel } from "@/lib/managerDashboardUi";
 
@@ -55,13 +57,23 @@ type PossessionDraft = {
   note: string;
 };
 
+const hasSuccessfulSale = (appointment: ManagerAppointmentHistoryRecord) =>
+  appointment.sales.some((sale) => sale.status === "SUCCESSFUL");
+
+const isActiveAppointment = (appointment: ManagerAppointmentHistoryRecord) =>
+  !hasSuccessfulSale(appointment) &&
+  appointment.status !== "CANCELLED" &&
+  appointment.status !== "NO_SHOW";
+
 export default function ManagerAppointments() {
+  const router = useRouter();
+  const { dashboardBasePath } = useRole();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [branchId, setBranchId] = useState("");
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; label: string }>>([]);
-  const [appointments, setAppointments] = useState<ManagerPendingAppointment[]>([]);
+  const [appointments, setAppointments] = useState<ManagerAppointmentHistoryRecord[]>([]);
   const [salespersons, setSalespersons] = useState<ManagerBranchUser[]>([]);
   const [expandedAppointmentId, setExpandedAppointmentId] = useState("");
   const [draftByAppointmentId, setDraftByAppointmentId] = useState<
@@ -111,9 +123,10 @@ export default function ManagerAppointments() {
       try {
         const accessToken = await getAccessToken();
         const [appointmentRows, branchUsers] = await Promise.all([
-          getManagerPendingAppointments({
+          getManagerAppointments({
             accessToken,
             branchId: resolvedBranchId,
+            limit: 200,
           }),
           getManagerBranchUsers({
             accessToken,
@@ -121,7 +134,7 @@ export default function ManagerAppointments() {
           }),
         ]);
 
-        setAppointments(appointmentRows);
+        setAppointments(appointmentRows.filter((appointment) => isActiveAppointment(appointment)));
         setSalespersons(filterManagerBranchStaff(branchUsers.users, ["SALES"]));
       } catch (caughtError) {
         if (handleAccountAccessDeniedError(caughtError)) {
@@ -204,11 +217,25 @@ export default function ManagerAppointments() {
 
     try {
       const accessToken = await getAccessToken();
-      await approveManagerAppointment({
+      const response = (await approveManagerAppointment({
         accessToken,
         appointmentId,
         status: nextStatus,
-      });
+      })) as {
+        lineConversation?: {
+          id?: string | null;
+        } | null;
+      };
+
+      const lineConversationId = response.lineConversation?.id?.trim();
+      if (nextStatus === "CONFIRMED" && lineConversationId) {
+        router.push(
+          `${dashboardBasePath}/line?conversationId=${encodeURIComponent(
+            lineConversationId,
+          )}`,
+        );
+        return;
+      }
 
       setNotice(
         nextStatus === "CONFIRMED"
@@ -226,7 +253,7 @@ export default function ManagerAppointments() {
     }
   };
 
-  const onSubmitPossession = async (appointment: ManagerPendingAppointment) => {
+  const onSubmitPossession = async (appointment: ManagerAppointmentHistoryRecord) => {
     const draft = draftByAppointmentId[appointment.id];
     if (!draft?.productId || !draft?.salespersonUserId) {
       setError("Select both the appointment product and salesperson before checkout.");
@@ -272,7 +299,7 @@ export default function ManagerAppointments() {
     <div className="space-y-6">
       <PageHeader
         title="Appointment Status"
-        description="Review customer appointment requests, update status, and allocate possessions from the requested product lines."
+        description="Manage active appointments until they are sold successfully or closed."
         action={
           <div className="flex items-center gap-2">
             <select
@@ -324,7 +351,7 @@ export default function ManagerAppointments() {
         </div>
       ) : appointments.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60 p-6 text-sm text-gray-500 dark:text-gray-400">
-          No pending customer appointment requests found for the selected branch.
+          No active appointments found for the selected branch.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -406,19 +433,23 @@ export default function ManagerAppointments() {
                 </div>
 
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onApprove(appointment.id, "CONFIRMED")}
-                    disabled={updatingAppointmentId === appointment.id}
-                    className="flex-1 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-                  >
-                    {updatingAppointmentId === appointment.id ? "Updating..." : "Confirm"}
-                  </button>
+                  {appointment.status === "REQUESTED" ? (
+                    <button
+                      type="button"
+                      onClick={() => void onApprove(appointment.id, "CONFIRMED")}
+                      disabled={updatingAppointmentId === appointment.id}
+                      className="flex-1 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                    >
+                      {updatingAppointmentId === appointment.id ? "Updating..." : "Confirm"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void onApprove(appointment.id, "CANCELLED")}
                     disabled={updatingAppointmentId === appointment.id}
-                    className="flex-1 py-2 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                    className={`py-2 border border-gray-200 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors ${
+                      appointment.status === "REQUESTED" ? "flex-1" : "w-full"
+                    }`}
                   >
                     Cancel
                   </button>
