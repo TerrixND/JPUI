@@ -5,14 +5,14 @@ import { useCart } from "@/hooks/useCart";
 import {
   ApiClientError,
   createPublicAppointment,
-  getCustomerAppointments,
   getPublicAppointmentAutofill,
   getPublicBranches,
   getPublicMediaUrl,
+  getUserMe,
   mapPageContextToMediaSection,
-  type CustomerAppointmentRecord,
   type PublicBranchRecord,
 } from "@/lib/apiClient";
+import { startLineOAuth } from "@/lib/lineAuth";
 import {
   geocodeAddress,
   haversineDistanceKm,
@@ -22,7 +22,8 @@ import {
 import supabase from "@/lib/supabase";
 import { ArrowRight, LoaderCircle, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 type AppointmentFormState = {
   branchId: string;
@@ -101,11 +102,13 @@ const normalizeToken = (value: string | null | undefined) =>
 const resolveDefaultPreferredContact = ({
   lineId,
   phone,
+  lineReady = false,
 }: {
   lineId?: string | null;
   phone?: string | null;
+  lineReady?: boolean;
 }) => {
-  if (normalizeToken(lineId)) return "LINE" as const;
+  if (lineReady || normalizeToken(lineId)) return "LINE" as const;
   if (normalizeToken(phone)) return "PHONE" as const;
   return "EMAIL" as const;
 };
@@ -147,49 +150,27 @@ const branchLabel = (branch: PublicBranchRecord | null | undefined) => {
     .join(" / ");
 };
 
-const appointmentTone = (status: string | null | undefined) => {
-  switch (String(status || "").toUpperCase()) {
-    case "CONFIRMED":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "COMPLETED":
-      return "border-stone-200 bg-stone-100 text-stone-700";
-    case "CANCELLED":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-};
-
-const fulfillmentTone = (status: string | null | undefined) => {
-  switch (String(status || "").toUpperCase()) {
-    case "FULFILLED":
-    case "READY":
-    case "RESERVED":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "CANCELLED":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-stone-200 bg-white text-stone-600";
-  }
-};
-
-export default function CartPage() {
+function CartPageContent() {
   const authUser = useAuth() as { id?: string | null } | null;
+  const searchParams = useSearchParams();
   const { items, count, removeItem, clear } = useCart();
   const [branches, setBranches] = useState<PublicBranchRecord[]>([]);
-  const [appointments, setAppointments] = useState<CustomerAppointmentRecord[]>([]);
   const [cartImages, setCartImages] = useState<Record<string, string>>({});
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isCustomerSession, setIsCustomerSession] = useState(false);
   const [tierLabel, setTierLabel] = useState("");
   const [customerCountry, setCustomerCountry] = useState("");
   const [customerLocationDistrict, setCustomerLocationDistrict] = useState("");
+  const [customerLineUserId, setCustomerLineUserId] = useState("");
+  const [customerLineVerifiedAt, setCustomerLineVerifiedAt] = useState("");
   const [branchSelectionNote, setBranchSelectionNote] = useState("");
   const [isResolvingBranch, setIsResolvingBranch] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConnectingLine, setIsConnectingLine] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [lineConnectionMessage, setLineConnectionMessage] = useState("");
   const [form, setForm] = useState<AppointmentFormState>({
     branchId: "",
     appointmentDate: createDefaultAppointmentValue(),
@@ -234,10 +215,39 @@ export default function CartPage() {
       isCustomerSession,
     ],
   );
+  const isLineReadyForContact = Boolean(customerLineUserId && customerLineVerifiedAt);
+  const preferredContactBlockingMessage = useMemo(() => {
+    if (form.preferredContact === "EMAIL" && !form.email.trim()) {
+      return "Add an email address before using Email as the preferred contact method.";
+    }
+
+    if (form.preferredContact === "PHONE" && !form.phone.trim()) {
+      return "Add a phone number before using Phone as the preferred contact method.";
+    }
+
+    if (form.preferredContact === "LINE") {
+      if (!isCustomerSession) {
+        return "LINE contact is available only for signed-in customer accounts.";
+      }
+
+      if (!isLineReadyForContact) {
+        return "Connect and verify your LINE account before using LINE as the preferred contact method.";
+      }
+    }
+
+    return "";
+  }, [
+    form.email,
+    form.phone,
+    form.preferredContact,
+    isCustomerSession,
+    isLineReadyForContact,
+  ]);
   const canSubmitAppointment =
     Boolean(form.branchId) &&
     Boolean(form.appointmentDate) &&
-    (isCustomerSession || (Boolean(form.name.trim()) && Boolean(form.email.trim())));
+    (isCustomerSession || (Boolean(form.name.trim()) && Boolean(form.email.trim()))) &&
+    !preferredContactBlockingMessage;
   const staffFacingLocationLabel = useMemo(
     () =>
       resolveLocationLabel({
@@ -267,24 +277,25 @@ export default function CartPage() {
         const metadataLocation = normalizeStoredLocationSelection(
           session?.user?.user_metadata,
         );
-        const autofill = await getPublicAppointmentAutofill({
-          accessToken: token ?? undefined,
-        });
-        const branchRows = await branchesPromise;
-        const historyRows =
-          token && autofill.canAutofill
-            ? await getCustomerAppointments({ accessToken: token })
-            : [];
+        const [autofill, branchRows, accountDetails] = await Promise.all([
+          getPublicAppointmentAutofill({
+            accessToken: token ?? undefined,
+          }),
+          branchesPromise,
+          token ? getUserMe({ accessToken: token }).catch(() => null) : Promise.resolve(null),
+        ]);
 
         if (cancelled) return;
 
+        const customerAccountDetails = autofill.canAutofill ? accountDetails : null;
         setBranches(branchRows);
-        setAppointments(historyRows);
         setAccessToken(token);
         setIsCustomerSession(autofill.canAutofill);
         setTierLabel(String(autofill.data?.tier || "").replace(/_/g, " "));
         setCustomerCountry(autofill.data?.country || "");
         setCustomerLocationDistrict(metadataLocation?.district || "");
+        setCustomerLineUserId(customerAccountDetails?.lineUserId || "");
+        setCustomerLineVerifiedAt(customerAccountDetails?.lineOfficialVerifiedAt || "");
         setForm((current) => ({
           ...current,
           branchId:
@@ -300,6 +311,10 @@ export default function CartPage() {
           preferredContact: resolveDefaultPreferredContact({
             lineId: current.lineId || autofill.data?.lineId || "",
             phone: current.phone || autofill.data?.phone || "",
+            lineReady: Boolean(
+              customerAccountDetails?.lineUserId &&
+                customerAccountDetails?.lineOfficialVerifiedAt,
+            ),
           }),
         }));
       } catch (error) {
@@ -319,6 +334,19 @@ export default function CartPage() {
       cancelled = true;
     };
   }, [authUser?.id]);
+
+  useEffect(() => {
+    if (searchParams.get("lineConnected") === "1") {
+      setLineConnectionMessage(
+        "LINE account connected and verified. You can now use LINE as your preferred contact method.",
+      );
+    }
+
+    const lineConnectError = String(searchParams.get("lineConnectError") || "").trim();
+    if (lineConnectError) {
+      setErrorMessage(lineConnectError);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,12 +506,34 @@ export default function CartPage() {
     }));
   };
 
+  const handleConnectLine = async () => {
+    setErrorMessage("");
+    setLineConnectionMessage("");
+    setIsConnectingLine(true);
+
+    try {
+      await startLineOAuth({
+        intent: "connect",
+        returnTo: "/cart",
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to start LINE connection.",
+      );
+      setIsConnectingLine(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setErrorMessage("");
     setSuccessMessage("");
     setIsSubmitting(true);
 
     try {
+      if (preferredContactBlockingMessage) {
+        throw new Error(preferredContactBlockingMessage);
+      }
+
       const appointmentDate = new Date(form.appointmentDate);
       if (Number.isNaN(appointmentDate.getTime())) {
         throw new Error("Choose a valid appointment date and time.");
@@ -521,9 +571,6 @@ export default function CartPage() {
           appointment.branch?.name || "your selected branch"
         }.`,
       );
-      if (appointment.customerType === "ACCOUNT") {
-        setAppointments((current) => [appointment, ...current.filter((row) => row.id !== appointment.id)]);
-      }
       clear();
       setForm((current) => ({
         ...current,
@@ -595,7 +642,21 @@ export default function CartPage() {
           ) : null}
           {successMessage ? (
             <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {successMessage}
+              <p>{successMessage}</p>
+              {isCustomerSession ? (
+                <Link
+                  href="/appointment"
+                  className="mt-3 inline-flex items-center gap-2 font-medium text-emerald-800 hover:text-emerald-900"
+                >
+                  Open Appointment Page
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+          {lineConnectionMessage ? (
+            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {lineConnectionMessage}
             </div>
           ) : null}
         </div>
@@ -752,7 +813,7 @@ export default function CartPage() {
                 {!isCustomerSession ? (
                   <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
                     Sign in with a customer account to auto-fill your profile and review appointment
-                    history on this page.
+                    history on the separate Appointment page.
                     {!authUser ? (
                       <Link
                         href="/login?returnTo=/cart"
@@ -905,21 +966,69 @@ export default function CartPage() {
                   </p>
                 ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {(["EMAIL", "PHONE", "LINE"] as const).map((channel) => (
-                    <button
-                      key={channel}
-                      type="button"
-                      onClick={() => updateForm("preferredContact", channel)}
-                      className={`rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
-                        form.preferredContact === channel
-                          ? "border-emerald-600 bg-emerald-600 text-white"
-                          : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
-                      }`}
-                    >
-                      {channel}
-                    </button>
-                  ))}
+                <div className="space-y-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-stone-500">
+                    Preferred Contact Method
+                  </span>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(["EMAIL", "PHONE", "LINE"] as const).map((channel) => (
+                      <button
+                        key={channel}
+                        type="button"
+                        onClick={() => updateForm("preferredContact", channel)}
+                        className={`rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
+                          form.preferredContact === channel
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
+                        }`}
+                      >
+                        {channel}
+                      </button>
+                    ))}
+                  </div>
+                  {form.preferredContact === "LINE" ? (
+                    <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-stone-700">
+                      {preferredContactBlockingMessage ? (
+                        <div className="space-y-3">
+                          <p>{preferredContactBlockingMessage}</p>
+                          {!isCustomerSession && !authUser ? (
+                            <Link
+                              href="/login?returnTo=/cart"
+                              className="inline-flex items-center gap-2 font-medium text-emerald-800 hover:text-emerald-900"
+                            >
+                              Login as Customer
+                              <ArrowRight className="h-4 w-4" />
+                            </Link>
+                          ) : null}
+                          {isCustomerSession ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleConnectLine()}
+                              disabled={isConnectingLine}
+                              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isConnectingLine ? (
+                                <LoaderCircle className="h-4 w-4 animate-spin" />
+                              ) : null}
+                              {isConnectingLine ? "Connecting..." : "Connect LINE"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p>
+                          Connected LINE account verified
+                          {customerLineVerifiedAt
+                            ? ` on ${new Date(customerLineVerifiedAt).toLocaleString()}.`
+                            : "."}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  {form.preferredContact !== "LINE" && preferredContactBlockingMessage ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                      {preferredContactBlockingMessage}
+                    </div>
+                  ) : null}
                 </div>
 
                 <label className="space-y-2">
@@ -981,103 +1090,42 @@ export default function CartPage() {
           <div className="flex flex-col gap-3 border-b border-stone-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
-                Appointment History
+                Appointment
               </p>
-              <h2 className="mt-2 text-2xl font-light">Track your request status</h2>
+              <h2 className="mt-2 text-2xl font-light">
+                Track request history on its own page
+              </h2>
             </div>
-            {isCustomerSession ? (
-              <p className="text-sm text-stone-500">
-                Showing {appointments.length} appointment{appointments.length === 1 ? "" : "s"}
-              </p>
-            ) : (
-              <p className="text-sm text-stone-500">Login with a customer account to unlock history.</p>
-            )}
+            <Link
+              href={isCustomerSession ? "/appointment" : "/login?returnTo=/appointment"}
+              className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            >
+              {isCustomerSession ? "Open Appointment" : "Login to View Appointment"}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-          {!isCustomerSession ? (
-            <div className="mt-6 rounded-[1.5rem] border border-stone-200 bg-stone-50 px-5 py-6 text-sm leading-7 text-stone-600">
-              Appointment history is tied to customer accounts so branch responses and requested
-              items stay attached to the right profile.
-            </div>
-          ) : appointments.length === 0 ? (
-            <div className="mt-6 rounded-[1.5rem] border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
-              <p className="text-lg font-light text-stone-900">No appointment requests yet</p>
-              <p className="mt-2 text-sm leading-7 text-stone-600">
-                Once you submit your first request, confirmation status and requested pieces will
-                appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-6 space-y-5">
-              {appointments.map((appointment) => (
-                <article
-                  key={appointment.id}
-                  className="rounded-[1.5rem] border border-stone-200 bg-white p-5"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${appointmentTone(appointment.status)}`}
-                        >
-                          {appointment.status || "REQUESTED"}
-                        </span>
-                        <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-stone-600">
-                          {appointment.branch?.name || "Private showroom"}
-                        </span>
-                      </div>
-                      <h3 className="mt-3 text-xl font-light">{formatDateTime(appointment.appointmentDate)}</h3>
-                      <p className="mt-2 text-sm leading-7 text-stone-600">
-                        {branchLabel(appointment.branch)}
-                      </p>
-                    </div>
-
-                    <div className="text-sm text-stone-500">
-                      <p>Requested {formatDate(appointment.createdAt)}</p>
-                      {appointment.preferredContact ? <p className="mt-1">{appointment.preferredContact}</p> : null}
-                      {appointment.userEnteredCity ? <p className="mt-1">{appointment.userEnteredCity}</p> : null}
-                    </div>
-                  </div>
-
-                  {appointment.items.length > 0 ? (
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      {appointment.items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-[1.25rem] border border-stone-200 bg-stone-50 px-4 py-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-stone-900">
-                                {item.product?.name || item.productId || "Requested piece"}
-                              </p>
-                              {item.product?.sku ? (
-                                <p className="mt-1 text-xs uppercase tracking-[0.22em] text-stone-500">
-                                  {item.product.sku}
-                                </p>
-                              ) : null}
-                            </div>
-                            <span
-                              className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${fulfillmentTone(item.fulfillmentStatus)}`}
-                            >
-                              {item.fulfillmentStatus || "REQUESTED"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {appointment.notes ? (
-                    <div className="mt-4 rounded-[1.25rem] border border-stone-200 bg-white px-4 py-4 text-sm leading-7 text-stone-600">
-                      {appointment.notes}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
+          <div className="mt-6 rounded-[1.5rem] border border-stone-200 bg-stone-50 px-5 py-6 text-sm leading-7 text-stone-600">
+            Review confirmations, requested pieces, and branch updates from the dedicated
+            Appointment page instead of mixing history into the cart.
+          </div>
         </div>
       </section>
     </div>
+  );
+}
+
+export default function CartPage() {
+  return (
+    <Suspense
+      fallback={
+        <section className="px-6 py-24 sm:px-12 lg:px-20">
+          <div className="rounded-[2rem] border border-stone-200 bg-white px-6 py-10 text-sm text-stone-500 shadow-[0_28px_90px_-60px_rgba(28,25,23,0.55)]">
+            Loading cart...
+          </div>
+        </section>
+      }
+    >
+      <CartPageContent />
+    </Suspense>
   );
 }

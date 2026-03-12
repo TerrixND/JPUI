@@ -4,9 +4,9 @@ import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedir
 import { startLineOAuth } from "@/lib/lineAuth";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-export default function LineConnectOptionPage() {
+function LineConnectOptionPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
@@ -129,5 +129,13 @@ export default function LineConnectOptionPage() {
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       </div>
     </div>
+  );
+}
+
+export default function LineConnectOptionPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-stone-50" />}>
+      <LineConnectOptionPageContent />
+    </Suspense>
   );
 }

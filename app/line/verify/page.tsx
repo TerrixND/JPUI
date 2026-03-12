@@ -20,7 +20,7 @@ import {
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 const LINE_OFFICIAL_ACCOUNT_URL = "https://line.me/R/ti/p/%40404isuyx#~";
 const normalizeOtpInput = (value: string) => value.replace(/\D/g, "").slice(0, 6);
@@ -55,7 +55,7 @@ const buildVerifyRoute = ({
   return `${url.pathname}${url.search}`;
 };
 
-export default function LineOfficialVerifyPage() {
+function LineOfficialVerifyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasBootstrappedRef = useRef(false);
@@ -506,5 +506,13 @@ export default function LineOfficialVerifyPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function LineOfficialVerifyPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-stone-50" />}>
+      <LineOfficialVerifyPageContent />
+    </Suspense>
   );
 }

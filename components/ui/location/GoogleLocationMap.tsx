@@ -173,8 +173,10 @@ export default function GoogleLocationMap({
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 ${className}`}>
-      <div ref={containerRef} className="min-h-[240px] w-full" />
+    <div
+      className={`relative min-h-[240px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 ${className}`}
+    >
+      <div ref={containerRef} className="h-full min-h-[inherit] w-full" />
       {isLoading ? (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm">

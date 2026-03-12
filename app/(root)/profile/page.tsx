@@ -2,9 +2,10 @@
 
 import GoogleLocationAutocomplete from "@/components/ui/location/GoogleLocationAutocomplete";
 import LocationMapDialog from "@/components/ui/location/LocationMapDialog";
+import PhoneNumberField from "@/components/ui/PhoneNumberField";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Edit, X, Save, LogOut, Trash2, Shield, Mail, Phone, MapPin, Globe, MessageCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -243,7 +244,7 @@ type ProfileTextField =
   | "lineDisplayName"
   | "linePictureUrl";
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1102,7 +1103,6 @@ export default function ProfilePage() {
               [
                 ["name", "Full Name"],
                 ["email", "Email Address"],
-                ["phone", "Phone Number"],
                 ["lineId", "LINE ID"],
                 ["lineUserId", "LINE User ID"],
                 ["lineDisplayName", "LINE Display Name"],
@@ -1136,6 +1136,20 @@ export default function ProfilePage() {
                 </div>
               );
             })}
+
+            <div data-anim="field" className="relative">
+              <PhoneNumberField
+                label="Phone Number"
+                value={profile.phone}
+                onChange={(value) => handleChange("phone", value)}
+                countryHint={profile.country}
+                disabled={!isEditing}
+                readOnly={!isEditing}
+                placeholder="Local phone number"
+                helperText="Country code is suggested from your saved location and can be changed while editing."
+                variant="underline"
+              />
+            </div>
 
             <div data-anim="field" data-profile-input-wrap className="relative">
               <label
@@ -1548,5 +1562,13 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }

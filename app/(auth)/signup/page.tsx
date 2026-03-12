@@ -2,6 +2,7 @@
 
 import GoogleLocationAutocomplete from "@/components/ui/location/GoogleLocationAutocomplete";
 import InputBox from "@/components/ui/InputBox";
+import PhoneNumberField from "@/components/ui/PhoneNumberField";
 import {
   ApiClientError,
   forceLogoutToBlockedPage,
@@ -27,7 +28,7 @@ import {
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 
 const languages = [
   { code: "en", label: "English" },
@@ -36,14 +37,14 @@ const languages = [
   { code: "mm", label: "Myanmar" },
 ];
 
-const SignupPage = () => {
+const SignupPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
   const loginHref = buildAuthRouteWithReturnTo("/login", returnTo);
 
   const [fullName, setFullName] = useState("");
-  const [phNo, setPhNo] = useState("");
+  const [phone, setPhone] = useState("");
   const [lineID, setLineID] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,7 +76,7 @@ const SignupPage = () => {
       const profilePayload = {
         email: normalizedEmail,
         displayName: fullName.trim() || undefined,
-        phone: phNo.trim() || undefined,
+        phone: phone.trim() || undefined,
         lineId: lineID.trim() || undefined,
         preferredLanguage: selected.code || undefined,
         city: selectedLocation?.city || undefined,
@@ -260,12 +261,13 @@ const SignupPage = () => {
             placeholder="Minimum 8 characters"
             type="password"
           />
-          <InputBox
-            value={phNo}
-            onChange={(event) => setPhNo(event.target.value)}
+          <PhoneNumberField
             label="Phone Number"
-            placeholder="+95 #### ####"
-            type="text"
+            value={phone}
+            onChange={setPhone}
+            countryHint={selectedLocation?.country}
+            placeholder="Enter your phone number"
+            helperText="We will suggest the country code from your selected city, and you can change it if needed."
           />
           <InputBox
             value={lineID}
@@ -305,4 +307,10 @@ const SignupPage = () => {
   );
 };
 
-export default SignupPage;
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0" />}>
+      <SignupPageContent />
+    </Suspense>
+  );
+}

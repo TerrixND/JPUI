@@ -1,6 +1,7 @@
 "use client";
 
 import InputBox from "@/components/ui/InputBox";
+import PhoneNumberField from "@/components/ui/PhoneNumberField";
 import {
   ApiClientError,
   forceLogoutToBlockedPage,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/setupUser";
 import supabase, { isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 const LANGUAGE_OPTIONS = [
   { code: "en", label: "English" },
@@ -30,7 +31,7 @@ const LANGUAGE_OPTIONS = [
 const isLineShadowEmail = (value: string) =>
   value.trim().toLowerCase().endsWith("@line.local");
 
-export default function LineSetupPage() {
+function LineSetupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
@@ -265,12 +266,12 @@ export default function LineSetupPage() {
               placeholder="you@example.com"
               type="text"
             />
-            <InputBox
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+            <PhoneNumberField
               label="Phone Number"
-              placeholder="+95 #### ####"
-              type="text"
+              value={phone}
+              onChange={setPhone}
+              placeholder="Enter your phone number"
+              helperText="Choose the right country code before saving your account."
             />
 
             <label className="block text-xs text-slate-700">
@@ -301,5 +302,13 @@ export default function LineSetupPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LineSetupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-stone-50" />}>
+      <LineSetupPageContent />
+    </Suspense>
   );
 }

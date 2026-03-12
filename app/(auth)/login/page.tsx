@@ -18,9 +18,9 @@ import { buildAuthRouteWithReturnTo, resolveSafeReturnTo } from "@/lib/authRedir
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 
-const LoginPage = () => {
+const LoginPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = resolveSafeReturnTo(searchParams.get("returnTo")) || "/";
@@ -241,4 +241,10 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0" />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}

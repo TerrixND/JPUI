@@ -30,6 +30,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     "/aboutus",
     "/contactus",
     "/cart",
+    "/appointment",
     "/authenticity",
     "/profile",
     "/login",
@@ -53,12 +54,16 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
       { label: "Contact Us", href: "/contactus" },
     ];
 
+    if (isLoggedIn) {
+      links.push({ label: "Appointment", href: "/appointment" });
+    }
+
     if (dashboardHref) {
       links.push({ label: "Dashboard", href: dashboardHref });
     }
 
     return links;
-  }, [dashboardHref]);
+  }, [dashboardHref, isLoggedIn]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -308,6 +313,15 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
           {isLoggedIn ? (
             <>
+              <Link
+                href="/appointment"
+                data-mobile-link
+                onClick={handleLinkClick}
+                className="text-sm text-black hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors duration-200 py-2.5 px-3 rounded-lg"
+              >
+                Appointment
+              </Link>
+
               <Link
                 href="/cart"
                 data-mobile-link

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
 import supabase from "@/lib/supabase";
@@ -37,7 +37,7 @@ const DURATION_PRESETS = [
 const getErrorMessage = (value: unknown) =>
   value instanceof Error ? value.message : "Unexpected error.";
 
-export default function ManagerUserDetailPage() {
+function ManagerUserDetailPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { dashboardBasePath } = useRole();
@@ -585,5 +585,13 @@ export default function ManagerUserDetailPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+export default function ManagerUserDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <ManagerUserDetailPageContent />
+    </Suspense>
   );
 }

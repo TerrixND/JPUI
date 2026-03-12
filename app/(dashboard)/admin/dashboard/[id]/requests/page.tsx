@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
@@ -150,7 +150,7 @@ const createRequestControlDraft = (
   };
 };
 
-export default function AdminRequestsPage() {
+function AdminRequestsPageContent() {
   const searchParams = useSearchParams();
   const { dashboardBasePath, isMainAdmin, userId } = useRole();
   const focusRequestId = (searchParams.get("requestId") || "").trim();
@@ -1157,5 +1157,13 @@ export default function AdminRequestsPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function AdminRequestsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <AdminRequestsPageContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PageHeader from "@/components/ui/dashboard/PageHeader";
 import { useRole } from "@/components/ui/dashboard/RoleContext";
@@ -92,7 +92,7 @@ const toViewerScopeMessage = ({
   return "You can monitor requests submitted by your account for the selected branch.";
 };
 
-export default function ManagerRequestsPage() {
+function ManagerRequestsPageContent() {
   const searchParams = useSearchParams();
   const { dashboardBasePath } = useRole();
   const focusRequestId = (searchParams.get("requestId") || "").trim();
@@ -646,5 +646,13 @@ export default function ManagerRequestsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ManagerRequestsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <ManagerRequestsPageContent />
+    </Suspense>
   );
 }
