@@ -38,31 +38,17 @@ export default function PageEntranceLoader({
     const copy = copyRef.current;
     const content = contentRef.current;
 
-    if (
-      !root ||
-      !overlay ||
-      !topPanel ||
-      !bottomPanel ||
-      !logoAura ||
-      !logoWrap ||
-      !copy ||
-      !content
-    ) {
+    if (!root || !overlay || !topPanel || !bottomPanel || !logoAura || !logoWrap || !copy || !content) {
       return;
     }
 
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
     let overflowRestored = false;
 
     const restoreOverflow = () => {
-      if (overflowRestored) {
-        return;
-      }
-
+      if (overflowRestored) return;
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.body.style.overflow = previousBodyOverflow;
       overflowRestored = true;
@@ -72,152 +58,37 @@ export default function PageEntranceLoader({
     document.body.style.overflow = "hidden";
 
     const ctx = gsap.context(() => {
-      const revealTargets = Array.from(
-        content.querySelectorAll<HTMLElement>("[data-page-intro]"),
-      );
-      const targets = revealTargets.length
-        ? revealTargets
-        : Array.from(content.children) as HTMLElement[];
+      const revealTargets = Array.from(content.querySelectorAll<HTMLElement>("[data-page-intro]"));
+      const targets = revealTargets.length ? revealTargets : (Array.from(content.children) as HTMLElement[]);
       const animatedTargets = targets.length ? targets : [content];
 
       if (prefersReducedMotion) {
-        gsap.set(animatedTargets, {
-          autoAlpha: 1,
-          clearProps: "all",
-        });
-        gsap.set(overlay, {
-          display: "none",
-          autoAlpha: 0,
-        });
+        gsap.set(animatedTargets, { autoAlpha: 1, clearProps: "all" });
+        gsap.set(overlay, { display: "none", autoAlpha: 0 });
         restoreOverflow();
         return;
       }
 
-      gsap.set(animatedTargets, {
-        autoAlpha: 0,
-        y: 42,
-      });
+      gsap.set(animatedTargets, { autoAlpha: 1, clearProps: "all" });
 
       gsap
         .timeline({
-          defaults: {
-            ease: "power3.out",
-          },
+          defaults: { ease: "power3.out" },
           onComplete: () => {
-            gsap.set(overlay, {
-              display: "none",
-            });
+            gsap.set(overlay, { display: "none" });
             restoreOverflow();
           },
         })
-        .fromTo(
-          logoAura,
-          {
-            autoAlpha: 0,
-            scale: 0.68,
-          },
-          {
-            autoAlpha: 0.95,
-            scale: 1.06,
-            duration: 1.05,
-          },
-        )
-        .fromTo(
-          logoWrap,
-          {
-            autoAlpha: 0,
-            scale: 0.72,
-            y: 24,
-            rotate: -8,
-          },
-          {
-            autoAlpha: 1,
-            scale: 1,
-            y: 0,
-            rotate: 0,
-            duration: 1.05,
-          },
-          "-=0.8",
-        )
-        .fromTo(
-          copy,
-          {
-            autoAlpha: 0,
-            y: 18,
-          },
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: 0.72,
-          },
-          "-=0.62",
-        )
-        .to(
-          logoAura,
-          {
-            scale: 1.18,
-            autoAlpha: 0.25,
-            duration: 0.5,
-          },
-          "+=0.1",
-        )
-        .to(
-          topPanel,
-          {
-            yPercent: -102,
-            duration: 1.08,
-            ease: "power4.inOut",
-          },
-        )
-        .to(
-          bottomPanel,
-          {
-            yPercent: 102,
-            duration: 1.08,
-            ease: "power4.inOut",
-          },
-          "<",
-        )
-        .to(
-          logoWrap,
-          {
-            autoAlpha: 0,
-            y: -26,
-            duration: 0.44,
-            ease: "power2.in",
-          },
-          "<0.06",
-        )
-        .to(
-          copy,
-          {
-            autoAlpha: 0,
-            y: 20,
-            duration: 0.38,
-            ease: "power2.in",
-          },
-          "<",
-        )
-        .to(
-          overlay,
-          {
-            autoAlpha: 0,
-            duration: 0.35,
-          },
-          "-=0.24",
-        )
-        .to(
-          animatedTargets,
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: 0.9,
-            stagger: 0.12,
-            ease: "power3.out",
-            clearProps: "transform",
-          },
-          "-=0.05",
-        );
+        .fromTo(logoAura, { autoAlpha: 0, scale: 0.7 }, { autoAlpha: 1, scale: 1, duration: 1.2 })
+        .fromTo(logoWrap, { autoAlpha: 0, scale: 0.82, y: 20 }, { autoAlpha: 1, scale: 1, y: 0, duration: 1.0 }, "-=0.9")
+        .fromTo(copy, { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.7 }, "-=0.55")
+        .addLabel("hold", "+=0.6")
+        .to(logoAura, { scale: 1.2, autoAlpha: 0, duration: 0.5, ease: "power2.in" }, "hold")
+        .to(logoWrap, { autoAlpha: 0, y: -100, duration: 0.4, ease: "power2.in" }, "hold+=0.05")
+        .to(copy, { autoAlpha: 0, y: 16, duration: 0.35, ease: "power2.in" }, "hold+=0.05")
+        .to(topPanel, { yPercent: -102, duration: 0.35, ease: "power4.inOut" })
+        .to(bottomPanel, { yPercent: 102, duration: 0.35, ease: "power4.inOut" }, "<")
+        .to(overlay, { autoAlpha: 0, duration: 0.3 }, "-=0.25");
     }, root);
 
     return () => {
@@ -230,61 +101,115 @@ export default function PageEntranceLoader({
     <div ref={rootRef} className={className}>
       <div
         ref={overlayRef}
-        className="fixed inset-0 z-[120] overflow-hidden bg-[#050606]"
+        className="fixed inset-0 z-[120] overflow-hidden"
+        style={{ backgroundColor: "#07090a" }}
       >
-        <div
-          className="absolute inset-0 opacity-95"
-          style={{
-            background:
-              "radial-gradient(circle at 50% 35%, rgba(32, 130, 109, 0.24), transparent 24%), radial-gradient(circle at 50% 58%, rgba(246, 225, 176, 0.14), transparent 32%), linear-gradient(180deg, #040505 0%, #0b1110 100%)",
-          }}
-        />
+        {/* Gentle warmth in the center */}
+        
+
+        {/* Split panels */}
         <div
           ref={topPanelRef}
-          className="absolute inset-x-0 top-0 h-1/2 border-b border-emerald-200/10 bg-[#050606]"
+          className="absolute inset-x-0 top-0 h-1/2"
+          style={{ backgroundColor: "#07090a" }}
         />
         <div
           ref={bottomPanelRef}
-          className="absolute inset-x-0 bottom-0 h-1/2 border-t border-emerald-200/10 bg-[#050606]"
+          className="absolute inset-x-0 bottom-0 h-1/2"
+          style={{ backgroundColor: "#07090a" }}
         />
 
+        {/* Center */}
         <div className="absolute inset-0 flex items-center justify-center px-6">
           <div className="relative flex flex-col items-center">
+
+            {/* Aura */}
             <div
               ref={logoAuraRef}
-              className="absolute h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl sm:h-80 sm:w-80"
+              className="absolute"
+              style={{
+                width: 280,
+                height: 280,
+                borderRadius: "50%",
+                background:
+                  "radial-gradient(circle, rgba(168,136,64,0.15) 0%, rgba(16,58,44,0.12) 50%, transparent 72%)",
+                filter: "blur(28px)",
+              }}
             />
 
-            <div
-              ref={logoWrapRef}
-              className="relative h-28 w-28 sm:h-36 sm:w-36"
-            >
+            {/* Logo */}
+            <div ref={logoWrapRef} className="relative" style={{ width: 112, height: 112 }}>
               <Image
                 src="/Jade-Palace-LOGO/noBgLogo.svg"
                 alt="Jade Palace"
                 fill
                 priority
-                className="object-contain drop-shadow-[0_0_24px_rgba(246,225,176,0.22)]"
+                className="object-contain"
+                style={{ filter: "drop-shadow(0 0 20px rgba(200,168,88,0.2))" }}
               />
             </div>
 
+            {/* Copy */}
             <div
               ref={copyRef}
-              className="relative mt-8 flex max-w-xl flex-col items-center text-center"
+              className="relative mt-9 flex flex-col items-center text-center"
             >
-              <p className="text-[11px] uppercase tracking-[0.55em] text-emerald-100/70">
+              <p
+                style={{
+                  fontFamily: "'Cormorant Garamond', 'Garamond', serif",
+                  fontSize: 10,
+                  letterSpacing: "0.5em",
+                  textTransform: "uppercase",
+                  color: "rgba(190,158,80,0.7)",
+                  fontWeight: 500,
+                }}
+              >
                 {eyebrow}
               </p>
-              <h1 className="mt-4 text-4xl font-light tracking-[0.14em] text-[#f4e7c7] sm:text-6xl">
+
+              <h1
+                className="mt-4"
+                style={{
+                  fontFamily: "'Cormorant Garamond', 'Cormorant', 'Garamond', serif",
+                  fontSize: "clamp(2.4rem, 6.5vw, 4rem)",
+                  fontWeight: 300,
+                  letterSpacing: "0.18em",
+                  lineHeight: 1.1,
+                  color: "#ede0c4",
+                }}
+              >
                 {title}
               </h1>
-              {subtitle ? (
-                <p className="mt-4 max-w-md text-sm leading-relaxed tracking-[0.18em] text-stone-300/80 uppercase">
+
+              {subtitle && (
+                <p
+                  className="mt-4"
+                  style={{
+                    fontFamily: "'Cormorant Garamond', 'Garamond', serif",
+                    fontSize: 11,
+                    letterSpacing: "0.26em",
+                    textTransform: "uppercase",
+                    lineHeight: 2,
+                    color: "rgba(195,180,148,0.55)",
+                    maxWidth: 320,
+                  }}
+                >
                   {subtitle}
                 </p>
-              ) : null}
-              <div className="mt-6 h-px w-28 bg-gradient-to-r from-transparent via-[#ddc18b] to-transparent sm:w-40" />
+              )}
+
+              {/* Single thin gold rule */}
+              <div
+                className="mt-6"
+                style={{
+                  width: 80,
+                  height: 1,
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(180,148,72,0.8), transparent)",
+                }}
+              />
             </div>
+
           </div>
         </div>
       </div>

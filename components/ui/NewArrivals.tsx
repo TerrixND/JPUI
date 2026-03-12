@@ -79,14 +79,14 @@ const NewArrival = () => {
           <div className="hidden md:flex gap-3">
             <button
               onClick={() => scroll("left")}
-              data-home-hover="button"
+              // data-home-hover="button"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-900 hover:text-white"
             >
               ←
             </button>
             <button
               onClick={() => scroll("right")}
-              data-home-hover="button"
+              // data-home-hover="button"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-900 hover:text-white"
             >
               →
@@ -103,7 +103,7 @@ const NewArrival = () => {
             <div
               key={product.id}
               data-scroll-reveal
-              data-home-hover="card"
+              // data-home-hover="card"
               className="group flex-none w-60 sm:w-65 snap-start cursor-pointer"
             >
               {/* Image */}
@@ -135,7 +135,7 @@ const NewArrival = () => {
         <div data-scroll-reveal className="mt-12 flex justify-center md:hidden">
           <Link
             href="#"
-            data-home-hover="link"
+            // data-home-hover="link"
             className="text-sm tracking-widest uppercase text-neutral-500 transition hover:text-neutral-900"
           >
             View All →

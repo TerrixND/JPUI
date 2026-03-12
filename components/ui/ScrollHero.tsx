@@ -139,13 +139,16 @@ export default function ScrollHero() {
         gsap.set(el, { autoAlpha: i === current ? 1 : 0 });
       });
       const activeBar = progressRefs.current[current];
-      if (activeBar) gsap.set(activeBar, { scaleX: 1, transformOrigin: "left center" });
+      if (activeBar)
+        gsap.set(activeBar, { scaleX: 1, transformOrigin: "left center" });
 
       autoplayTweenRef.current = gsap.delayedCall(DURATION_SECONDS, () => {
         directionRef.current = 1;
         setCurrent((prev) => (prev + 1) % total);
       });
-      return () => { autoplayTweenRef.current?.kill(); };
+      return () => {
+        autoplayTweenRef.current?.kill();
+      };
     }
 
     /* ── Build transition timeline ── */
@@ -246,7 +249,9 @@ export default function ScrollHero() {
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            ref={(node) => { backgroundRefs.current[index] = node; }}
+            ref={(node) => {
+              backgroundRefs.current[index] = node;
+            }}
             className="absolute inset-0"
           >
             <div
@@ -276,7 +281,9 @@ export default function ScrollHero() {
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            ref={(node) => { contentRefs.current[index] = node; }}
+            ref={(node) => {
+              contentRefs.current[index] = node;
+            }}
             aria-hidden={index !== current}
             className="absolute inset-0 flex items-center justify-center px-6 md:justify-start md:px-20"
             style={{
@@ -325,16 +332,17 @@ export default function ScrollHero() {
                 className="mt-7 flex flex-col items-center gap-5 md:items-start"
               >
                 <Link
-                  href="/products"
-                  data-home-hover="hero-cta"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 px-6 py-3 text-sm font-medium tracking-[0.08em] text-black shadow-[0_8px_20px_rgba(0,0,0,0.2)] transition-all duration-300 hover:opacity-90"
+                  href={"/products"}
+                  className="px-6 py-3 text-sm font-medium tracking-wide text-black w-fit mx-auto md:mx-0 transition-all duration-300"
                   style={{ backgroundColor: "var(--accent)" }}
                 >
                   {slide.button}
                 </Link>
 
                 <div className="flex items-center gap-4 text-white/50">
-                  <span className="text-sm tracking-[0.35em]">{slide.number}</span>
+                  <span className="text-sm tracking-[0.35em]">
+                    {slide.number}
+                  </span>
                   <span
                     className="h-px w-16"
                     style={{ backgroundColor: "var(--accent)" }}
@@ -372,7 +380,9 @@ export default function ScrollHero() {
               >
                 <span className="block h-[2px] w-full" />
                 <span
-                  ref={(node) => { progressRefs.current[index] = node; }}
+                  ref={(node) => {
+                    progressRefs.current[index] = node;
+                  }}
                   className="absolute inset-y-0 left-0 right-0"
                   style={{
                     backgroundColor: slide.accent,
