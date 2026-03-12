@@ -121,6 +121,7 @@ export const resolveLineIdentityFromSupabaseUser = (
   const identities = Array.isArray(userRecord.identities)
     ? userRecord.identities
     : [];
+  const appMetadata = toRecord(userRecord.app_metadata);
 
   const lineIdentity =
     identities.find((identity) => {
@@ -142,14 +143,20 @@ export const resolveLineIdentityFromSupabaseUser = (
     toSafeString(identityData.sub) ||
     toSafeString(userMetadata.lineUserId) ||
     toSafeString(userMetadata.line_user_id);
+  const hasLinkedLineIdentity =
+    Boolean(lineIdentity) ||
+    Boolean(lineUserId) ||
+    normalizeProviderName(appMetadata.provider) === "line";
 
   const lineDisplayName =
-    toSafeString(identityData.displayName) ||
-    toSafeString(identityData.display_name) ||
-    toSafeString(identityData.name) ||
-    toSafeString(userMetadata.displayName) ||
-    toSafeString(userMetadata.full_name) ||
-    toSafeString(userMetadata.name);
+    hasLinkedLineIdentity
+      ? toSafeString(identityData.displayName) ||
+        toSafeString(identityData.display_name) ||
+        toSafeString(identityData.name) ||
+        toSafeString(userMetadata.displayName) ||
+        toSafeString(userMetadata.full_name) ||
+        toSafeString(userMetadata.name)
+      : null;
 
   return {
     lineUserId,

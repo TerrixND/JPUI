@@ -1108,7 +1108,10 @@ function ProfilePageContent() {
                 ["lineDisplayName", "LINE Display Name"],
               ] as [ProfileTextField, string][]
             ).map(([key, label]) => {
-              const isReadOnly = key === "email" || !isEditing;
+              const isManagedLineField =
+                Boolean(profile.lineUserId) &&
+                (key === "lineId" || key === "lineUserId" || key === "lineDisplayName");
+              const isReadOnly = key === "email" || !isEditing || isManagedLineField;
 
               return (
                 <div key={key} data-anim="field" data-profile-input-wrap className="relative">
@@ -1133,6 +1136,11 @@ function ProfilePageContent() {
                       isReadOnly ? "bg-neutral-300" : "bg-emerald-600"
                     }`}
                   />
+                  {isManagedLineField ? (
+                    <p className="mt-2 text-xs text-neutral-500">
+                      Managed by your connected LINE account.
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
