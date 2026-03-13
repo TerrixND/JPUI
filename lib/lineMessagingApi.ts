@@ -197,6 +197,56 @@ export type StaffLineMessage = {
 
 export type LineMessageRecord = StaffLineMessage;
 
+export type StaffLineSupportRequestActivity = {
+  id: string;
+  actorUserId: string | null;
+  actorDisplayName: string | null;
+  type: string | null;
+  message: string | null;
+  webhookEventId: string | null;
+  metadata: JsonRecord | null;
+  createdAt: string | null;
+  raw: JsonRecord;
+};
+
+export type SupportStaffDirectoryEntry = {
+  id: string;
+  role: string | null;
+  displayName: string | null;
+  email: string | null;
+  lineUserId: string | null;
+  emailNotificationsEnabled: boolean;
+  lineNotificationsEnabled: boolean;
+  raw: JsonRecord;
+};
+
+export type StaffLineSupportRequest = {
+  id: string;
+  customerUserId: string | null;
+  customerLineUserId: string | null;
+  customerDisplayName: string | null;
+  customerEmail: string | null;
+  requestedLanguage: string | null;
+  commandText: string | null;
+  status: string | null;
+  acceptedByUserId: string | null;
+  acceptedAt: string | null;
+  resolvedAt: string | null;
+  lastNotifiedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  acceptedBy: {
+    id: string;
+    role: string | null;
+    email: string | null;
+    displayName: string | null;
+  } | null;
+  activities: StaffLineSupportRequestActivity[];
+  raw: JsonRecord;
+};
+
+export type LineSupportRequestRecord = StaffLineSupportRequest;
+
 const normalizeConversation = (value: unknown): StaffLineConversation | null => {
   const row = asRecord(value);
   if (!row) {
@@ -336,6 +386,101 @@ const normalizeMessage = (value: unknown): StaffLineMessage | null => {
   };
 };
 
+const normalizeSupportRequestActivity = (value: unknown): StaffLineSupportRequestActivity | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    actorUserId: asNullableString(row.actorUserId),
+    actorDisplayName: asNullableString(row.actorDisplayName),
+    type: asNullableString(row.type),
+    message: asNullableString(row.message),
+    webhookEventId: asNullableString(row.webhookEventId),
+    metadata:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as JsonRecord)
+        : null,
+    createdAt: asNullableString(row.createdAt),
+    raw: row,
+  };
+};
+
+const normalizeSupportStaffDirectoryEntry = (value: unknown): SupportStaffDirectoryEntry | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    role: asNullableString(row.role),
+    displayName: asNullableString(row.displayName),
+    email: asNullableString(row.email),
+    lineUserId: asNullableString(row.lineUserId),
+    emailNotificationsEnabled: row.emailNotificationsEnabled !== false,
+    lineNotificationsEnabled: row.lineNotificationsEnabled === true,
+    raw: row,
+  };
+};
+
+const normalizeSupportRequest = (value: unknown): StaffLineSupportRequest | null => {
+  const row = asRecord(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = asString(row.id);
+  if (!id) {
+    return null;
+  }
+
+  const acceptedBy = asRecord(row.acceptedBy);
+  const activities = Array.isArray(row.activities) ? row.activities : [];
+
+  return {
+    id,
+    customerUserId: asNullableString(row.customerUserId),
+    customerLineUserId: asNullableString(row.customerLineUserId),
+    customerDisplayName: asNullableString(row.customerDisplayName),
+    customerEmail: asNullableString(row.customerEmail),
+    requestedLanguage: asNullableString(row.requestedLanguage),
+    commandText: asNullableString(row.commandText),
+    status: asNullableString(row.status),
+    acceptedByUserId: asNullableString(row.acceptedByUserId),
+    acceptedAt: asNullableString(row.acceptedAt),
+    resolvedAt: asNullableString(row.resolvedAt),
+    lastNotifiedAt: asNullableString(row.lastNotifiedAt),
+    createdAt: asNullableString(row.createdAt),
+    updatedAt: asNullableString(row.updatedAt),
+    acceptedBy:
+      acceptedBy && asString(acceptedBy.id)
+        ? {
+            id: asString(acceptedBy.id),
+            role: asNullableString(acceptedBy.role),
+            email: asNullableString(acceptedBy.email),
+            displayName: asNullableString(acceptedBy.displayName),
+          }
+        : null,
+    activities: activities
+      .map((entry) => normalizeSupportRequestActivity(entry))
+      .filter((entry): entry is StaffLineSupportRequestActivity => Boolean(entry)),
+    raw: row,
+  };
+};
+
 export const getRoleLineConversations = async ({
   accessToken,
   role,
@@ -468,6 +613,170 @@ export const endRoleLineSession = async ({
 
 export const endStaffLineSession = endRoleLineSession;
 
+export const getRoleLineSupportRequests = async ({
+  accessToken,
+  role,
+}: {
+  accessToken: string;
+  role: StaffRole;
+}) => {
+  const payload = await fetchRoleJson({
+    accessToken,
+    role,
+    path: "/line/support-requests",
+    method: "GET",
+    fallbackErrorMessage: "Failed to load LINE support requests.",
+  });
+
+  const root = asRecord(payload) ?? {};
+  const records = (Array.isArray(root.records) ? root.records : [])
+    .map((entry) => normalizeSupportRequest(entry))
+    .filter((entry): entry is StaffLineSupportRequest => Boolean(entry));
+  const staffDirectory = (Array.isArray(root.staffDirectory) ? root.staffDirectory : [])
+    .map((entry) => normalizeSupportStaffDirectoryEntry(entry))
+    .filter((entry): entry is SupportStaffDirectoryEntry => Boolean(entry));
+
+  return {
+    count: asPositiveInt(root.count) ?? records.length,
+    records,
+    staffDirectory,
+    raw: payload,
+  };
+};
+
+export const getStaffLineSupportRequests = getRoleLineSupportRequests;
+
+const normalizeSupportRequestMutationResponse = (payload: unknown) => {
+  const root = asRecord(payload) ?? {};
+
+  return {
+    record: normalizeSupportRequest(root.record),
+    raw: payload,
+  };
+};
+
+export const acceptRoleLineSupportRequest = async ({
+  accessToken,
+  role,
+  supportRequestId,
+}: {
+  accessToken: string;
+  role: StaffRole;
+  supportRequestId: string;
+}) =>
+  normalizeSupportRequestMutationResponse(
+    await fetchRoleJson({
+      accessToken,
+      role,
+      path: `/line/support-requests/${encodeURIComponent(supportRequestId)}/accept`,
+      method: "POST",
+      fallbackErrorMessage: "Failed to accept the support request.",
+    }),
+  );
+
+export const acceptStaffLineSupportRequest = acceptRoleLineSupportRequest;
+
+export const inviteRoleLineSupportRequestStaff = async ({
+  accessToken,
+  role,
+  supportRequestId,
+  staffUserIds,
+  message,
+}: {
+  accessToken: string;
+  role: StaffRole;
+  supportRequestId: string;
+  staffUserIds: string[];
+  message?: string;
+}) =>
+  normalizeSupportRequestMutationResponse(
+    await fetchRoleJson({
+      accessToken,
+      role,
+      path: `/line/support-requests/${encodeURIComponent(supportRequestId)}/invite`,
+      method: "POST",
+      body: {
+        staffUserIds,
+        ...(message ? { message } : {}),
+      },
+      fallbackErrorMessage: "Failed to invite staff to the support request.",
+    }),
+  );
+
+export const inviteStaffLineSupportRequestStaff = inviteRoleLineSupportRequestStaff;
+
+export const notifyAllRoleLineSupportRequestStaff = async ({
+  accessToken,
+  role,
+  supportRequestId,
+  message,
+}: {
+  accessToken: string;
+  role: StaffRole;
+  supportRequestId: string;
+  message?: string;
+}) =>
+  normalizeSupportRequestMutationResponse(
+    await fetchRoleJson({
+      accessToken,
+      role,
+      path: `/line/support-requests/${encodeURIComponent(supportRequestId)}/notify-all`,
+      method: "POST",
+      body: message ? { message } : {},
+      fallbackErrorMessage: "Failed to notify staff about the support request.",
+    }),
+  );
+
+export const notifyAllStaffLineSupportRequestStaff = notifyAllRoleLineSupportRequestStaff;
+
+export const resolveRoleLineSupportRequest = async ({
+  accessToken,
+  role,
+  supportRequestId,
+  message,
+}: {
+  accessToken: string;
+  role: StaffRole;
+  supportRequestId: string;
+  message?: string;
+}) =>
+  normalizeSupportRequestMutationResponse(
+    await fetchRoleJson({
+      accessToken,
+      role,
+      path: `/line/support-requests/${encodeURIComponent(supportRequestId)}/resolve`,
+      method: "POST",
+      body: message ? { message } : {},
+      fallbackErrorMessage: "Failed to resolve the support request.",
+    }),
+  );
+
+export const resolveStaffLineSupportRequest = resolveRoleLineSupportRequest;
+
+export const sendRoleLineSupportRequestMessage = async ({
+  accessToken,
+  role,
+  supportRequestId,
+  text,
+}: {
+  accessToken: string;
+  role: StaffRole;
+  supportRequestId: string;
+  text: string;
+}) =>
+  normalizeSupportRequestMutationResponse(
+    await fetchRoleJson({
+      accessToken,
+      role,
+      path: `/line/support-requests/${encodeURIComponent(supportRequestId)}/messages`,
+      method: "POST",
+      body: { text },
+      fallbackErrorMessage: "Failed to send the support message.",
+    }),
+  );
+
+export const sendStaffLineSupportRequestMessage = sendRoleLineSupportRequestMessage;
+
 export const getRealtimeSocketOrigin = () => {
   const configured = (
     process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -488,3 +797,4 @@ export const getRealtimeSocketOrigin = () => {
 export const resolveRealtimeApiOrigin = getRealtimeSocketOrigin;
 export const normalizeLineConversationPayload = normalizeConversation;
 export const normalizeLineMessagePayload = normalizeMessage;
+export const normalizeLineSupportRequestPayload = normalizeSupportRequest;
