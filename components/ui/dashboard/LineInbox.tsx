@@ -25,6 +25,7 @@ import {
   getStaffLineSupportRequests,
   normalizeLineConversationPayload,
   normalizeLineMessagePayload,
+  normalizeLineSupportRequestPayload,
   resolveRealtimeApiOrigin,
   sendStaffLineMessage,
   sendStaffLineSupportRequestMessage,
@@ -64,6 +65,19 @@ const upsertMessage = (rows: LineMessageRecord[], nextMessage: LineMessageRecord
   return nextRows.sort((left, right) =>
     String(left.createdAt || "").localeCompare(String(right.createdAt || "")),
   );
+};
+
+const upsertSupportRequest = (
+  rows: LineSupportRequestRecord[],
+  nextRecord: LineSupportRequestRecord,
+) => {
+  const nextRows = rows.filter((row) => row.id !== nextRecord.id);
+  if (nextRecord.status === "RESOLVED") {
+    return sortSupportConversations(nextRows);
+  }
+
+  nextRows.unshift(nextRecord);
+  return sortSupportConversations(nextRows);
 };
 
 const sortSupportConversations = (rows: LineSupportRequestRecord[]) =>
@@ -667,6 +681,15 @@ export default function LineInbox({
     setSelectedConversationId((current) => current || conversation.id);
   });
 
+  const handleRealtimeSupportRequest = useEffectEvent((payload: unknown) => {
+    const record = normalizeLineSupportRequestPayload(payload);
+    if (!record) {
+      return;
+    }
+
+    setSupportRequests((current) => upsertSupportRequest(current, record));
+  });
+
   useEffect(() => {
     let active = true;
 
@@ -712,6 +735,7 @@ export default function LineInbox({
         });
         socket.on("line:conversation-upserted", handleRealtimeConversation);
         socket.on("line:message-created", handleRealtimeMessage);
+        socket.on("line:support-request-upserted", handleRealtimeSupportRequest);
       } catch {
         if (active) {
           setSocketStatus("Realtime unavailable · auto-refresh active");
@@ -726,7 +750,12 @@ export default function LineInbox({
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [getAccessToken, handleRealtimeConversation, handleRealtimeMessage]);
+  }, [
+    getAccessToken,
+    handleRealtimeConversation,
+    handleRealtimeMessage,
+    handleRealtimeSupportRequest,
+  ]);
 
   const onSendMessage = async () => {
     const text = composer.trim();
@@ -840,10 +869,7 @@ export default function LineInbox({
 
       if (response.record) {
         setSupportRequests((current) =>
-          sortSupportConversations([
-            response.record as LineSupportRequestRecord,
-            ...current.filter((row) => row.id !== response.record?.id),
-          ]),
+          upsertSupportRequest(current, response.record as LineSupportRequestRecord),
         );
       }
 

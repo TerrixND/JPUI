@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { io, type Socket } from "socket.io-client";
 import { handleAccountAccessDeniedError } from "@/lib/apiClient";
 import {
   acceptStaffLineSupportRequest,
   getStaffLineSupportRequests,
   inviteStaffLineSupportRequestStaff,
+  normalizeLineSupportRequestPayload,
   notifyAllStaffLineSupportRequestStaff,
+  resolveRealtimeApiOrigin,
   resolveStaffLineSupportRequest,
   type LineSupportRequestRecord,
   type SupportStaffDirectoryEntry,
@@ -107,6 +110,7 @@ export default function LineSupportQueue({
   const router = useRouter();
   const pathname = usePathname();
   const initialSupportRequestIdRef = useRef(initialSupportRequestId.trim());
+  const socketRef = useRef<Socket | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
@@ -128,6 +132,22 @@ export default function LineSupportQueue({
       selectedSupportRequest ? sortActivitiesAscending(selectedSupportRequest.activities) : [],
     [selectedSupportRequest],
   );
+
+  const handleRealtimeSupportRequest = useEffectEvent((payload: unknown) => {
+    const record = normalizeLineSupportRequestPayload(payload);
+    if (!record) {
+      return;
+    }
+
+    setSupportRequests((current) =>
+      record.status === "RESOLVED"
+        ? current.filter((row) => row.id !== record.id)
+        : sortSupportRequests([
+            record,
+            ...current.filter((row) => row.id !== record.id),
+          ]),
+    );
+  });
 
   const syncSelectedSupportRequest = useCallback((nextRequests: LineSupportRequestRecord[]) => {
     setSelectedSupportRequestId((current) => {
@@ -208,6 +228,42 @@ export default function LineSupportQueue({
       window.clearInterval(intervalId);
     };
   }, [loadSupportRequests]);
+
+  useEffect(() => {
+    let active = true;
+
+    const connect = async () => {
+      try {
+        const accessToken = await getAccessToken();
+        const realtimeOrigin = resolveRealtimeApiOrigin();
+
+        if (!active || !realtimeOrigin) {
+          return;
+        }
+
+        const socket = io(realtimeOrigin, {
+          path: "/socket.io",
+          auth: {
+            token: accessToken,
+          },
+          transports: ["websocket", "polling"],
+        });
+
+        socketRef.current = socket;
+        socket.on("line:support-request-upserted", handleRealtimeSupportRequest);
+      } catch {
+        // Keep polling fallback active when realtime cannot connect.
+      }
+    };
+
+    void connect();
+
+    return () => {
+      active = false;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, [getAccessToken, handleRealtimeSupportRequest]);
 
   useEffect(() => {
     setSelectedStaffIds([]);

@@ -10,6 +10,7 @@ import {
   type LineSupportRequestRecord,
   normalizeLineConversationPayload,
   normalizeLineMessagePayload,
+  normalizeLineSupportRequestPayload,
   resolveRealtimeApiOrigin,
 } from "@/lib/lineMessagingApi";
 import supabase from "@/lib/supabase";
@@ -128,6 +129,39 @@ export default function DashboardLineRedirect() {
     routeToConversation(conversation, message.id);
   });
 
+  const handleRealtimeSupportRequest = useEffectEvent((payload: unknown) => {
+    if (role !== "manager" && role !== "salesperson") {
+      return;
+    }
+
+    const record = normalizeLineSupportRequestPayload(payload);
+    if (!record?.id) {
+      return;
+    }
+
+    if (
+      record.status !== "ACCEPTED" ||
+      record.acceptedByUserId !== userId
+    ) {
+      delete supportRequestStateRef.current[record.id];
+      return;
+    }
+
+    const latestCustomerActivity = getLatestSupportCustomerActivity(record);
+    const stateKey = [
+      latestCustomerActivity?.id || "",
+      latestCustomerActivity?.createdAt || "",
+      record.updatedAt || "",
+    ].join(":");
+
+    const previousState = supportRequestStateRef.current[record.id];
+    supportRequestStateRef.current[record.id] = stateKey;
+
+    if (latestCustomerActivity?.id && previousState !== stateKey) {
+      routeToSupportConversation(record.id, latestCustomerActivity.id);
+    }
+  });
+
   useEffect(() => {
     if (role !== "manager" && role !== "salesperson") {
       return;
@@ -154,6 +188,7 @@ export default function DashboardLineRedirect() {
 
         socketRef.current = socket;
         socket.on("line:message-created", handleRealtimeMessage);
+        socket.on("line:support-request-upserted", handleRealtimeSupportRequest);
       } catch {
         // Ignore realtime setup failures here. The dedicated LINE page still shows status feedback.
       }
@@ -166,7 +201,7 @@ export default function DashboardLineRedirect() {
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [getAccessToken, role]);
+  }, [getAccessToken, handleRealtimeMessage, handleRealtimeSupportRequest, role]);
 
   useEffect(() => {
     if (role !== "manager" && role !== "salesperson") {
