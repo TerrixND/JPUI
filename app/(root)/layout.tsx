@@ -1,4 +1,5 @@
 import Navbar from "@/components/ui/Navbar";
+import WebsiteAiAssistant from "@/components/ui/WebsiteAiAssistant";
 
 export default function PublicLayout({
   children,
@@ -9,6 +10,7 @@ export default function PublicLayout({
     <>
       <Navbar heroMode />
       {children}
+      <WebsiteAiAssistant />
     </>
   );
 }
