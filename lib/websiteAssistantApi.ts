@@ -1,4 +1,6 @@
-const WEBSITE_ASSISTANT_ENDPOINT = "/api/v1/public/ai/chat";
+import supabase from "@/lib/supabase";
+
+const WEBSITE_ASSISTANT_ENDPOINT = "/api/v1/ai/chat";
 const DEFAULT_HANDOFF_COMMAND = "/support en";
 
 type JsonRecord = Record<string, unknown>;
@@ -40,9 +42,159 @@ const buildErrorMessage = (payload: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
+const asNumberOrNull = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeSuggestedFollowUps = (value: unknown) =>
+  Array.isArray(value)
+    ? [...new Set(
+        value
+          .map((entry) => asString(entry).trim())
+          .filter(Boolean),
+      )].slice(0, 4)
+    : [];
+
+export type WebsiteAssistantProductResultItem = {
+  id: string;
+  name: string;
+  shortDescription: string;
+  mediaPreviewUrl: string | null;
+  productRoute: string | null;
+  productType: string | null;
+  shape: string | null;
+  color: string | null;
+  weightCarat: number | null;
+  weightGram: number | null;
+  hasCertificate: boolean;
+};
+
+export type WebsiteAssistantUi =
+  | {
+      type: "product_results";
+      items: WebsiteAssistantProductResultItem[];
+    }
+  | {
+      type: "none";
+      items: [];
+    };
+
+export type WebsiteAssistantActionType =
+  | "OPEN_ROUTE"
+  | "START_LINE_CONNECT"
+  | "ESCALATE_SUPPORT"
+  | "OPEN_PRODUCT"
+  | "OPEN_SUPPORT_PAGE"
+  | "OPEN_CONTACT_PAGE"
+  | "NONE";
+
+export type WebsiteAssistantAction = {
+  type: WebsiteAssistantActionType;
+  route: string | null;
+  productRoute: string | null;
+  label: string | null;
+  handoffCommand: string | null;
+};
+
+const normalizeProductResultItem = (
+  value: unknown,
+): WebsiteAssistantProductResultItem | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = asString(value.id).trim();
+  const name = asString(value.name).trim();
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    shortDescription: asString(value.shortDescription).trim(),
+    mediaPreviewUrl: asNullableString(value.mediaPreviewUrl),
+    productRoute: asNullableString(value.productRoute),
+    productType: asNullableString(value.productType),
+    shape: asNullableString(value.shape),
+    color: asNullableString(value.color),
+    weightCarat: asNumberOrNull(value.weightCarat),
+    weightGram: asNumberOrNull(value.weightGram),
+    hasCertificate: value.hasCertificate === true,
+  };
+};
+
+const normalizeUi = (value: unknown): WebsiteAssistantUi => {
+  if (!isRecord(value)) {
+    return {
+      type: "none",
+      items: [],
+    };
+  }
+
+  const type = asString(value.type).trim().toLowerCase();
+  const items = Array.isArray(value.items)
+    ? value.items
+        .map((entry) => normalizeProductResultItem(entry))
+        .filter((entry): entry is WebsiteAssistantProductResultItem => Boolean(entry))
+    : [];
+
+  if (type === "product_results" && items.length > 0) {
+    return {
+      type: "product_results",
+      items,
+    };
+  }
+
+  return {
+    type: "none",
+    items: [],
+  };
+};
+
+const normalizeAction = (value: unknown): WebsiteAssistantAction => {
+  if (!isRecord(value)) {
+    return {
+      type: "NONE",
+      route: null,
+      productRoute: null,
+      label: null,
+      handoffCommand: null,
+    };
+  }
+
+  const type = asString(value.type).trim().toUpperCase();
+
+  if (
+    type !== "OPEN_ROUTE" &&
+    type !== "START_LINE_CONNECT" &&
+    type !== "ESCALATE_SUPPORT" &&
+    type !== "OPEN_PRODUCT" &&
+    type !== "OPEN_SUPPORT_PAGE" &&
+    type !== "OPEN_CONTACT_PAGE"
+  ) {
+    return {
+      type: "NONE",
+      route: null,
+      productRoute: null,
+      label: null,
+      handoffCommand: null,
+    };
+  }
+
+  return {
+    type,
+    route: asNullableString(value.route),
+    productRoute: asNullableString(value.productRoute),
+    label: asNullableString(value.label),
+    handoffCommand: asNullableString(value.handoffCommand),
+  };
+};
+
 const normalizeChatResponse = (payload: unknown) => {
   const root = isRecord(payload) ? payload : null;
-  const reply = root && isRecord(root.reply) ? root.reply : null;
   const sessionId = asString(root?.sessionId).trim();
 
   if (!sessionId) {
@@ -53,12 +205,21 @@ const normalizeChatResponse = (payload: unknown) => {
     });
   }
 
+  const rootMessage = asString(root?.message).trim();
+  const replyText =
+    rootMessage ||
+    (isRecord(root?.reply) ? asString(root.reply.text).trim() : "") ||
+    "I’m ready to help with your next question.";
+
   return {
+    ok: root?.ok !== false,
     sessionId,
     browserSessionId: asNullableString(root?.browserSessionId),
-    reply: {
-      text: asString(reply?.text).trim(),
-    },
+    message: replyText,
+    mode: asString(root?.mode).trim() || "support",
+    ui: normalizeUi(root?.ui),
+    action: normalizeAction(root?.action),
+    suggestedFollowUps: normalizeSuggestedFollowUps(root?.suggestedFollowUps),
     model: asString(root?.model).trim() || "unknown",
     handoffCommand: asString(root?.handoffCommand).trim() || DEFAULT_HANDOFF_COMMAND,
   } satisfies WebsiteAssistantChatResponse;
@@ -69,14 +230,18 @@ export type WebsiteAssistantChatRequest = {
   sessionId?: string | null;
   browserSessionId?: string | null;
   pagePath?: string | null;
+  channel?: "website";
 };
 
 export type WebsiteAssistantChatResponse = {
+  ok: boolean;
   sessionId: string;
   browserSessionId: string | null;
-  reply: {
-    text: string;
-  };
+  message: string;
+  mode: string;
+  ui: WebsiteAssistantUi;
+  action: WebsiteAssistantAction;
+  suggestedFollowUps: string[];
   model: string;
   handoffCommand: string;
 };
@@ -101,6 +266,18 @@ export class WebsiteAssistantApiError extends Error {
   }
 }
 
+const getCurrentAccessToken = async () => {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
+};
+
 export const sendWebsiteAssistantMessage = async (
   input: WebsiteAssistantChatRequest,
   options?: {
@@ -118,6 +295,7 @@ export const sendWebsiteAssistantMessage = async (
 
   const body: WebsiteAssistantChatRequest = {
     message,
+    channel: "website",
   };
 
   if (input.sessionId?.trim()) {
@@ -132,14 +310,20 @@ export const sendWebsiteAssistantMessage = async (
     body.pagePath = input.pagePath.trim();
   }
 
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  const accessToken = await getCurrentAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
   let response: Response;
 
   try {
     response = await fetch(WEBSITE_ASSISTANT_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(body),
       cache: "no-store",
       signal: options?.signal,
