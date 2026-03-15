@@ -138,7 +138,9 @@ const SignupPageContent = () => {
         }
 
         clearPendingSetupPayload();
-        router.replace(`/line/connect-option?returnTo=${encodeURIComponent(returnTo)}`);
+        router.replace(
+          `/line/connect-option?returnTo=${encodeURIComponent(returnTo)}`,
+        );
         router.refresh();
         return;
       }
@@ -178,18 +180,22 @@ const SignupPageContent = () => {
   };
 
   return (
-    <div className="lg:w-[100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center mb-10">
+    <div className="lg:w-full h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center mb-10">
       <div className="flex justify-between items-center flex-wrap mb-6 gap-4">
         <div>
-          <h3 className="text-base font-semibold text-black">Create an account</h3>
-          <p className="text-xs text-slate-700 mt-[5px]">
+          <h3 className="text-base font-semibold text-black">
+            Create an account
+          </h3>
+          <p className="text-xs text-slate-700 mt-1.25">
             Create your account and get started.
           </p>
         </div>
         <select
           value={selected.code}
           onChange={(event) => {
-            const found = languages.find((lang) => lang.code === event.target.value);
+            const found = languages.find(
+              (lang) => lang.code === event.target.value,
+            );
             if (found) {
               setSelected(found);
             }
@@ -213,40 +219,14 @@ const SignupPageContent = () => {
             placeholder="Rain John"
             type="text"
           />
-          <div className="md:col-span-2">
-            <GoogleLocationAutocomplete
-              label="City"
-              value={selectedLocation}
-              onChange={setSelectedLocation}
-              placeholder="Search your city"
-              helperText="Use Google Places or your current location. Jade Palace stores only city, country, and timezone for customer accounts."
-              mode="city"
-            />
-            {selectedLocation ? (
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                {selectedLocation.district ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                    {selectedLocation.district}
-                  </span>
-                ) : null}
-                {selectedLocation.city ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                    {selectedLocation.city}
-                  </span>
-                ) : null}
-                {selectedLocation.country ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                    {selectedLocation.country}
-                  </span>
-                ) : null}
-                {selectedLocation.timezone ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                    {selectedLocation.timezone}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <GoogleLocationAutocomplete
+            label="City"
+            value={selectedLocation}
+            onChange={setSelectedLocation}
+            placeholder="Search your city"
+            mode="city"
+          />
+          
           <InputBox
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -309,7 +289,9 @@ const SignupPageContent = () => {
 
 export default function SignupPage() {
   return (
-    <Suspense fallback={<div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0" />}>
+    <Suspense
+      fallback={<div className="lg:w-[75%] h-auto md:h-full mt-10 md:mt-0" />}
+    >
       <SignupPageContent />
     </Suspense>
   );

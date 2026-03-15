@@ -2,7 +2,13 @@
 
 import { ShoppingBag, User, Menu, X } from "@boxicons/react";
 import Link from "next/link";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import useAuth from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
 import { usePathname } from "next/navigation";
@@ -13,6 +19,7 @@ import {
   mapBackendRoleToDashboardRole,
 } from "@/lib/roleChecker";
 import { gsap } from "gsap";
+import Image from "next/image";
 
 const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
   const authUser = useAuth();
@@ -37,9 +44,7 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
     "/signup",
   ];
 
-  const isWhiteRoute = whiteRoutes.some((route) =>
-    pathname.startsWith(route),
-  );
+  const isWhiteRoute = whiteRoutes.some((route) => pathname.startsWith(route));
 
   const isLight = isScrolled || isWhiteRoute;
 
@@ -223,7 +228,15 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
       {/* Main bar */}
       <div className="px-6 sm:px-12 lg:px-20 py-4 flex justify-between items-center">
         {/* Logo */}
-        <h2 className={`text-lg font-semibold ${textColor}`}>Jade Palace</h2>
+
+        {/* Logo */}
+        <Image
+          src="/Jade-Palace-LOGO/noBgLogo.svg"
+          alt="Jade Palace Logo"
+          width={50}
+          height={10}
+          priority
+        />
 
         {/* Desktop Nav Links */}
         <div className="hidden md:flex gap-10 items-center">
@@ -240,7 +253,11 @@ const Navbar = ({ heroMode = false }: { heroMode?: boolean }) => {
 
         {/* Icons + Hamburger */}
         <div className="flex gap-10 items-center">
-          <Link href="/cart" className="relative cursor-pointer" aria-label="Open appointment cart">
+          <Link
+            href="/cart"
+            className="relative cursor-pointer"
+            aria-label="Open appointment cart"
+          >
             <ShoppingBag className={`w-5 h-5 ${iconColor}`} />
             {totalQuantity > 0 ? (
               <span className="absolute -top-2 -right-3 bg-black text-white text-[10px] px-1.5 py-0.5 rounded-full">

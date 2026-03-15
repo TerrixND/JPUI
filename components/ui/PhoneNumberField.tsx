@@ -9,7 +9,8 @@ import {
   sanitizePhoneLocalNumber,
   splitPhoneNumberValue,
 } from "@/lib/phoneCountryCodes";
-import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
+import { useState } from "react";
 
 type PhoneNumberFieldProps = {
   label: string;
@@ -31,25 +32,28 @@ const getVariantStyles = (variant: PhoneNumberFieldProps["variant"]) => {
   switch (variant) {
     case "underline":
       return {
-        label: "mb-2 block text-xs font-medium uppercase tracking-wider text-neutral-400",
-        wrapper: "mt-2 flex items-center gap-3 border-b border-neutral-200 pb-3",
+        label:
+          "mb-2 block text-xs font-medium uppercase tracking-wider text-neutral-400",
+        wrapper:
+          "mt-2 flex items-center gap-3 border-b border-neutral-200 pb-3",
         select:
           "min-w-[8.5rem] bg-transparent text-[15px] text-neutral-800 outline-none disabled:cursor-not-allowed disabled:text-neutral-400",
         input:
           "w-full bg-transparent text-[15px] text-neutral-800 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:text-neutral-400",
-        helper: "mt-2 text-xs text-neutral-500",
       };
+
     case "outline":
       return {
-        label: "text-[11px] font-semibold uppercase tracking-[0.24em] text-stone-500",
+        label:
+          "text-[11px] font-semibold uppercase tracking-[0.24em] text-stone-500",
         wrapper:
           "mt-2 flex items-center gap-3 rounded-2xl border border-stone-200 px-4 py-3",
         select:
           "min-w-[8.5rem] bg-transparent text-sm text-stone-700 outline-none disabled:cursor-not-allowed disabled:text-stone-400",
         input:
           "w-full bg-transparent text-sm text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:text-stone-400",
-        helper: "mt-2 text-xs text-stone-500",
       };
+
     default:
       return {
         label: "text-[13px] text-slate-800",
@@ -59,7 +63,6 @@ const getVariantStyles = (variant: PhoneNumberFieldProps["variant"]) => {
           "min-w-[8.5rem] bg-transparent text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:text-slate-400",
         input:
           "w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400",
-        helper: "mt-1 text-xs text-slate-500",
       };
   }
 };
@@ -71,22 +74,28 @@ export default function PhoneNumberField({
   countryHint = null,
   disabled = false,
   readOnly = false,
-  helperText,
   placeholder = "Local phone number",
   variant = "filled",
   wrapperClassName = "",
   labelClassName = "",
-  helperClassName = "",
   selectAriaLabel = "Country code",
 }: PhoneNumberFieldProps) {
   const styles = getVariantStyles(variant);
-  const [manualCountryIsoCode, setManualCountryIsoCode] = useState(() =>
-    guessPhoneCountryOptionFromEnvironment({ countryName: countryHint }).isoCode,
+
+  const [showInfo, setShowInfo] = useState(false);
+
+  const [manualCountryIsoCode, setManualCountryIsoCode] = useState(
+    () =>
+      guessPhoneCountryOptionFromEnvironment({ countryName: countryHint })
+        .isoCode,
   );
+
   const parsedValue = splitPhoneNumberValue(value);
+
   const hintedCountry =
     getPhoneCountryOptionByCountryName(countryHint) ||
     guessPhoneCountryOptionFromEnvironment({ countryName: countryHint });
+
   const manuallySelectedCountry =
     getPhoneCountryOptionByIsoCode(manualCountryIsoCode) || hintedCountry;
 
@@ -94,6 +103,7 @@ export default function PhoneNumberField({
     parsedValue.option ||
     manuallySelectedCountry ||
     guessPhoneCountryOptionFromEnvironment({ countryName: countryHint });
+
   const localNumber = parsedValue.localNumber;
 
   const emitPhoneValue = ({
@@ -111,26 +121,42 @@ export default function PhoneNumberField({
     );
   };
 
-  const helperCopy = useMemo(() => {
-    if (helperText) {
-      return helperText;
-    }
-
-    return "Country code is suggested from your saved or current location.";
-  }, [helperText]);
-
   return (
     <div className={wrapperClassName}>
-      <label className={labelClassName || styles.label}>{label}</label>
+      {/* Label + Info */}
+      <div className="flex items-center gap-2 relative">
+        <label className={labelClassName || styles.label}>{label}</label>
+
+        <button
+          type="button"
+          onClick={() => setShowInfo((v) => !v)}
+          className="text-slate-400 hover:text-slate-600 transition"
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+
+        {showInfo && (
+          <div className="absolute top-6 left-0 z-10 w-65 text-xs text-slate-600 bg-white border border-slate-200 rounded shadow-md p-3">
+            We will suggest the country code from your selected city, and you
+            can change it if needed.
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
       <div className={styles.wrapper}>
         <select
           value={selectedCountry.isoCode}
           onChange={(event) => {
             const nextCountryIsoCode = event.target.value;
+
             const nextCountry =
-              PHONE_COUNTRY_OPTIONS.find((option) => option.isoCode === nextCountryIsoCode) ||
-              selectedCountry;
+              PHONE_COUNTRY_OPTIONS.find(
+                (option) => option.isoCode === nextCountryIsoCode,
+              ) || selectedCountry;
+
             setManualCountryIsoCode(nextCountry.isoCode);
+
             emitPhoneValue({ nextDialCode: nextCountry.dialCode });
           }}
           disabled={disabled || readOnly}
@@ -138,16 +164,22 @@ export default function PhoneNumberField({
           className={styles.select}
         >
           {PHONE_COUNTRY_OPTIONS.map((option) => (
-            <option key={`${option.isoCode}-${option.dialCode}`} value={option.isoCode}>
+            <option
+              key={`${option.isoCode}-${option.dialCode}`}
+              value={option.isoCode}
+            >
               {option.country} ({option.dialCode})
             </option>
           ))}
         </select>
+
         <input
           type="tel"
           value={localNumber}
           onChange={(event) => {
-            const nextLocalNumber = sanitizePhoneLocalNumber(event.target.value);
+            const nextLocalNumber = sanitizePhoneLocalNumber(
+              event.target.value,
+            );
             emitPhoneValue({ nextLocalNumber });
           }}
           placeholder={placeholder}
@@ -156,9 +188,6 @@ export default function PhoneNumberField({
           className={styles.input}
         />
       </div>
-      {helperCopy ? (
-        <p className={helperClassName || styles.helper}>{helperCopy}</p>
-      ) : null}
     </div>
   );
 }
