@@ -30,6 +30,7 @@ import {
   getAssistantActionExecutionPlan,
 } from "@/lib/assistant/assistantActionExecutor";
 import {
+  consumeWebsiteAssistantPendingAction,
   sendWebsiteAssistantMessage,
   type WebsiteAssistantAction,
   type WebsiteAssistantChatResponse,
@@ -47,6 +48,7 @@ type ChatMessage = {
   mode: string | null;
   ui: WebsiteAssistantUi;
   action: WebsiteAssistantAction;
+  pendingAction: WebsiteAssistantAction;
   suggestedFollowUps: string[];
 };
 
@@ -187,6 +189,7 @@ const createMessage = (
   mode: extras?.mode || null,
   ui: extras?.ui || EMPTY_UI,
   action: extras?.action || EMPTY_ACTION,
+  pendingAction: extras?.pendingAction || EMPTY_ACTION,
   suggestedFollowUps: Array.isArray(extras?.suggestedFollowUps)
     ? extras.suggestedFollowUps.filter(Boolean)
     : [],
@@ -195,7 +198,7 @@ const createMessage = (
 const createGreetingMessage = (handoffCommand = DEFAULT_HANDOFF_COMMAND) =>
   createMessage(
     "assistant",
-    `Hello. I can help with products, appointments, profile steps, and public pages. If you need staff on LINE, ask for ${handoffCommand}.`,
+    "Hello. I can help with products, appointments, account pages, LINE connection, and human support.",
   );
 
 const normalizeStoredMessage = (value: unknown): ChatMessage | null => {
@@ -218,6 +221,7 @@ const normalizeStoredMessage = (value: unknown): ChatMessage | null => {
     mode: asNullableString(value.mode),
     ui: normalizeUi(value.ui),
     action: normalizeAction(value.action),
+    pendingAction: normalizeAction(value.pendingAction),
     suggestedFollowUps: Array.isArray(value.suggestedFollowUps)
       ? value.suggestedFollowUps
           .map((entry) => asString(entry).trim())
@@ -298,6 +302,7 @@ const createAssistantMessageFromResponse = (
     mode: response.mode,
     ui: response.ui,
     action: response.action,
+    pendingAction: response.pendingAction,
     suggestedFollowUps: response.suggestedFollowUps,
   });
 
@@ -431,7 +436,13 @@ export default function WebsiteAiAssistant() {
     setMessages((currentMessages) => [...currentMessages, createMessage("assistant", text)]);
   };
 
-  const executeActionForMessage = async (message: ChatMessage) => {
+  const executeActionForMessage = async (
+    message: ChatMessage,
+    options?: {
+      sessionId?: string | null;
+      browserSessionId?: string | null;
+    },
+  ) => {
     const plan = getAssistantActionExecutionPlan({
       action: message.action,
       currentPath: pathname,
@@ -473,6 +484,15 @@ export default function WebsiteAiAssistant() {
           text: plan.successText,
         },
       }));
+
+      if (message.pendingAction.type !== "NONE") {
+        await consumeWebsiteAssistantPendingAction({
+          sessionId: options?.sessionId || sessionId,
+          browserSessionId: options?.browserSessionId || browserSessionId,
+        }).catch(() => {
+          return;
+        });
+      }
     } catch {
       if (!isMountedRef.current) {
         return;
@@ -551,8 +571,18 @@ export default function WebsiteAiAssistant() {
       setLatestHandoffCommand(response.handoffCommand || DEFAULT_HANDOFF_COMMAND);
       setMessages((currentMessages) => [...currentMessages, assistantMessage]);
 
-      if (assistantModeRef.current === "full_access" && assistantMessage.action.type !== "NONE") {
-        void executeActionForMessage(assistantMessage);
+      const shouldAutoExecute =
+        assistantMessage.action.type !== "NONE" &&
+        (
+          assistantModeRef.current === "full_access" ||
+          assistantMessage.mode === "action_confirmation"
+        );
+
+      if (shouldAutoExecute) {
+        void executeActionForMessage(assistantMessage, {
+          sessionId: response.sessionId,
+          browserSessionId: nextBrowserSessionId,
+        });
       }
     } catch (caughtError) {
       if (caughtError instanceof DOMException && caughtError.name === "AbortError") {
@@ -690,7 +720,13 @@ export default function WebsiteAiAssistant() {
                   Boolean(actionPlan) &&
                   actionStatus?.state !== "executing" &&
                   actionStatus?.state !== "completed" &&
-                  (assistantMode === "ask_permission" || actionStatus?.state === "failed");
+                  (
+                    (
+                      assistantMode === "ask_permission" &&
+                      message.mode !== "action_confirmation"
+                    ) ||
+                    actionStatus?.state === "failed"
+                  );
 
                 return (
                   <div
@@ -727,7 +763,11 @@ export default function WebsiteAiAssistant() {
                           <button
                             className="inline-flex items-center rounded-full border border-stone-300 bg-white px-3.5 py-2 text-xs font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={isLoading}
-                            onClick={() => void executeActionForMessage(message)}
+                            onClick={() =>
+                              void executeActionForMessage(message, {
+                                sessionId,
+                                browserSessionId,
+                              })}
                             type="button"
                           >
                             {actionPlan.buttonLabel}
@@ -797,8 +837,7 @@ export default function WebsiteAiAssistant() {
 
             {showSupportHint ? (
               <p className="mb-3 text-xs leading-5 text-stone-500">
-                Need a person on LINE? Ask for{" "}
-                <span className="font-semibold text-stone-700">{latestHandoffCommand}</span>.
+                Need a person? Tell me you want staff support and I can guide or connect you.
               </p>
             ) : null}
 

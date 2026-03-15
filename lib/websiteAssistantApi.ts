@@ -1,6 +1,7 @@
 import supabase from "@/lib/supabase";
 
 const WEBSITE_ASSISTANT_ENDPOINT = "/api/v1/ai/chat";
+const WEBSITE_ASSISTANT_PENDING_ACTION_ENDPOINT = "/api/v1/ai/pending-action/consume";
 const DEFAULT_HANDOFF_COMMAND = "/support en";
 
 type JsonRecord = Record<string, unknown>;
@@ -219,6 +220,7 @@ const normalizeChatResponse = (payload: unknown) => {
     mode: asString(root?.mode).trim() || "support",
     ui: normalizeUi(root?.ui),
     action: normalizeAction(root?.action),
+    pendingAction: normalizeAction(root?.pendingAction),
     suggestedFollowUps: normalizeSuggestedFollowUps(root?.suggestedFollowUps),
     model: asString(root?.model).trim() || "unknown",
     handoffCommand: asString(root?.handoffCommand).trim() || DEFAULT_HANDOFF_COMMAND,
@@ -241,6 +243,7 @@ export type WebsiteAssistantChatResponse = {
   mode: string;
   ui: WebsiteAssistantUi;
   action: WebsiteAssistantAction;
+  pendingAction: WebsiteAssistantAction;
   suggestedFollowUps: string[];
   model: string;
   handoffCommand: string;
@@ -351,4 +354,41 @@ export const sendWebsiteAssistantMessage = async (
   }
 
   return normalizeChatResponse(payload);
+};
+
+export const consumeWebsiteAssistantPendingAction = async ({
+  sessionId,
+  browserSessionId,
+}: {
+  sessionId?: string | null;
+  browserSessionId?: string | null;
+}) => {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  const accessToken = await getCurrentAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(WEBSITE_ASSISTANT_PENDING_ACTION_ENDPOINT, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      sessionId: asNullableString(sessionId),
+      browserSessionId: asNullableString(browserSessionId),
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = parseJsonSafely(await response.text());
+    throw new WebsiteAssistantApiError({
+      message: buildErrorMessage(payload, "Unable to update the assistant action state."),
+      status: response.status,
+      payload,
+    });
+  }
+
+  return true;
 };
